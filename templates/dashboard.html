@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard | Controle de Ocorrência</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --dhl-red:#d40511;
+      --dhl-red-dark:#a3030d;
+      --dhl-yellow:#ffcc00;
+      --bg:#eeeeee;
+      --card:#f7f7f7;
+      --text:#1f1f1f;
+      --muted:#6b7280;
+      --line:#d6d6d6;
+      --shadow:0 6px 16px rgba(0,0,0,.12);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:Arial, Helvetica, sans-serif;background:var(--bg);}
+    .page{padding:18px;}
+    .topbar{
+      background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
+      color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:16px;
+      display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+    }
+    .topbar a{color:#fff;text-decoration:none;font-weight:800;background:rgba(255,255,255,.12);padding:10px 14px;border-radius:12px;}
+    .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:16px;}
+    .card{
+      background:#fff;border-radius:18px;padding:16px;border:1px solid #ddd;box-shadow:var(--shadow);
+    }
+    .kpi .label{font-size:12px;color:var(--muted);font-weight:800;text-transform:uppercase;}
+    .kpi .value{font-size:34px;font-weight:900;color:var(--dhl-red);margin-top:8px;}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;}
+    .chart-box{height:280px;}
+    .table-wrap{overflow:auto;}
+    table{width:100%;border-collapse:collapse;}
+    th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:left;font-size:13px;}
+    th{background:#fff8db;}
+    .filters{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px;}
+    .filters input,.filters select{
+      width:100%;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fff;
+    }
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+    .btn{border:none;border-radius:12px;padding:12px 14px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;}
+    .btn-dark{background:#1f2937;color:#fff;}
+    .btn-soft{background:#fff;color:#d40511;border:1px solid #eee;}
+    @media(max-width:1100px){.kpis,.grid,.filters{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div>
+      <h2 style="margin:0;">Dashboard Executivo</h2>
+      <div style="opacity:.9;">Indicadores e visão gerencial de ocorrências</div>
+    </div>
+    <div class="actions">
+      <a href="{{ url_for('ocorrencias') }}">Ocorrências</a>
+      <a href="{{ url_for('exportar_excel', **filtros) }}">Excel</a>
+      <a href="{{ url_for('exportar_pdf', **filtros) }}">PDF</a>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <form method="GET">
+      <div class="filters">
+        <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}">
+        <input type="date" name="data_final" value="{{ filtros.data_final }}">
+        <input type="text" name="local" placeholder="Local" value="{{ filtros.local }}">
+        <input type="text" name="natureza" placeholder="Natureza" value="{{ filtros.natureza }}">
+        <select name="status">
+          <option value="">Todos os status</option>
+          <option value="PENDENTE" {% if filtros.status == 'PENDENTE' %}selected{% endif %}>PENDENTE</option>
+          <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>EM ANDAMENTO</option>
+          <option value="CONCLUIDO" {% if filtros.status == 'CONCLUIDO' %}selected{% endif %}>CONCLUÍDO</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="btn btn-dark" type="submit">Aplicar filtros</button>
+        <a class="btn btn-soft" href="{{ url_for('dashboard') }}">Limpar</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="kpis">
+    <div class="card kpi"><div class="label">Total</div><div class="value">{{ resumo.total }}</div></div>
+    <div class="card kpi"><div class="label">Pendentes</div><div class="value">{{ resumo.pendentes }}</div></div>
+    <div class="card kpi"><div class="label">Em andamento</div><div class="value">{{ resumo.andamento }}</div></div>
+    <div class="card kpi"><div class="label">Concluídas</div><div class="value">{{ resumo.concluidas }}</div></div>
+    <div class="card kpi"><div class="label">Prioridade alta</div><div class="value">{{ resumo.altas }}</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3 style="margin-top:0;">Por natureza</h3>
+      <div class="chart-box"><canvas id="chartNatureza"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Por local</h3>
+      <div class="chart-box"><canvas id="chartLocal"></canvas></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Por status</h3>
+      <div class="chart-box"><canvas id="chartStatus"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Últimos registros</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Data/Hora</th>
+            <th>Natureza</th>
+            <th>Local</th>
+            <th>Prioridade</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in registros %}
+          <tr>
+            <td>#{{ r.id }}</td>
+            <td>{{ r.data_hora }}</td>
+            <td>{{ r.natureza }}</td>
+            <td>{{ r.local }}</td>
+            <td>{{ r.prioridade }}</td>
+            <td>{{ r.status }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6">Sem registros.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+new Chart(document.getElementById('chartNatureza'), {
+  type: 'bar',
+  data: {
+    labels: {{ labels_natureza|tojson }},
+    datasets: [{ data: {{ valores_natureza|tojson }} }]
+  },
+  options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
+});
+
+new Chart(document.getElementById('chartLocal'), {
+  type: 'pie',
+  data: {
+    labels: {{ labels_local|tojson }},
+    datasets: [{ data: {{ valores_local|tojson }} }]
+  },
+  options: { responsive:true, maintainAspectRatio:false }
+});
+
+new Chart(document.getElementById('chartStatus'), {
+  type: 'doughnut',
+  data: {
+    labels: {{ labels_status|tojson }},
+    datasets: [{ data: {{ valores_status|tojson }} }]
+  },
+  options: { responsive:true, maintainAspectRatio:false }
+});
+</script>
+</body>
+</html>

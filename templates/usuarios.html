@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Usuários | Controle de Ocorrência</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{
+      margin:0;
+      font-family:Arial, Helvetica, sans-serif;
+      background:#f3f5f7;
+      padding:30px;
+    }
+    .card{
+      max-width:1100px;
+      margin:0 auto;
+      background:#fff;
+      border-radius:20px;
+      padding:24px;
+      box-shadow:0 12px 28px rgba(15,23,42,.08);
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:20px;
+    }
+    th, td{
+      padding:12px;
+      border-bottom:1px solid #e5e7eb;
+      text-align:left;
+    }
+    th{ background:#fff8db; }
+    .btn{
+      display:inline-block;
+      padding:10px 14px;
+      border-radius:12px;
+      text-decoration:none;
+      font-weight:700;
+      margin-right:8px;
+    }
+    .btn-red{ background:#d40511; color:#fff; }
+    .btn-dark{ background:#1f2937; color:#fff; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Usuários cadastrados</h1>
+
+    <div style="margin-top:16px;">
+      <a href="{{ url_for('register') }}" class="btn btn-red">Novo usuário</a>
+      <a href="{{ url_for('ocorrencias') }}" class="btn btn-dark">Voltar</a>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Usuário</th>
+          <th>Perfil</th>
+          <th>Ativo</th>
+          <th>Criado em</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in usuarios %}
+        <tr>
+          <td>{{ u.id }}</td>
+          <td>{{ u.nome }}</td>
+          <td>{{ u.username }}</td>
+          <td>{{ u.perfil }}</td>
+          <td>{{ "Sim" if u.ativo else "Não" }}</td>
+          <td>{{ u.criado_em.strftime('%d/%m/%Y %H:%M') if u.criado_em else '-' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6">Nenhum usuário cadastrado.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

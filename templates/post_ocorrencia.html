@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Post da Ocorrência | DHL Security</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00;
+      --dhl-red:#d40511;
+      --dhl-red-dark:#b3030e;
+      --dhl-black:#1f1f1f;
+      --bg:#f3f5f7;
+      --card:#ffffff;
+      --line:#e5e7eb;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --shadow:0 12px 28px rgba(15,23,42,.08);
+      --radius:20px;
+      --sidebar:#161a1d;
+      --sidebar-2:#20262b;
+      --ok-bg:#e8f7ee;
+      --ok-text:#146c43;
+      --warn-bg:#fff4db;
+      --warn-text:#9a6700;
+      --danger-bg:#fde8ea;
+      --danger-text:#b42318;
+      --neutral-bg:#eef1f4;
+      --neutral-text:#3f4a5a;
+    }
+
+    *{ box-sizing:border-box; }
+
+    html, body{
+      margin:0;
+      padding:0;
+      min-height:100vh;
+      background:var(--bg);
+      color:var(--text);
+      font-family:Arial, Helvetica, sans-serif;
+    }
+
+    a{ text-decoration:none; }
+
+    .app-shell{
+      display:flex;
+      min-height:100vh;
+      width:100%;
+    }
+
+    .sidebar{
+      width:260px;
+      background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
+      color:#fff;
+      position:fixed;
+      top:0; left:0; bottom:0;
+      padding:22px 18px;
+      box-shadow:6px 0 22px rgba(0,0,0,.12);
+      z-index:1000;
+      overflow-y:auto;
+    }
+
+    .brand{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      padding-bottom:18px;
+      margin-bottom:18px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+
+    .brand-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:max-content;
+      padding:7px 12px;
+      border-radius:999px;
+      background:var(--dhl-yellow);
+      color:#111;
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.5px;
+    }
+
+    .brand-title{
+      font-size:22px;
+      font-weight:900;
+      letter-spacing:.3px;
+      line-height:1.1;
+    }
+
+    .brand-sub{
+      font-size:12px;
+      color:rgba(255,255,255,.72);
+      line-height:1.5;
+    }
+
+    .menu-title{
+      margin:18px 0 10px;
+      font-size:11px;
+      color:rgba(255,255,255,.5);
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.8px;
+    }
+
+    .menu{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .menu a{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:#fff;
+      padding:12px 14px;
+      border-radius:14px;
+      font-size:14px;
+      font-weight:700;
+      transition:.18s ease;
+      border:1px solid transparent;
+    }
+
+    .menu a:hover,
+    .menu a.active{
+      background:rgba(255,255,255,.08);
+      border-color:rgba(255,255,255,.10);
+      transform:translateX(2px);
+    }
+
+    .menu .dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      background:var(--dhl-yellow);
+      flex:0 0 10px;
+    }
+
+    .main{
+      margin-left:260px;
+      width:calc(100% - 260px);
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .topbar{
+      height:76px;
+      background:#fff;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      padding:0 24px;
+      position:sticky;
+      top:0;
+      z-index:900;
+    }
+
+    .topbar-left{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      min-width:0;
+    }
+
+    .logo-topbar{
+      height:42px;
+      width:auto;
+      display:block;
+      object-fit:contain;
+      flex-shrink:0;
+    }
+
+    .topbar-left h1{
+      margin:0;
+      font-size:20px;
+      font-weight:900;
+      color:var(--dhl-black);
+    }
+
+    .topbar-left p{
+      margin:4px 0 0;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .top-chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:8px 12px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      border:1px solid #efd56f;
+      background:#fff8d8;
+      color:#7a5a00;
+      white-space:nowrap;
+    }
+
+    .content{
+      padding:24px;
+      max-width:1150px;
+      width:100%;
+      margin:0 auto;
+    }
+
+    .flash{
+      margin-bottom:12px;
+      padding:12px 14px;
+      border-radius:12px;
+      font-weight:700;
+      border:1px solid transparent;
+    }
+
+    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+    .hero{
+      position:relative;
+      overflow:hidden;
+      background:linear-gradient(135deg,#d40511,#93000a);
+      color:#fff;
+      border-radius:24px;
+      padding:24px 26px;
+      box-shadow:var(--shadow);
+      margin-bottom:20px;
+    }
+
+    .hero h2{
+      margin:0 0 8px 0;
+      font-size:30px;
+      font-weight:900;
+    }
+
+    .hero p{
+      margin:0;
+      line-height:1.55;
+      font-size:14px;
+      opacity:.96;
+      max-width:850px;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+
+    .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
+    .badge-warning{ background:var(--warn-bg); color:var(--warn-text); }
+    .badge-success{ background:var(--ok-bg); color:var(--ok-text); }
+    .badge-neutral{ background:var(--neutral-bg); color:var(--neutral-text); }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:18px;
+      box-shadow:var(--shadow);
+      min-width:0;
+      margin-bottom:20px;
+    }
+
+    .post-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:14px;
+      flex-wrap:wrap;
+      padding-bottom:14px;
+      margin-bottom:14px;
+      border-bottom:1px solid var(--line);
+    }
+
+    .post-meta{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    .avatar{
+      width:48px;
+      height:48px;
+      border-radius:50%;
+      background:linear-gradient(180deg,#fff8db,#ffd84d);
+      color:#7a2500;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:900;
+      font-size:18px;
+      box-shadow:0 8px 18px rgba(0,0,0,.12);
+    }
+
+    .meta-text strong{
+      display:block;
+      font-size:15px;
+      color:#111827;
+    }
+
+    .meta-text span{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .id-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:10px 14px;
+      border-radius:999px;
+      background:#fff8db;
+      border:1px solid #f0d66a;
+      color:#7a5a00;
+      font-size:13px;
+      font-weight:900;
+    }
+
+    .info-grid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0,1fr));
+      gap:12px;
+      margin-bottom:16px;
+    }
+
+    .info-box{
+      background:#fff;
+      border:1px solid #eceff3;
+      border-radius:16px;
+      padding:14px;
+    }
+
+    .info-box.full{
+      grid-column:1 / -1;
+    }
+
+    .info-box .label{
+      font-size:12px;
+      color:var(--muted);
+      font-weight:800;
+      margin-bottom:6px;
+      text-transform:uppercase;
+      letter-spacing:.4px;
+    }
+
+    .info-box .value{
+      font-size:14px;
+      color:#111827;
+      font-weight:700;
+      line-height:1.45;
+      word-break:break-word;
+    }
+
+    .photo-box{
+      margin-top:16px;
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fff;
+      padding:14px;
+    }
+
+    .photo-box h3{
+      margin:0 0 10px 0;
+      font-size:15px;
+      font-weight:900;
+      color:#111827;
+    }
+
+    .photo-box img{
+      width:100%;
+      max-height:420px;
+      object-fit:cover;
+      border-radius:14px;
+      border:1px solid #e5e7eb;
+      display:block;
+    }
+
+    .section-title{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:14px;
+      flex-wrap:wrap;
+    }
+
+    .section-title h3{
+      margin:0;
+      font-size:20px;
+      font-weight:900;
+      color:var(--dhl-black);
+    }
+
+    .section-chip{
+      background:#fff8db;
+      color:#7a5a00;
+      border:1px solid #f5d66f;
+      border-radius:999px;
+      padding:7px 12px;
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.3px;
+    }
+
+    .row{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      flex:1;
+      min-width:240px;
+      margin-bottom:14px;
+    }
+
+    .field label{
+      font-size:13px;
+      color:var(--muted);
+      font-weight:800;
+    }
+
+    .field input,
+    .field select,
+    .field textarea{
+      width:100%;
+      border:1px solid #d6dae1;
+      background:#fff;
+      border-radius:14px;
+      padding:13px 14px;
+      font-size:14px;
+      outline:none;
+      font-family:Arial, Helvetica, sans-serif;
+      transition:border-color .18s ease, box-shadow .18s ease;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus{
+      border-color:#d40511;
+      box-shadow:0 0 0 4px rgba(212,5,17,.08);
+    }
+
+    .field textarea{
+      min-height:120px;
+      resize:vertical;
+    }
+
+    .attachment-box{
+      margin-top:12px;
+      padding:12px 14px;
+      border-radius:14px;
+      background:#fff8db;
+      border:1px solid #f0d66a;
+      color:#7a5a00;
+      font-size:13px;
+      font-weight:700;
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+
+    .btn{
+      border:none;
+      border-radius:14px;
+      padding:12px 16px;
+      cursor:pointer;
+      font-weight:800;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      transition:.18s ease;
+    }
+
+    .btn:hover{ transform:translateY(-1px); }
+
+    .btn-red{
+      background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
+      color:#fff;
+      box-shadow:0 8px 18px rgba(212,5,17,.20);
+    }
+
+    .btn-dark{
+      background:linear-gradient(180deg,#3e434a,#262a2f);
+      color:#fff;
+    }
+
+    .btn-soft{
+      background:#fff6cf;
+      color:#6d5400;
+      border:1px solid #f0d66a;
+    }
+
+    @media (max-width:1100px){
+      .sidebar{
+        position:relative;
+        width:100%;
+        height:auto;
+        inset:auto;
+      }
+
+      .main{
+        margin-left:0;
+        width:100%;
+      }
+
+      .app-shell{
+        flex-direction:column;
+      }
+    }
+
+    @media (max-width:800px){
+      .info-grid{
+        grid-template-columns:1fr;
+      }
+    }
+
+    @media (max-width:700px){
+      .content{ padding:16px; }
+      .topbar{
+        padding:14px 16px;
+        height:auto;
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      .topbar-left{ align-items:flex-start; }
+      .hero h2{ font-size:24px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">Controle de<br>Ocorrência</div>
+      <div class="brand-sub">
+        Registro corporativo de ocorrências, evidências e acompanhamento operacional.
+      </div>
+    </div>
+
+    <div class="menu-title">Navegação</div>
+    <nav class="menu">
+      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Controle de ocorrência</a>
+      <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
+
+      {% if session.get('user_perfil') == 'SUPERUSUARIO' %}
+        <a href="{{ url_for('register') }}"><span class="dot"></span> Criar usuário</a>
+        <a href="{{ url_for('listar_usuarios') }}"><span class="dot"></span> Usuários</a>
+      {% endif %}
+
+      <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-topbar">
+        <div>
+          <h1>Post da Ocorrência</h1>
+          <p>Visualização social da ocorrência com atualização de conclusão</p>
+        </div>
+      </div>
+
+      <div>
+        <span class="top-chip">{{ session.get('user_nome', 'Usuário') }} | {{ session.get('user_perfil', '-') }}</span>
+      </div>
+    </header>
+
+    <div class="content">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <section class="hero">
+        <h2>
+          Publicação da Ocorrência
+          <span style="
+            display:inline-flex;
+            margin-left:10px;
+            padding:6px 12px;
+            border-radius:999px;
+            background:rgba(255,255,255,.15);
+            border:1px solid rgba(255,255,255,.25);
+            font-size:14px;
+            font-weight:800;
+          ">
+            ID #{{ registro.id }}
+          </span>
+        </h2>
+
+        <p>
+          Visualize os dados da ocorrência já cadastrada e publique a conclusão da análise com anexo complementar.
+        </p>
+      </section>
+
+      <section class="card">
+        <div class="post-header">
+          <div class="post-meta">
+            <div class="avatar">{{ (registro.criado_por or 'U')[:1]|upper }}</div>
+
+            <div class="meta-text">
+              <strong>{{ registro.criado_por or 'Usuário do sistema' }}</strong>
+              <span>{{ registro.criado_em.strftime('%d/%m/%Y %H:%M') if registro.criado_em else '-' }}</span>
+            </div>
+          </div>
+
+          <div class="id-pill">Ocorrência #{{ registro.id }}</div>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-box">
+            <div class="label">Data / Hora</div>
+            <div class="value">{{ registro.data_hora or '-' }}</div>
+          </div>
+
+          <div class="info-box">
+            <div class="label">Hora da ocorrência</div>
+            <div class="value">{{ registro.hora_ocorrencia or '-' }}</div>
+          </div>
+
+          <div class="info-box">
+            <div class="label">Natureza</div>
+            <div class="value">{{ registro.natureza or '-' }}</div>
+          </div>
+
+          <div class="info-box">
+            <div class="label">Local</div>
+            <div class="value">{{ registro.local or '-' }}</div>
+          </div>
+
+          <div class="info-box">
+            <div class="label">Operador</div>
+            <div class="value">{{ registro.operador or '-' }}</div>
+          </div>
+
+          <div class="info-box">
+            <div class="label">GC</div>
+            <div class="value">{{ registro.gc or '-' }}</div>
+          </div>
+
+          <div class="info-box">
+            <div class="label">Envolvido</div>
+            <div class="value">{{ registro.envolvido or '-' }}</div>
+          </div>
+
+          <div class="info-box">
+            <div class="label">Status atual</div>
+            <div class="value">
+              {% if registro.status == 'CONCLUIDO' %}
+                <span class="badge badge-success">CONCLUÍDO</span>
+              {% elif registro.status == 'INCONCLUSIVA' %}
+                <span class="badge badge-warning">INCONCLUSIVA</span>
+              {% elif registro.status == 'EM ANDAMENTO' %}
+                <span class="badge badge-warning">EM ANDAMENTO</span>
+              {% else %}
+                <span class="badge badge-danger">{{ registro.status or 'PENDENTE' }}</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="info-box full">
+            <div class="label">Descrição da ocorrência</div>
+            <div class="value">{{ registro.descricao or '-' }}</div>
+          </div>
+        </div>
+
+        {% if registro.foto %}
+          <div class="photo-box">
+            <h3>Foto da ocorrência</h3>
+            <img src="{{ url_for('uploaded_file', filename=registro.foto) }}" alt="Foto da ocorrência">
+          </div>
+        {% endif %}
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <h3>Atualizar publicação</h3>
+          <span class="section-chip">Pós-investigação</span>
+        </div>
+
+        <form method="POST" enctype="multipart/form-data">
+          <div class="row">
+            <div class="field">
+              <label>Conclusão da análise</label>
+              <select name="status_post" required>
+                <option value="">Selecione</option>
+                <option value="CONCLUIDO" {% if registro.status == 'CONCLUIDO' %}selected{% endif %}>Concluído</option>
+                <option value="INCONCLUSIVA" {% if registro.status == 'INCONCLUSIVA' %}selected{% endif %}>Inconclusiva</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Anexar arquivo</label>
+              <input type="file" name="anexo_post">
+              <div class="small">Aceita PDF, JPG, JPEG, PNG, DOC, DOCX ou XLSX.</div>
+            </div>
+          </div>
+
+          {% if registro.anexo_post %}
+            <div class="attachment-box">
+              Arquivo atual:
+              <a href="{{ url_for('uploaded_file', filename=registro.anexo_post) }}" target="_blank" style="color:#7a5a00; text-decoration:underline;">
+                {{ registro.anexo_post }}
+              </a>
+            </div>
+          {% endif %}
+
+          <div class="actions">
+            <button type="submit" class="btn btn-red">Salvar publicação</button>
+            <a href="{{ url_for('ocorrencias') }}" class="btn btn-dark">Voltar</a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-soft">Dashboard</a>
+          </div>
+        </form>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

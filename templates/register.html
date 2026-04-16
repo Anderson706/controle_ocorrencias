@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Criar Usuário | Controle de Ocorrência</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00;
+      --dhl-red:#d40511;
+      --dhl-red-dark:#b3030e;
+      --dhl-black:#1f1f1f;
+      --bg:#f3f5f7;
+      --card:#ffffff;
+      --line:#e5e7eb;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --shadow:0 12px 28px rgba(15,23,42,.08);
+      --radius:20px;
+      --sidebar:#161a1d;
+      --sidebar-2:#20262b;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:Arial, Helvetica, sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+    .app-shell{ display:flex; min-height:100vh; }
+    .sidebar{
+      width:260px;
+      background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
+      color:#fff;
+      position:fixed;
+      top:0; left:0; bottom:0;
+      padding:22px 18px;
+    }
+    .brand{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      padding-bottom:18px;
+      margin-bottom:18px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .brand-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:max-content;
+      padding:7px 12px;
+      border-radius:999px;
+      background:var(--dhl-yellow);
+      color:#111;
+      font-size:11px;
+      font-weight:900;
+    }
+    .brand-title{ font-size:22px; font-weight:900; line-height:1.1; }
+    .brand-sub{ font-size:12px; color:rgba(255,255,255,.72); line-height:1.5; }
+    .menu{ display:flex; flex-direction:column; gap:8px; margin-top:20px; }
+    .menu a{
+      color:#fff;
+      padding:12px 14px;
+      border-radius:14px;
+      font-size:14px;
+      font-weight:700;
+      border:1px solid transparent;
+      text-decoration:none;
+    }
+    .menu a:hover, .menu a.active{
+      background:rgba(255,255,255,.08);
+      border-color:rgba(255,255,255,.10);
+    }
+    .main{
+      margin-left:260px;
+      width:calc(100% - 260px);
+      min-height:100vh;
+    }
+    .topbar{
+      height:76px;
+      background:#fff;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 24px;
+    }
+    .topbar-left{ display:flex; align-items:center; gap:14px; }
+    .topbar-left img{ height:42px; }
+    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+    .top-chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:8px 12px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      border:1px solid #efd56f;
+      background:#fff8d8;
+      color:#7a5a00;
+    }
+    .content{ padding:24px; }
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:22px;
+      box-shadow:var(--shadow);
+      max-width:900px;
+    }
+    .row{ display:flex; gap:12px; flex-wrap:wrap; }
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      flex:1;
+      min-width:240px;
+      margin-bottom:14px;
+    }
+    .field label{ font-size:13px; color:var(--muted); font-weight:800; }
+    .field input, .field select{
+      width:100%;
+      border:1px solid #d6dae1;
+      border-radius:14px;
+      padding:13px 14px;
+      font-size:14px;
+      outline:none;
+    }
+    .field input:focus, .field select:focus{
+      border-color:#d40511;
+      box-shadow:0 0 0 4px rgba(212,5,17,.08);
+    }
+    .actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+    .btn{
+      border:none;
+      border-radius:14px;
+      padding:12px 16px;
+      cursor:pointer;
+      font-weight:800;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; }
+    .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
+    .flash{
+      margin-bottom:12px;
+      padding:12px 14px;
+      border-radius:12px;
+      font-weight:700;
+      font-size:14px;
+    }
+    .flash.success{ background:#e6fffa; color:#065f46; }
+    .flash.danger{ background:#ffe4e6; color:#9f1239; }
+    .flash.warning{ background:#fff4db; color:#9a6700; }
+
+    @media (max-width:1100px){
+      .sidebar{ position:relative; width:100%; }
+      .main{ margin-left:0; width:100%; }
+      .app-shell{ flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">Controle de<br>Ocorrência</div>
+      <div class="brand-sub">Cadastro de usuários e controle de acesso.</div>
+    </div>
+
+    <nav class="menu">
+      <a href="{{ url_for('ocorrencias') }}">Ocorrências</a>
+      <a href="{{ url_for('register') }}" class="active">Criar usuário</a>
+      <a href="{{ url_for('listar_usuarios') }}">Usuários</a>
+      <a href="{{ url_for('logout') }}">Sair</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL">
+        <div>
+          <h1>Criar Usuário</h1>
+          <p>Perfis disponíveis: Superusuário, Usuário e Operacional</p>
+        </div>
+      </div>
+
+      <div>
+        <span class="top-chip">{{ session.get('user_nome', 'Usuário') }} | {{ session.get('user_perfil', '-') }}</span>
+      </div>
+    </header>
+
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <div class="card">
+        <form method="POST">
+          <div class="row">
+            <div class="field">
+              <label>Nome</label>
+              <input type="text" name="nome" required>
+            </div>
+
+            <div class="field">
+              <label>Usuário</label>
+              <input type="text" name="username" required>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <label>Senha</label>
+              <input type="password" name="senha" required>
+            </div>
+
+            <div class="field">
+              <label>Confirmar senha</label>
+              <input type="password" name="confirmar_senha" required>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <label>Perfil</label>
+              <select name="perfil" required>
+                <option value="">Selecione</option>
+                <option value="SUPERUSUARIO">Superusuário</option>
+                <option value="USUARIO">Usuário</option>
+                <option value="OPERACIONAL">Operacional</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn btn-red">Salvar usuário</button>
+            <a href="{{ url_for('ocorrencias') }}" class="btn btn-dark">Voltar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
