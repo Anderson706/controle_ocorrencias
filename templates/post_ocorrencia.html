@@ -465,6 +465,12 @@
       resize:vertical;
     }
 
+    .small{
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.45;
+    }
+
     .attachment-box{
       margin-top:12px;
       padding:12px 14px;
@@ -647,6 +653,13 @@
           </div>
 
           <div class="info-box">
+            <div class="label">Responsável pelo fechamento</div>
+            <div class="value">
+              {{ registro.responsavel_fechamento or '-' }}
+            </div>
+          </div>
+
+          <div class="info-box">
             <div class="label">Hora da ocorrência</div>
             <div class="value">{{ registro.hora_ocorrencia or '-' }}</div>
           </div>
@@ -720,6 +733,15 @@
                 <option value="CONCLUIDO" {% if registro.status == 'CONCLUIDO' %}selected{% endif %}>Concluído</option>
                 <option value="INCONCLUSIVA" {% if registro.status == 'INCONCLUSIVA' %}selected{% endif %}>Inconclusiva</option>
               </select>
+            </div>
+
+            <div class="field">
+              <label>Responsável pelo fechamento</label>
+              <input type="text"
+                     name="responsavel_fechamento"
+                     placeholder="Digite o nome de quem está finalizando"
+                     value="{{ registro.responsavel_fechamento or session.get('user_nome') }}"
+                     required>
             </div>
 
             <div class="field">

@@ -79,6 +79,7 @@ class Ocorrencia(db.Model):
     criado_por = db.Column(db.String(120), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    responsavel_fechamento = db.Column(db.String(120), nullable=True)
 
 
 # =========================
@@ -425,6 +426,7 @@ def post_ocorrencia(ocorrencia_id):
 
     if request.method == "POST":
         status_post = normalizar_status(request.form.get("status_post"))
+        responsavel = (request.form.get("responsavel_fechamento") or "").strip()
         anexo_post = request.files.get("anexo_post")
 
         if not status_post:
@@ -435,8 +437,13 @@ def post_ocorrencia(ocorrencia_id):
             flash("Opção inválida para a publicação.", "danger")
             return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
 
+        if not responsavel:
+            flash("Informe o responsável pelo fechamento.", "warning")
+            return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
+
         registro.status = status_post
         registro.situacao_investigacao = status_post
+        registro.responsavel_fechamento = responsavel
 
         if anexo_post and anexo_post.filename:
             novo_anexo = salvar_arquivo(anexo_post, EXTENSOES_PERMITIDAS_POST)
@@ -452,8 +459,6 @@ def post_ocorrencia(ocorrencia_id):
         return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
 
     return render_template("post_ocorrencia.html", registro=registro)
-
-
 @app.route("/excluir/<int:ocorrencia_id>", methods=["POST"])
 @login_required
 @perfil_required("SUPERUSUARIO", "USUARIO")

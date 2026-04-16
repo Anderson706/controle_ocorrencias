@@ -5,65 +5,419 @@
   <title>Dashboard | Controle de Ocorrência</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     :root{
       --dhl-red:#d40511;
       --dhl-red-dark:#a3030d;
       --dhl-yellow:#ffcc00;
-      --bg:#eeeeee;
-      --card:#f7f7f7;
-      --text:#1f1f1f;
+      --bg:#eef1f5;
+      --card:#ffffff;
+      --text:#1f2937;
       --muted:#6b7280;
-      --line:#d6d6d6;
-      --shadow:0 6px 16px rgba(0,0,0,.12);
+      --line:#dfe3e8;
+      --shadow:0 10px 24px rgba(15,23,42,.10);
+      --shadow-soft:0 6px 16px rgba(0,0,0,.08);
+      --radius:20px;
+      --ok-bg:#e8f7ee;
+      --ok-text:#146c43;
+      --warn-bg:#fff4db;
+      --warn-text:#9a6700;
+      --danger-bg:#fde8ea;
+      --danger-text:#b42318;
+      --neutral-bg:#eef1f4;
+      --neutral-text:#3f4a5a;
     }
-    *{box-sizing:border-box;}
-    body{margin:0;font-family:Arial, Helvetica, sans-serif;background:var(--bg);}
-    .page{padding:18px;}
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      font-family:Arial, Helvetica, sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(212,5,17,.05), transparent 22%),
+        linear-gradient(180deg, #f5f6f8 0%, #eef1f5 100%);
+      color:var(--text);
+    }
+
+    .page{
+      padding:22px;
+      max-width:1600px;
+      margin:0 auto;
+    }
+
     .topbar{
+      background:linear-gradient(135deg,var(--dhl-red),var(--dhl-red-dark));
+      color:#fff;
+      border-radius:24px;
+      padding:22px 24px;
+      margin-bottom:18px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      flex-wrap:wrap;
+      gap:18px;
+      box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .topbar::after{
+      content:"";
+      position:absolute;
+      right:-40px;
+      top:-40px;
+      width:180px;
+      height:180px;
+      background:rgba(255,255,255,.08);
+      border-radius:50%;
+    }
+
+    .topbar-left{
+      display:flex;
+      align-items:center;
+      gap:16px;
+      position:relative;
+      z-index:1;
+    }
+
+    .logo-box{
+      width:72px;
+      height:72px;
+      border-radius:18px;
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.16);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      backdrop-filter:blur(2px);
+      box-shadow:0 10px 20px rgba(0,0,0,.12);
+      flex-shrink:0;
+    }
+
+    .logo-box img{
+      max-width:54px;
+      max-height:54px;
+      object-fit:contain;
+      display:block;
+    }
+
+    .title-group h1{
+      margin:0;
+      font-size:28px;
+      font-weight:900;
+      letter-spacing:.2px;
+    }
+
+    .title-group p{
+      margin:6px 0 0;
+      font-size:14px;
+      opacity:.95;
+    }
+
+    .top-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      position:relative;
+      z-index:1;
+    }
+
+    .topbar a,
+    .btn{
+      color:#fff;
+      text-decoration:none;
+      font-weight:800;
+      padding:11px 15px;
+      border-radius:14px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      border:none;
+      cursor:pointer;
+      transition:.18s ease;
+    }
+
+    .topbar a{
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.14);
+    }
+
+    .topbar a:hover,
+    .btn:hover{
+      transform:translateY(-1px);
+    }
+
+    .btn-dark{
+      background:#1f2937;
+      color:#fff;
+    }
+
+    .btn-soft{
+      background:#fff;
+      color:var(--dhl-red);
+      border:1px solid #e7e7e7;
+    }
+
+    .btn-primary{
       background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
-      color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:16px;
-      display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+      color:#fff;
+      box-shadow:0 8px 18px rgba(212,5,17,.18);
     }
-    .topbar a{color:#fff;text-decoration:none;font-weight:800;background:rgba(255,255,255,.12);padding:10px 14px;border-radius:12px;}
-    .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:16px;}
+
+    .panel{
+      background:var(--card);
+      border-radius:var(--radius);
+      padding:18px;
+      border:1px solid var(--line);
+      box-shadow:var(--shadow-soft);
+      margin-bottom:18px;
+    }
+
+    .panel-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:14px;
+      flex-wrap:wrap;
+    }
+
+    .panel-title h3{
+      margin:0;
+      font-size:20px;
+      font-weight:900;
+      color:#111827;
+    }
+
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:7px 12px;
+      border-radius:999px;
+      background:#fff8db;
+      border:1px solid #f0d66a;
+      color:#7a5a00;
+      font-size:12px;
+      font-weight:800;
+    }
+
+    .filters{
+      display:grid;
+      grid-template-columns:repeat(5, minmax(0,1fr));
+      gap:12px;
+      margin-top:14px;
+    }
+
+    .filters input,
+    .filters select{
+      width:100%;
+      padding:12px 13px;
+      border:1px solid #d7dbe1;
+      border-radius:14px;
+      background:#fff;
+      font-size:14px;
+      outline:none;
+      transition:border-color .18s ease, box-shadow .18s ease;
+    }
+
+    .filters input:focus,
+    .filters select:focus{
+      border-color:var(--dhl-red);
+      box-shadow:0 0 0 4px rgba(212,5,17,.08);
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:14px;
+    }
+
+    .kpis{
+      display:grid;
+      grid-template-columns:repeat(5, minmax(0,1fr));
+      gap:14px;
+      margin-bottom:18px;
+    }
+
     .card{
-      background:#fff;border-radius:18px;padding:16px;border:1px solid #ddd;box-shadow:var(--shadow);
+      background:#fff;
+      border-radius:20px;
+      padding:18px;
+      border:1px solid #e4e7eb;
+      box-shadow:var(--shadow-soft);
     }
-    .kpi .label{font-size:12px;color:var(--muted);font-weight:800;text-transform:uppercase;}
-    .kpi .value{font-size:34px;font-weight:900;color:var(--dhl-red);margin-top:8px;}
-    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;}
-    .chart-box{height:280px;}
-    .table-wrap{overflow:auto;}
-    table{width:100%;border-collapse:collapse;}
-    th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:left;font-size:13px;}
-    th{background:#fff8db;}
-    .filters{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px;}
-    .filters input,.filters select{
-      width:100%;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fff;
+
+    .kpi{
+      position:relative;
+      overflow:hidden;
+      min-height:128px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:8px;
+      background:linear-gradient(180deg,#fff,#fffef8);
+      border-left:6px solid var(--dhl-yellow);
     }
-    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
-    .btn{border:none;border-radius:12px;padding:12px 14px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;}
-    .btn-dark{background:#1f2937;color:#fff;}
-    .btn-soft{background:#fff;color:#d40511;border:1px solid #eee;}
-    @media(max-width:1100px){.kpis,.grid,.filters{grid-template-columns:1fr;}}
+
+    .kpi::before{
+      content:"";
+      position:absolute;
+      right:-20px;
+      bottom:-20px;
+      width:80px;
+      height:80px;
+      border-radius:50%;
+      background:rgba(255,204,0,.14);
+    }
+
+    .kpi .label{
+      font-size:12px;
+      color:var(--muted);
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.6px;
+      position:relative;
+      z-index:1;
+    }
+
+    .kpi .value{
+      font-size:34px;
+      font-weight:900;
+      color:var(--dhl-red);
+      line-height:1;
+      position:relative;
+      z-index:1;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0,1fr));
+      gap:14px;
+      margin-bottom:18px;
+    }
+
+    .chart-card h3{
+      margin:0 0 12px 0;
+      font-size:18px;
+      font-weight:900;
+      color:#111827;
+    }
+
+    .chart-box{
+      height:300px;
+    }
+
+    .table-wrap{
+      overflow:auto;
+      border:1px solid #eceff3;
+      border-radius:18px;
+      background:#fff;
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      min-width:900px;
+    }
+
+    th, td{
+      padding:12px 14px;
+      border-bottom:1px solid #edf0f4;
+      text-align:left;
+      font-size:13px;
+      vertical-align:middle;
+    }
+
+    th{
+      background:linear-gradient(180deg,#fff8db,#ffefab);
+      color:#4b3c00;
+      font-weight:800;
+      white-space:nowrap;
+      position:sticky;
+      top:0;
+      z-index:1;
+    }
+
+    tbody tr:hover{
+      background:#fffdf5;
+    }
+
+    .id-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:7px 10px;
+      border-radius:999px;
+      font-weight:900;
+      color:var(--dhl-red);
+      background:#fff3f4;
+      border:1px solid #ffd5d8;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+
+    .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
+    .badge-warning{ background:var(--warn-bg); color:var(--warn-text); }
+    .badge-success{ background:var(--ok-bg); color:var(--ok-text); }
+    .badge-neutral{ background:var(--neutral-bg); color:var(--neutral-text); }
+
+    @media(max-width:1200px){
+      .kpis{ grid-template-columns:repeat(2,1fr); }
+      .grid{ grid-template-columns:1fr; }
+      .filters{ grid-template-columns:repeat(2,1fr); }
+    }
+
+    @media(max-width:700px){
+      .page{ padding:14px; }
+      .topbar{ padding:18px; }
+      .topbar-left{ align-items:flex-start; }
+      .title-group h1{ font-size:24px; }
+      .filters,
+      .kpis{ grid-template-columns:1fr; }
+    }
   </style>
 </head>
 <body>
 <div class="page">
+
   <div class="topbar">
-    <div>
-      <h2 style="margin:0;">Dashboard Executivo</h2>
-      <div style="opacity:.9;">Indicadores e visão gerencial de ocorrências</div>
+    <div class="topbar-left">
+      <div class="logo-box">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL">
+      </div>
+
+      <div class="title-group">
+        <h1>Dashboard Executivo</h1>
+        <p>Indicadores gerenciais, tendências operacionais e acompanhamento das ocorrências.</p>
+      </div>
     </div>
-    <div class="actions">
+
+    <div class="top-actions">
       <a href="{{ url_for('ocorrencias') }}">Ocorrências</a>
       <a href="{{ url_for('exportar_excel', **filtros) }}">Excel</a>
       <a href="{{ url_for('exportar_pdf', **filtros) }}">PDF</a>
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:16px;">
+  <div class="panel">
+    <div class="panel-title">
+      <h3>Filtros de análise</h3>
+      <span class="chip">Consulta dinâmica</span>
+    </div>
+
     <form method="GET">
       <div class="filters">
         <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}">
@@ -77,38 +431,64 @@
           <option value="CONCLUIDO" {% if filtros.status == 'CONCLUIDO' %}selected{% endif %}>CONCLUÍDO</option>
         </select>
       </div>
+
       <div class="actions">
-        <button class="btn btn-dark" type="submit">Aplicar filtros</button>
+        <button class="btn btn-primary" type="submit">Aplicar filtros</button>
         <a class="btn btn-soft" href="{{ url_for('dashboard') }}">Limpar</a>
       </div>
     </form>
   </div>
 
   <div class="kpis">
-    <div class="card kpi"><div class="label">Total</div><div class="value">{{ resumo.total }}</div></div>
-    <div class="card kpi"><div class="label">Pendentes</div><div class="value">{{ resumo.pendentes }}</div></div>
-    <div class="card kpi"><div class="label">Em andamento</div><div class="value">{{ resumo.andamento }}</div></div>
-    <div class="card kpi"><div class="label">Concluídas</div><div class="value">{{ resumo.concluidas }}</div></div>
-    <div class="card kpi"><div class="label">Prioridade alta</div><div class="value">{{ resumo.altas }}</div></div>
+    <div class="card kpi">
+      <div class="label">Total</div>
+      <div class="value">{{ resumo.total }}</div>
+    </div>
+
+    <div class="card kpi">
+      <div class="label">Pendentes</div>
+      <div class="value">{{ resumo.pendentes }}</div>
+    </div>
+
+    <div class="card kpi">
+      <div class="label">Em andamento</div>
+      <div class="value">{{ resumo.andamento }}</div>
+    </div>
+
+    <div class="card kpi">
+      <div class="label">Concluídas</div>
+      <div class="value">{{ resumo.concluidas }}</div>
+    </div>
+
+    <div class="card kpi">
+      <div class="label">Prioridade alta</div>
+      <div class="value">{{ resumo.altas }}</div>
+    </div>
   </div>
 
   <div class="grid">
-    <div class="card">
-      <h3 style="margin-top:0;">Por natureza</h3>
+    <div class="card chart-card">
+      <h3>Ocorrências por natureza</h3>
       <div class="chart-box"><canvas id="chartNatureza"></canvas></div>
     </div>
-    <div class="card">
-      <h3 style="margin-top:0;">Por local</h3>
+
+    <div class="card chart-card">
+      <h3>Ocorrências por local</h3>
       <div class="chart-box"><canvas id="chartLocal"></canvas></div>
     </div>
-    <div class="card">
-      <h3 style="margin-top:0;">Por status</h3>
+
+    <div class="card chart-card">
+      <h3>Ocorrências por status</h3>
       <div class="chart-box"><canvas id="chartStatus"></canvas></div>
     </div>
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0;">Últimos registros</h3>
+    <div class="panel-title" style="margin-bottom:12px;">
+      <h3>Últimos registros</h3>
+      <span class="chip">Painel resumido</span>
+    </div>
+
     <div class="table-wrap">
       <table>
         <thead>
@@ -124,12 +504,28 @@
         <tbody>
           {% for r in registros %}
           <tr>
-            <td>#{{ r.id }}</td>
+            <td><span class="id-badge">#{{ r.id }}</span></td>
             <td>{{ r.data_hora }}</td>
             <td>{{ r.natureza }}</td>
             <td>{{ r.local }}</td>
-            <td>{{ r.prioridade }}</td>
-            <td>{{ r.status }}</td>
+            <td>
+              {% if r.prioridade == 'ALTA' %}
+                <span class="badge badge-danger">{{ r.prioridade }}</span>
+              {% elif r.prioridade == 'MEDIA' %}
+                <span class="badge badge-warning">{{ r.prioridade }}</span>
+              {% else %}
+                <span class="badge badge-neutral">{{ r.prioridade }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.status == 'CONCLUIDO' %}
+                <span class="badge badge-success">{{ r.status }}</span>
+              {% elif r.status == 'EM ANDAMENTO' %}
+                <span class="badge badge-warning">{{ r.status }}</span>
+              {% else %}
+                <span class="badge badge-danger">{{ r.status }}</span>
+              {% endif %}
+            </td>
           </tr>
           {% else %}
           <tr>
@@ -140,6 +536,7 @@
       </table>
     </div>
   </div>
+
 </div>
 
 <script>
@@ -149,7 +546,11 @@ new Chart(document.getElementById('chartNatureza'), {
     labels: {{ labels_natureza|tojson }},
     datasets: [{ data: {{ valores_natureza|tojson }} }]
   },
-  options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
+  options: {
+    responsive:true,
+    maintainAspectRatio:false,
+    plugins:{ legend:{ display:false } }
+  }
 });
 
 new Chart(document.getElementById('chartLocal'), {
@@ -158,7 +559,10 @@ new Chart(document.getElementById('chartLocal'), {
     labels: {{ labels_local|tojson }},
     datasets: [{ data: {{ valores_local|tojson }} }]
   },
-  options: { responsive:true, maintainAspectRatio:false }
+  options: {
+    responsive:true,
+    maintainAspectRatio:false
+  }
 });
 
 new Chart(document.getElementById('chartStatus'), {
@@ -167,7 +571,10 @@ new Chart(document.getElementById('chartStatus'), {
     labels: {{ labels_status|tojson }},
     datasets: [{ data: {{ valores_status|tojson }} }]
   },
-  options: { responsive:true, maintainAspectRatio:false }
+  options: {
+    responsive:true,
+    maintainAspectRatio:false
+  }
 });
 </script>
 </body>
