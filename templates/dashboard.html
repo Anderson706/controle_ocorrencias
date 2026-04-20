@@ -400,13 +400,13 @@
       </div>
 
       <div class="title-group">
-        <h1>Dashboard Executivo</h1>
+        <h1>Dashboard</h1>
         <p>Indicadores gerenciais, tendências operacionais e acompanhamento das ocorrências.</p>
       </div>
     </div>
 
     <div class="top-actions">
-      <a href="{{ url_for('ocorrencias') }}">Ocorrências</a>
+      <a href="{{ url_for('ocorrencias') }}">OCORRÊNCIAS</a>
       <a href="{{ url_for('exportar_excel', **filtros) }}">Excel</a>
       <a href="{{ url_for('exportar_pdf', **filtros) }}">PDF</a>
     </div>
@@ -414,7 +414,7 @@
 
   <div class="panel">
     <div class="panel-title">
-      <h3>Filtros de análise</h3>
+      <h3>FILTROS DE ANÁLISE</h3>
       <span class="chip">Consulta dinâmica</span>
     </div>
 
@@ -433,7 +433,7 @@
       </div>
 
       <div class="actions">
-        <button class="btn btn-primary" type="submit">Aplicar filtros</button>
+        <button class="btn btn-primary" type="submit">APLICAR FILTROS</button>
         <a class="btn btn-soft" href="{{ url_for('dashboard') }}">Limpar</a>
       </div>
     </form>
@@ -441,52 +441,52 @@
 
   <div class="kpis">
     <div class="card kpi">
-      <div class="label">Total</div>
+      <div class="label">TOTAL</div>
       <div class="value">{{ resumo.total }}</div>
     </div>
 
     <div class="card kpi">
-      <div class="label">Pendentes</div>
+      <div class="label">PENDENTES</div>
       <div class="value">{{ resumo.pendentes }}</div>
     </div>
 
     <div class="card kpi">
-      <div class="label">Em andamento</div>
+      <div class="label">EM ANDAMENTO</div>
       <div class="value">{{ resumo.andamento }}</div>
     </div>
 
     <div class="card kpi">
-      <div class="label">Concluídas</div>
+      <div class="label">CONCLUÍDAS</div>
       <div class="value">{{ resumo.concluidas }}</div>
     </div>
 
     <div class="card kpi">
-      <div class="label">Prioridade alta</div>
+      <div class="label">PRIORIDADE</div>
       <div class="value">{{ resumo.altas }}</div>
     </div>
   </div>
 
   <div class="grid">
     <div class="card chart-card">
-      <h3>Ocorrências por natureza</h3>
+      <h3>OCORRÊNCIAS POR NATUREZA</h3>
       <div class="chart-box"><canvas id="chartNatureza"></canvas></div>
     </div>
 
     <div class="card chart-card">
-      <h3>Ocorrências por local</h3>
+      <h3>OCORRÊNCIAS POR LOCAL</h3>
       <div class="chart-box"><canvas id="chartLocal"></canvas></div>
     </div>
 
     <div class="card chart-card">
-      <h3>Ocorrências por status</h3>
+      <h3>OCORRÊNCIAS POR STATUS</h3>
       <div class="chart-box"><canvas id="chartStatus"></canvas></div>
     </div>
   </div>
 
   <div class="card">
     <div class="panel-title" style="margin-bottom:12px;">
-      <h3>Últimos registros</h3>
-      <span class="chip">Painel resumido</span>
+      <h3>ÚLTIMOS REGISTROS</h3>
+      <span class="chip">RESUMOS</span>
     </div>
 
     <div class="table-wrap">
