@@ -301,7 +301,36 @@
     margin-top:26px;
     padding-top:22px;
     border-top:1px solid var(--line);
+
   }
+
+  .voltar-red{
+  background:linear-gradient(135deg, #d40511, #a8030d);
+  color:#fff;
+  padding:10px 18px;
+  border-radius:999px;
+  font-size:13px;
+  font-weight:900;
+  box-shadow:0 12px 22px rgba(212,5,17,.25);
+}
+
+.voltar-red:hover{
+  transform:translateY(-1px);
+  filter:brightness(.95);
+}
+
+  .voltar{
+  background:#111827;
+  color:#fff;
+  padding:10px 16px;
+  border-radius:999px;
+  font-size:13px;
+  box-shadow:0 10px 18px rgba(0,0,0,.15);
+}
+
+.voltar:hover{
+  background:#000;
+}
 
   .gerar{
     background:linear-gradient(135deg, var(--dhl-red), var(--dhl-red-dark));
@@ -359,7 +388,17 @@
         DHL SHEIN - GUARULHOS
         <span>Rua Concretex 800 - Cumbica - Guarulhos/SP</span>
       </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+
+        <button type="button" class="btn voltar-red"
+        onclick="window.history.back()">
+        ← Voltar
+        </button>
     </header>
+
+
+
+  <div>
 
     <div class="ai-card">
       <div class="ai-card-top">
@@ -474,6 +513,7 @@
 
         <div class="buttons-row">
           <button type="submit" class="btn gerar">Gerar DOCX + PDF</button>
+           <button type="button" class="btn voltar" onclick="window.history.back()">← Voltar</button>
           <button type="button" class="btn sair" onclick="window.location.href='{{ url_for('logout') }}'">Sair</button>
           <button type="button" class="btn excluir" onclick="excluirFormulario()">Limpar</button>
         </div>
