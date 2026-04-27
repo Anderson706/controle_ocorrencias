@@ -459,6 +459,10 @@
     <nav class="menu">
       <a href="{{ url_for('ocorrencias') }}" class="active"><span class="dot"></span> Controle de ocorrência</a>
       <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
+      <a href="{{ url_for('analise_investigativa') }}"
+     class="{% if request.endpoint == 'analise_investigativa' %}active{% endif %}">
+     <span class="dot"></span> Análise Investigativa
+     </a>
 
       {% if session.get('user_perfil') == 'SUPERUSUARIO' %}
         <a href="{{ url_for('register') }}"><span class="dot"></span> Criar usuário</a>

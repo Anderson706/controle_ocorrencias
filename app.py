@@ -1,4 +1,5 @@
 import os
+import zipfile
 from io import BytesIO
 from datetime import datetime
 from functools import wraps
@@ -6,18 +7,30 @@ from uuid import uuid4
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, session, send_from_directory, send_file
+    flash, session, send_from_directory, send_file, current_app
 )
+
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
+from docx import Document
+from docx.shared import Cm, Inches, Pt, RGBColor
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer,
+    Image, Table, TableStyle
+)
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_FOLDER = os.path.join(BASE_DIR, "database")
@@ -35,6 +48,10 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 db = SQLAlchemy(app)
+
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 EXTENSOES_PERMITIDAS_IMAGEM = {"png", "jpg", "jpeg", "webp"}
 EXTENSOES_PERMITIDAS_POST = {"png", "jpg", "jpeg", "webp", "pdf", "doc", "docx", "xlsx"}
@@ -54,6 +71,47 @@ class Usuario(db.Model):
     ativo = db.Column(db.Boolean, default=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
+class AnaliseInvestigativa(db.Model):
+    __tablename__ = "analises_investigativas"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    id_relatorio = db.Column(db.Integer, nullable=False)
+    empresa = db.Column(db.String(120), nullable=False)
+    unidade = db.Column(db.String(180), nullable=False)
+    endereco = db.Column(db.String(255), nullable=False)
+    classificacao = db.Column(db.String(80), nullable=False)
+    produtos_segmento = db.Column(db.String(120), nullable=False)
+    clientes = db.Column(db.String(120), nullable=False)
+
+    objetivo = db.Column(db.Text, nullable=False)
+    responsavel = db.Column(db.String(150), nullable=False)
+    nome_funcao_data = db.Column(db.String(255), nullable=False)
+
+    descricao_registro = db.Column(db.Text, nullable=False)
+    conclusao = db.Column(db.Text, nullable=False)
+    sugestao = db.Column(db.Text, nullable=True)
+
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    imagens = db.relationship(
+        "ImagemAnaliseInvestigativa",
+        backref="analise",
+        cascade="all, delete-orphan",
+        lazy=True
+    )
+
+
+class ImagemAnaliseInvestigativa(db.Model):
+    __tablename__ = "imagens_analises_investigativas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    analise_id = db.Column(db.Integer, db.ForeignKey("analises_investigativas.id"), nullable=False)
+
+    arquivo = db.Column(db.String(255), nullable=False)
+    descricao = db.Column(db.Text, nullable=False)
+
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Ocorrencia(db.Model):
     __tablename__ = "ocorrencias"
@@ -208,6 +266,339 @@ def index():
     if session.get("user_id"):
         return redirect(url_for("ocorrencias"))
     return redirect(url_for("login"))
+
+
+
+@app.route("/analise-investigativa", methods=["GET"])
+@login_required
+def analise_investigativa():
+    return render_template("analise_investigativa.html")
+
+
+def classify_line(valor):
+    valor = (valor or "").strip()
+    if not valor:
+        return "-"
+    return valor
+
+
+def style_heading(paragraph, text, size=12, bold=True, align="left"):
+    paragraph.text = ""
+
+    if align == "center":
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    else:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+    run = paragraph.add_run(text)
+    run.bold = bold
+    run.font.name = "Arial"
+    run.font.size = Pt(size)
+
+
+def set_cell_background(cell, color_hex):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:fill"), color_hex)
+    tc_pr.append(shd)
+
+
+def add_grid_table(doc, data, col_widths_cm=None, header_bold_cols=None):
+    table = doc.add_table(rows=len(data), cols=len(data[0]))
+    table.style = "Table Grid"
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    header_bold_cols = header_bold_cols or []
+
+    for r_idx, row in enumerate(data):
+        for c_idx, value in enumerate(row):
+            cell = table.rows[r_idx].cells[c_idx]
+            cell.text = str(value or "")
+
+            if col_widths_cm and c_idx < len(col_widths_cm):
+                cell.width = Cm(col_widths_cm[c_idx])
+
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.name = "Arial"
+                    run.font.size = Pt(9)
+
+                    if c_idx in header_bold_cols:
+                        run.bold = True
+
+            if c_idx in header_bold_cols:
+                set_cell_background(cell, "F2F2F2")
+
+    return table
+
+
+def convert_doc_to_pdf_bytes(doc, base_name="documento"):
+    """
+    PDF simples com o mesmo conteúdo textual.
+    A conversão visual idêntica ao DOCX só acontece usando LibreOffice/Word.
+    """
+    buffer = BytesIO()
+
+    pdf = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36
+    )
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    story.append(Paragraph("ANÁLISE INVESTIGATIVA", styles["Title"]))
+    story.append(Spacer(1, 12))
+    story.append(Paragraph("DHL - SECURITY", styles["Heading2"]))
+    story.append(Spacer(1, 12))
+
+    pdf.build(story)
+    buffer.seek(0)
+
+    return buffer
+
+@app.route("/gerar_docx", methods=["POST"])
+def gerar_analise_investigativa():
+    f = request.form
+
+    # ===== Coleta do form =====
+    id_relatorio = (f.get("id_relatorio", "") or "").strip()
+
+    dados_operacao = {
+        "Empresa": f.get("empresa", ""),
+        "Unidade": f.get("unidade", ""),
+        "Endereço": f.get("endereco", ""),
+        "Classificação do Site": classify_line(f.get("classificacao", "")),
+        "Produtos Segmento (Setor)": f.get("produtos_segmento", ""),
+        "Cliente(s)": f.get("clientes", ""),
+    }
+
+    dados_levantamento = {
+        "Objetivo": f.get("objetivo", ""),
+        "Responsável pelo Levantamento": f.get("responsavel", ""),
+        "Nome / Função / Data": f.get("nome_funcao_data", ""),
+    }
+
+    descricao_registro = f.get("descricao_registro", "")
+    conclusao = f.get("conclusao", "")
+    sugestao = f.get("sugestao", "")
+
+    files = request.files.getlist("imagens[]")
+    descricoes = request.form.getlist("descricoes[]")
+    if len(descricoes) < len(files):
+        descricoes += [""] * (len(files) - len(descricoes))
+    evidencias = [(file, desc) for file, desc in zip(files, descricoes) if file and file.filename]
+
+    # ===== Montagem do DOCX =====
+    doc = Document()
+
+    # Margens
+    for section in doc.sections:
+        section.left_margin = Cm(2.0)
+        section.right_margin = Cm(2.0)
+        section.top_margin = Cm(2.0)
+        section.bottom_margin = Cm(2.0)
+
+    # ===== Cabeçalho com logo =====
+    logo_path = os.path.join(app.root_path, "static", "logo.png")
+
+    for section in doc.sections:
+        header = section.header
+
+        # limpar conteúdo anterior (sem usar p.clear(), que pode não existir)
+        for p in header.paragraphs:
+            p.text = ""
+
+        # largura disponível (página - margens)
+        available_width = section.page_width - section.left_margin - section.right_margin
+
+        # ✅ AQUI É A CORREÇÃO: add_table no header exige width
+        header_table = header.add_table(rows=1, cols=2, width=available_width)
+        header_table.alignment = WD_TABLE_ALIGNMENT.LEFT
+
+        # opcional: controlar proporção das colunas
+        try:
+            header_table.columns[0].width = Cm(5.0)
+            header_table.columns[1].width = Cm(12.0)
+        except Exception:
+            pass
+
+        cell_logo = header_table.rows[0].cells[0]
+        p_logo = cell_logo.paragraphs[0]
+        p_logo.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+        if os.path.exists(logo_path):
+            run_logo = p_logo.add_run()
+            run_logo.add_picture(logo_path, width=Cm(3.5))
+        else:
+            run_logo = p_logo.add_run("DHL")
+            run_logo.bold = True
+            run_logo.font.name = "Arial"
+            run_logo.font.size = Pt(12)
+
+        header_table.rows[0].cells[1].text = ""
+
+    # ===== Título e faixa =====
+    p = doc.add_paragraph()
+    style_heading(p, "ANÁLISE INVESTIGATIVA", size=16, bold=True, align="center")
+
+    code_tbl = add_grid_table(doc, [[" DHL - SECURITY "]])
+    for cell in code_tbl.rows[0].cells:
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in cell.paragraphs[0].runs:
+            run.font.size = Pt(9)
+
+    # ===== DADOS DA OPERAÇÃO =====
+    h2 = doc.add_paragraph()
+    style_heading(h2, "Dados da Operação", size=14, bold=True, align="left")
+
+    add_grid_table(
+        doc,
+        [["Nº do Relatório (ID):", id_relatorio]],
+        col_widths_cm=[5.0, 15.5],
+        header_bold_cols=[0],
+    )
+
+    add_grid_table(
+        doc,
+        [["Empresa:", dados_operacao["Empresa"], "Unidade:", dados_operacao["Unidade"]]],
+        col_widths_cm=[3.0, 8.5, 3.0, 6.0],
+        header_bold_cols=[0, 2],
+    )
+
+    add_grid_table(
+        doc,
+        [["Endereço:", dados_operacao["Endereço"]]],
+        col_widths_cm=[3.0, 17.5],
+        header_bold_cols=[0],
+    )
+
+    add_grid_table(
+        doc,
+        [["Classificação do Site:", dados_operacao["Classificação do Site"]]],
+        col_widths_cm=[5.0, 15.5],
+        header_bold_cols=[0],
+    )
+
+    add_grid_table(
+        doc,
+        [
+            ["Produtos Segmento (Setor):", dados_operacao["Produtos Segmento (Setor)"]],
+            ["Cliente(s):", dados_operacao["Cliente(s)"]],
+        ],
+        col_widths_cm=[6.0, 14.5],
+        header_bold_cols=[0],
+    )
+
+    # ===== DADOS DO LEVANTAMENTO =====
+    h2 = doc.add_paragraph()
+    style_heading(h2, "Dados do Levantamento", size=14, bold=True, align="left")
+
+    add_grid_table(
+        doc,
+        [
+            ["Objetivo:", dados_levantamento["Objetivo"]],
+            ["Responsável pelo Levantamento:", dados_levantamento["Responsável pelo Levantamento"]],
+            ["Nome / Função / Data:", dados_levantamento["Nome / Função / Data"]],
+        ],
+        col_widths_cm=[6.0, 14.5],
+        header_bold_cols=[0],
+    )
+
+    # ===== DESCRIÇÃO DO REGISTRO =====
+    p_sub = doc.add_paragraph()
+    style_heading(p_sub, "Descrição do Registro", size=12, bold=True, align="left")
+    doc.add_paragraph(descricao_registro or "")
+
+    # ===== EVIDÊNCIAS =====
+    if evidencias:
+        doc.add_paragraph().add_run("EVIDÊNCIAS ABAIXO").bold = True
+
+        max_width_cm = 8.0
+        row_pair = []
+        for idx, (fimg, desc) in enumerate(evidencias, start=1):
+            bio = BytesIO(fimg.read())
+            bio.seek(0)
+            row_pair.append((bio, f"Imagem {idx}: {desc or ''}"))
+
+            if len(row_pair) == 2 or idx == len(evidencias):
+                tbl = doc.add_table(rows=1, cols=2)
+                tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+                for ci, (img_bytes, legend) in enumerate(row_pair):
+                    cell = tbl.rows[0].cells[ci]
+                    run_img = cell.paragraphs[0].add_run()
+                    run_img.add_picture(img_bytes, width=Cm(max_width_cm))
+
+                    p_cap = cell.add_paragraph(legend)
+                    p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    for rn in p_cap.runs:
+                        rn.font.size = Pt(9)
+
+                if len(row_pair) == 1:
+                    tbl.rows[0].cells[1].text = ""
+
+                row_pair = []
+
+    # ===== CONCLUSÃO e SUGESTÃO =====
+    h2 = doc.add_paragraph()
+    style_heading(h2, "Conclusão", size=14, bold=True, align="left")
+    doc.add_paragraph(conclusao or "")
+
+    if (sugestao or "").strip():
+        h2 = doc.add_paragraph()
+        style_heading(h2, "Sugestão", size=14, bold=True, align="left")
+        doc.add_paragraph(sugestao)
+
+    # ===== Rodapé textual =====
+    code_para = doc.add_paragraph()
+    code_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if id_relatorio:
+        run_id = code_para.add_run(f"Nº do Relatório (ID): {id_relatorio}")
+        run_id.font.name = "Arial"
+        run_id.font.size = Pt(9)
+
+    base_name = "Analise_Investigativa"
+    if id_relatorio:
+        base_name = f"Analise_Investigativa_ID-{id_relatorio}"
+
+    # ===== Gera DOCX em memória =====
+    docx_buf = BytesIO()
+    doc.save(docx_buf)
+    docx_buf.seek(0)
+
+    # ===== Converter para PDF e gerar ZIP =====
+    try:
+        pdf_io = convert_doc_to_pdf_bytes(doc, base_name=base_name)
+        pdf_io.seek(0)
+
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f"{base_name}.docx", docx_buf.getvalue())
+            zf.writestr(f"{base_name}.pdf", pdf_io.getvalue())
+
+        zip_buf.seek(0)
+        return send_file(
+            zip_buf,
+            as_attachment=True,
+            download_name=f"{base_name}_DOCX_PDF.zip",
+            mimetype="application/zip",
+        )
+
+    except Exception:
+        docx_buf.seek(0)
+        return send_file(
+            docx_buf,
+            as_attachment=True,
+            download_name=f"{base_name}.docx",
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+
+
 
 
 @app.route("/login", methods=["GET", "POST"])
