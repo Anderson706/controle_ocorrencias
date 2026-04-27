@@ -390,10 +390,10 @@
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
 
-        <button type="button" class="btn voltar-red"
-        onclick="window.history.back()">
-        ← Voltar
-        </button>
+<!--        <button type="button" class="btn voltar-red"-->
+<!--        onclick="window.history.back()">-->
+<!--        ← Voltar-->
+<!--        </button>-->
     </header>
 
 
@@ -513,7 +513,7 @@
 
         <div class="buttons-row">
           <button type="submit" class="btn gerar">Gerar DOCX + PDF</button>
-           <button type="button" class="btn voltar" onclick="window.history.back()">← Voltar</button>
+           <button type="button" class="btn voltar-red" onclick="window.history.back()">← Voltar</button>
           <button type="button" class="btn sair" onclick="window.location.href='{{ url_for('logout') }}'">Sair</button>
           <button type="button" class="btn excluir" onclick="excluirFormulario()">Limpar</button>
         </div>
