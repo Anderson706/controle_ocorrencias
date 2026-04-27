@@ -2,262 +2,390 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
-  <title>Criar Usuário | Controle de Ocorrência</title>
+  <title>Criar Usuário | DHL Security</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <style>
     :root{
       --dhl-yellow:#ffcc00;
       --dhl-red:#d40511;
-      --dhl-red-dark:#b3030e;
-      --dhl-black:#1f1f1f;
-      --bg:#f3f5f7;
-      --card:#ffffff;
-      --line:#e5e7eb;
-      --text:#1f2937;
+      --dhl-red-dark:#a8030d;
+      --dark:#111827;
       --muted:#6b7280;
-      --shadow:0 12px 28px rgba(15,23,42,.08);
-      --radius:20px;
-      --sidebar:#161a1d;
-      --sidebar-2:#20262b;
+      --line:#e5e7eb;
+      --bg:#f3f4f6;
+      --white:#ffffff;
     }
+
     *{ box-sizing:border-box; }
+
     body{
       margin:0;
       min-height:100vh;
       font-family:Arial, Helvetica, sans-serif;
-      background:var(--bg);
-      color:var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(255,204,0,.25), transparent 34%),
+        linear-gradient(135deg, #f3f4f6 0%, #ffffff 48%, #f9fafb 100%);
+      color:var(--dark);
     }
-    .app-shell{ display:flex; min-height:100vh; }
-    .sidebar{
-      width:260px;
-      background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
-      color:#fff;
-      position:fixed;
-      top:0; left:0; bottom:0;
-      padding:22px 18px;
+
+    .page{
+      min-height:100vh;
+      padding:28px;
     }
+
+    .shell{
+      max-width:1180px;
+      margin:0 auto;
+    }
+
+    .hero{
+      background:linear-gradient(135deg, var(--dhl-yellow), #ffe26a);
+      border-radius:26px;
+      padding:24px 28px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:20px;
+      box-shadow:0 18px 38px rgba(0,0,0,.12);
+      margin-bottom:22px;
+    }
+
     .brand{
       display:flex;
-      flex-direction:column;
-      gap:6px;
-      padding-bottom:18px;
-      margin-bottom:18px;
-      border-bottom:1px solid rgba(255,255,255,.08);
-    }
-    .brand-badge{
-      display:inline-flex;
       align-items:center;
-      justify-content:center;
-      width:max-content;
-      padding:7px 12px;
-      border-radius:999px;
-      background:var(--dhl-yellow);
-      color:#111;
-      font-size:11px;
-      font-weight:900;
+      gap:18px;
     }
-    .brand-title{ font-size:22px; font-weight:900; line-height:1.1; }
-    .brand-sub{ font-size:12px; color:rgba(255,255,255,.72); line-height:1.5; }
-    .menu{ display:flex; flex-direction:column; gap:8px; margin-top:20px; }
-    .menu a{
-      color:#fff;
-      padding:12px 14px;
-      border-radius:14px;
-      font-size:14px;
-      font-weight:700;
-      border:1px solid transparent;
-      text-decoration:none;
-    }
-    .menu a:hover, .menu a.active{
-      background:rgba(255,255,255,.08);
-      border-color:rgba(255,255,255,.10);
-    }
-    .main{
-      margin-left:260px;
-      width:calc(100% - 260px);
-      min-height:100vh;
-    }
-    .topbar{
-      height:76px;
+
+    .brand img{
+      height:58px;
       background:#fff;
-      border-bottom:1px solid var(--line);
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding:0 24px;
-    }
-    .topbar-left{ display:flex; align-items:center; gap:14px; }
-    .topbar-left img{ height:42px; }
-    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
-    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
-    .top-chip{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
       padding:8px 12px;
+      border-radius:16px;
+      box-shadow:0 8px 18px rgba(0,0,0,.12);
+    }
+
+    .hero h1{
+      margin:0;
+      font-size:28px;
+      font-weight:900;
+      text-transform:uppercase;
+    }
+
+    .hero p{
+      margin:6px 0 0;
+      color:#374151;
+      font-weight:700;
+      font-size:13px;
+    }
+
+    .user-chip{
+      background:var(--dhl-red);
+      color:#fff;
+      padding:10px 15px;
       border-radius:999px;
       font-size:12px;
-      font-weight:800;
-      border:1px solid #efd56f;
-      background:#fff8d8;
-      color:#7a5a00;
+      font-weight:900;
+      box-shadow:0 10px 22px rgba(212,5,17,.25);
+      white-space:nowrap;
     }
-    .content{ padding:24px; }
+
     .card{
-      background:var(--card);
+      background:rgba(255,255,255,.96);
       border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:22px;
-      box-shadow:var(--shadow);
-      max-width:900px;
+      border-radius:26px;
+      box-shadow:0 20px 45px rgba(15,23,42,.09);
+      overflow:hidden;
     }
-    .row{ display:flex; gap:12px; flex-wrap:wrap; }
+
+    .card-top{
+      padding:22px 26px;
+      border-bottom:1px solid var(--line);
+      background:linear-gradient(90deg, #fff, #fff8d6);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:16px;
+    }
+
+    .card-top h2{
+      margin:0;
+      font-size:22px;
+      font-weight:900;
+    }
+
+    .card-top p{
+      margin:5px 0 0;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .security-badge{
+      background:#111827;
+      color:#fff;
+      padding:10px 14px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+
+    .content{
+      padding:24px 26px 28px;
+    }
+
+    .flash{
+      margin-bottom:14px;
+      padding:13px 16px;
+      border-radius:14px;
+      font-weight:800;
+      font-size:14px;
+    }
+
+    .flash.success{ background:#dcfce7; color:#166534; }
+    .flash.danger{ background:#fee2e2; color:#991b1b; }
+    .flash.warning{ background:#fff7ed; color:#9a3412; }
+
+    .form-grid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0,1fr));
+      gap:18px;
+    }
+
     .field{
       display:flex;
       flex-direction:column;
-      gap:6px;
-      flex:1;
-      min-width:240px;
-      margin-bottom:14px;
+      gap:7px;
     }
-    .field label{ font-size:13px; color:var(--muted); font-weight:800; }
-    .field input, .field select{
+
+    .field-full{
+      grid-column:1 / -1;
+    }
+
+    label{
+      font-size:12px;
+      color:#374151;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.4px;
+    }
+
+    input,
+    select{
       width:100%;
-      border:1px solid #d6dae1;
-      border-radius:14px;
+      border:1px solid #d1d5db;
+      background:#f9fafb;
+      border-radius:16px;
       padding:13px 14px;
       font-size:14px;
       outline:none;
+      transition:.2s ease;
     }
-    .field input:focus, .field select:focus{
-      border-color:#d40511;
-      box-shadow:0 0 0 4px rgba(212,5,17,.08);
+
+    input:focus,
+    select:focus{
+      border-color:var(--dhl-red);
+      background:#fff;
+      box-shadow:0 0 0 4px rgba(212,5,17,.12);
     }
+
+    .hint{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:4px;
+    }
+
+    .perfil-info{
+      margin-top:22px;
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0,1fr));
+      gap:14px;
+    }
+
+    .info-box{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:18px;
+      padding:15px;
+    }
+
+    .info-box strong{
+      display:block;
+      color:var(--dhl-red);
+      font-size:13px;
+      margin-bottom:6px;
+      text-transform:uppercase;
+    }
+
+    .info-box span{
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.5;
+    }
+
     .actions{
+      margin-top:26px;
+      padding-top:22px;
+      border-top:1px solid var(--line);
       display:flex;
-      gap:10px;
+      justify-content:flex-end;
+      gap:12px;
       flex-wrap:wrap;
-      margin-top:10px;
     }
+
     .btn{
       border:none;
-      border-radius:14px;
-      padding:12px 16px;
+      border-radius:999px;
+      padding:13px 20px;
       cursor:pointer;
-      font-weight:800;
+      font-weight:900;
       text-decoration:none;
       display:inline-flex;
       align-items:center;
       justify-content:center;
+      gap:8px;
+      font-size:13px;
+      transition:.2s ease;
     }
-    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; }
-    .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
-    .flash{
-      margin-bottom:12px;
-      padding:12px 14px;
-      border-radius:12px;
-      font-weight:700;
-      font-size:14px;
-    }
-    .flash.success{ background:#e6fffa; color:#065f46; }
-    .flash.danger{ background:#ffe4e6; color:#9f1239; }
-    .flash.warning{ background:#fff4db; color:#9a6700; }
 
-    @media (max-width:1100px){
-      .sidebar{ position:relative; width:100%; }
-      .main{ margin-left:0; width:100%; }
-      .app-shell{ flex-direction:column; }
+    .btn:hover{
+      transform:translateY(-1px);
+      filter:brightness(.96);
+    }
+
+    .btn-red{
+      background:linear-gradient(135deg, var(--dhl-red), var(--dhl-red-dark));
+      color:#fff;
+      box-shadow:0 14px 24px rgba(212,5,17,.25);
+    }
+
+    .btn-dark{
+      background:#111827;
+      color:#fff;
+      box-shadow:0 14px 24px rgba(17,24,39,.16);
+    }
+
+    @media(max-width:800px){
+      .page{ padding:16px; }
+
+      .hero,
+      .card-top{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+
+      .form-grid,
+      .perfil-info{
+        grid-template-columns:1fr;
+      }
+
+      .actions{
+        justify-content:stretch;
+      }
+
+      .btn{
+        width:100%;
+      }
     }
   </style>
 </head>
+
 <body>
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand">
-      <span class="brand-badge">DHL SECURITY</span>
-      <div class="brand-title">Controle de<br>Ocorrência</div>
-      <div class="brand-sub">Cadastro de usuários e controle de acesso.</div>
-    </div>
+  <main class="page">
+    <div class="shell">
 
-    <nav class="menu">
-      <a href="{{ url_for('ocorrencias') }}">Ocorrências</a>
-      <a href="{{ url_for('register') }}" class="active">Criar usuário</a>
-      <a href="{{ url_for('listar_usuarios') }}">Usuários</a>
-      <a href="{{ url_for('logout') }}">Sair</a>
-    </nav>
-  </aside>
-
-  <main class="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL">
-        <div>
-          <h1>Criar Usuário</h1>
-          <p>Perfis disponíveis: Superusuário, Usuário e Operacional</p>
+      <section class="hero">
+        <div class="brand">
+          <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL">
+          <div>
+            <h1>Criar Usuário</h1>
+            <p>DHL Security | Administração de acessos e perfis do sistema</p>
+          </div>
         </div>
-      </div>
 
-      <div>
-        <span class="top-chip">{{ session.get('user_nome', 'Usuário') }} | {{ session.get('user_perfil', '-') }}</span>
-      </div>
-    </header>
+        <div class="user-chip">
+          {{ session.get('user_nome', 'Usuário') }} | {{ session.get('user_perfil', '-') }}
+        </div>
+      </section>
 
-    <div class="content">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            <div class="flash {{ category }}">{{ message }}</div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
-
-      <div class="card">
-        <form method="POST">
-          <div class="row">
-            <div class="field">
-              <label>Nome</label>
-              <input type="text" name="nome" required>
-            </div>
-
-            <div class="field">
-              <label>Usuário</label>
-              <input type="text" name="username" required>
-            </div>
+      <section class="card">
+        <div class="card-top">
+          <div>
+            <h2>Novo cadastro de usuário</h2>
+            <p>Preencha os dados abaixo para liberar o acesso ao sistema.</p>
           </div>
+          <div class="security-badge">CONTROLE DE ACESSO</div>
+        </div>
 
-          <div class="row">
-            <div class="field">
-              <label>Senha</label>
-              <input type="password" name="senha" required>
+        <div class="content">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            {% endif %}
+          {% endwith %}
+
+          <form method="POST">
+            <div class="form-grid">
+              <div class="field">
+                <label>Nome completo</label>
+                <input type="text" name="nome" placeholder="Digite o nome completo" required>
+              </div>
+
+              <div class="field">
+                <label>Usuário de acesso</label>
+                <input type="text" name="username" placeholder="Ex: nome.sobrenome" required>
+                <div class="hint">Use preferencialmente o padrão corporativo.</div>
+              </div>
+
+              <div class="field">
+                <label>Senha</label>
+                <input type="password" name="senha" placeholder="Digite a senha" required>
+              </div>
+
+              <div class="field">
+                <label>Confirmar senha</label>
+                <input type="password" name="confirmar_senha" placeholder="Confirme a senha" required>
+              </div>
+
+              <div class="field field-full">
+                <label>Perfil de acesso</label>
+                <select name="perfil" required>
+                  <option value="">Selecione o perfil</option>
+                  <option value="SUPERUSUARIO">Superusuário</option>
+                  <option value="USUARIO">Usuário</option>
+                  <option value="OPERACIONAL">Operacional</option>
+                </select>
+              </div>
             </div>
 
-            <div class="field">
-              <label>Confirmar senha</label>
-              <input type="password" name="confirmar_senha" required>
-            </div>
-          </div>
+            <div class="perfil-info">
+              <div class="info-box">
+                <strong>Superusuário</strong>
+                <span>Acesso administrativo completo, incluindo gestão de usuários.</span>
+              </div>
 
-          <div class="row">
-            <div class="field">
-              <label>Perfil</label>
-              <select name="perfil" required>
-                <option value="">Selecione</option>
-                <option value="SUPERUSUARIO">Superusuário</option>
-                <option value="USUARIO">Usuário</option>
-                <option value="OPERACIONAL">Operacional</option>
-              </select>
-            </div>
-          </div>
+              <div class="info-box">
+                <strong>Usuário</strong>
+                <span>Acesso operacional ampliado para registros e acompanhamento.</span>
+              </div>
 
-          <div class="actions">
-            <button type="submit" class="btn btn-red">Salvar usuário</button>
-            <a href="{{ url_for('ocorrencias') }}" class="btn btn-dark">Voltar</a>
-          </div>
-        </form>
-      </div>
+              <div class="info-box">
+                <strong>Operacional</strong>
+                <span>Acesso básico para utilização diária do sistema.</span>
+              </div>
+            </div>
+
+            <div class="actions">
+              <a href="{{ url_for('listar_usuarios') }}" class="btn btn-dark">← Voltar</a>
+              <button type="submit" class="btn btn-red">Salvar usuário</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
     </div>
   </main>
-</div>
 </body>
 </html>

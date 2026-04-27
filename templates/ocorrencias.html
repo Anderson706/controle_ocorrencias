@@ -353,7 +353,7 @@
     .btn:hover{ transform:translateY(-1px); }
     .btn-red{
       background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
-      color:#fff;
+      color:#ffcc00;
       box-shadow:0 8px 18px rgba(212,5,17,.20);
     }
     .btn-dark{
@@ -619,7 +619,7 @@
                 <label>Natureza</label>
                 <select name="natureza" required>
                   <option value="">Selecione</option>
-                  {% for item in ['Desvio de Conduta','Furto','Acidente','Desvio de Processo','Desinteligência','Outros'] %}
+                  {% for item in ['Assédio','Acidente','Desvio de Conduta','Furto','Pacote No Descarte','Pacote Violado','Desvio de Processo','Desinteligência','Outros'] %}
                     <option value="{{ item }}" {% if modo_edicao and registro_edicao.natureza == item %}selected{% endif %}>{{ item }}</option>
                   {% endfor %}
                 </select>

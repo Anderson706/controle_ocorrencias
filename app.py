@@ -4,7 +4,11 @@ from io import BytesIO
 from datetime import datetime
 from functools import wraps
 from uuid import uuid4
-
+from docx.shared import Cm, Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, send_from_directory, send_file, current_app
@@ -361,6 +365,90 @@ def convert_doc_to_pdf_bytes(doc, base_name="documento"):
 
     return buffer
 
+def set_cell_bg(cell, color):
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:fill"), color)
+    tcPr.append(shd)
+
+
+def set_cell_border(cell, color="D9D9D9", size="8"):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    borders = OxmlElement("w:tcBorders")
+
+    for border_name in ["top", "left", "bottom", "right"]:
+        border = OxmlElement(f"w:{border_name}")
+        border.set(qn("w:val"), "single")
+        border.set(qn("w:sz"), size)
+        border.set(qn("w:space"), "0")
+        border.set(qn("w:color"), color)
+        borders.append(border)
+
+    tcPr.append(borders)
+
+
+def format_cell(cell, bold=False, bg=None, align="left"):
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+
+    if bg:
+        set_cell_bg(cell, bg)
+
+    set_cell_border(cell)
+
+    for p in cell.paragraphs:
+        p.paragraph_format.space_before = Pt(3)
+        p.paragraph_format.space_after = Pt(3)
+
+        if align == "center":
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        else:
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+        for run in p.runs:
+            run.font.name = "Arial"
+            run.font.size = Pt(9)
+            run.bold = bold
+            run.font.color.rgb = RGBColor(31, 41, 55)
+
+
+def add_section_title(doc, title):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(14)
+    p.paragraph_format.space_after = Pt(6)
+
+    run = p.add_run(title.upper())
+    run.bold = True
+    run.font.name = "Arial"
+    run.font.size = Pt(11)
+    run.font.color.rgb = RGBColor(212, 5, 17)
+
+    return p
+
+
+def add_professional_table(doc, rows, col_widths):
+    table = doc.add_table(rows=0, cols=len(col_widths))
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
+
+    for row_data in rows:
+        row = table.add_row()
+        for i, value in enumerate(row_data):
+            cell = row.cells[i]
+            cell.width = Cm(col_widths[i])
+            cell.text = str(value or "")
+
+            is_label = i % 2 == 0
+            format_cell(
+                cell,
+                bold=is_label,
+                bg="FFF2CC" if is_label else "FFFFFF",
+                align="left"
+            )
+
+    doc.add_paragraph().paragraph_format.space_after = Pt(3)
+    return table
+
 @app.route("/gerar_docx", methods=["POST"])
 def gerar_analise_investigativa():
     f = request.form
@@ -393,136 +481,253 @@ def gerar_analise_investigativa():
         descricoes += [""] * (len(files) - len(descricoes))
     evidencias = [(file, desc) for file, desc in zip(files, descricoes) if file and file.filename]
 
-    # ===== Montagem do DOCX =====
     doc = Document()
 
-    # Margens
+    # ===== Margens =====
     for section in doc.sections:
-        section.left_margin = Cm(2.0)
-        section.right_margin = Cm(2.0)
-        section.top_margin = Cm(2.0)
-        section.bottom_margin = Cm(2.0)
+        section.left_margin = Cm(1.7)
+        section.right_margin = Cm(1.7)
+        section.top_margin = Cm(1.5)
+        section.bottom_margin = Cm(1.5)
 
-    # ===== Cabeçalho com logo =====
+    # ==========================================================
+    # FUNÇÕES DE FORMATAÇÃO
+    # ==========================================================
+    def set_cell_bg(cell, color):
+        tcPr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:fill"), color)
+        tcPr.append(shd)
+
+    def set_cell_border(cell, color="D9D9D9", size="8"):
+        tcPr = cell._tc.get_or_add_tcPr()
+        tcBorders = OxmlElement("w:tcBorders")
+
+        for border_name in ["top", "left", "bottom", "right"]:
+            border = OxmlElement(f"w:{border_name}")
+            border.set(qn("w:val"), "single")
+            border.set(qn("w:sz"), size)
+            border.set(qn("w:space"), "0")
+            border.set(qn("w:color"), color)
+            tcBorders.append(border)
+
+        tcPr.append(tcBorders)
+
+    def format_cell(cell, bold=False, bg="FFFFFF", align="left"):
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+        set_cell_bg(cell, bg)
+        set_cell_border(cell)
+
+        for p in cell.paragraphs:
+            p.paragraph_format.space_before = Pt(4)
+            p.paragraph_format.space_after = Pt(4)
+
+            if align == "center":
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            else:
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+            for run in p.runs:
+                run.font.name = "Arial"
+                run.font.size = Pt(9)
+                run.bold = bold
+                run.font.color.rgb = RGBColor(31, 41, 55)
+
+    def add_section_title(doc, title):
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(14)
+        p.paragraph_format.space_after = Pt(6)
+
+        run = p.add_run(title.upper())
+        run.bold = True
+        run.font.name = "Arial"
+        run.font.size = Pt(11)
+        run.font.color.rgb = RGBColor(212, 5, 17)
+
+    def add_professional_table(doc, rows, col_widths):
+        table = doc.add_table(rows=0, cols=len(col_widths))
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = False
+
+        for row_data in rows:
+            row = table.add_row()
+
+            for i, value in enumerate(row_data):
+                cell = row.cells[i]
+                cell.width = Cm(col_widths[i])
+                cell.text = str(value or "")
+
+                is_label = i % 2 == 0
+
+                format_cell(
+                    cell,
+                    bold=is_label,
+                    bg="FFF2CC" if is_label else "FFFFFF",
+                    align="left"
+                )
+
+        doc.add_paragraph().paragraph_format.space_after = Pt(2)
+        return table
+
+    def add_text_box(doc, text="\n\n\n"):
+        table = doc.add_table(rows=1, cols=1)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        cell = table.rows[0].cells[0]
+        cell.text = text or "\n\n\n"
+        format_cell(cell, bold=False, bg="FFFFFF")
+
+        return table
+
+    # ==========================================================
+    # CABEÇALHO COM LOGO
+    # ==========================================================
     logo_path = os.path.join(app.root_path, "static", "logo.png")
 
     for section in doc.sections:
         header = section.header
 
-        # limpar conteúdo anterior (sem usar p.clear(), que pode não existir)
         for p in header.paragraphs:
             p.text = ""
 
-        # largura disponível (página - margens)
         available_width = section.page_width - section.left_margin - section.right_margin
 
-        # ✅ AQUI É A CORREÇÃO: add_table no header exige width
         header_table = header.add_table(rows=1, cols=2, width=available_width)
-        header_table.alignment = WD_TABLE_ALIGNMENT.LEFT
+        header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        header_table.autofit = False
 
-        # opcional: controlar proporção das colunas
-        try:
-            header_table.columns[0].width = Cm(5.0)
-            header_table.columns[1].width = Cm(12.0)
-        except Exception:
-            pass
+        header_table.columns[0].width = Cm(5.0)
+        header_table.columns[1].width = Cm(14.0)
 
         cell_logo = header_table.rows[0].cells[0]
+        cell_info = header_table.rows[0].cells[1]
+
+        for cell in [cell_logo, cell_info]:
+            set_cell_border(cell, color="FFFFFF")
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+
         p_logo = cell_logo.paragraphs[0]
         p_logo.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
         if os.path.exists(logo_path):
             run_logo = p_logo.add_run()
-            run_logo.add_picture(logo_path, width=Cm(3.5))
+            run_logo.add_picture(logo_path, width=Cm(3.8))
         else:
             run_logo = p_logo.add_run("DHL")
             run_logo.bold = True
             run_logo.font.name = "Arial"
-            run_logo.font.size = Pt(12)
+            run_logo.font.size = Pt(16)
+            run_logo.font.color.rgb = RGBColor(212, 5, 17)
 
-        header_table.rows[0].cells[1].text = ""
+        p_info = cell_info.paragraphs[0]
+        p_info.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-    # ===== Título e faixa =====
+        r1 = p_info.add_run("DHL SECURITY\n")
+        r1.bold = True
+        r1.font.name = "Arial"
+        r1.font.size = Pt(10)
+        r1.font.color.rgb = RGBColor(212, 5, 17)
+
+        r2 = p_info.add_run("Relatório Corporativo de Análise Investigativa")
+        r2.font.name = "Arial"
+        r2.font.size = Pt(8)
+        r2.font.color.rgb = RGBColor(90, 90, 90)
+
+    doc.add_paragraph()
+
+    # ==========================================================
+    # TÍTULO PRINCIPAL
+    # ==========================================================
     p = doc.add_paragraph()
-    style_heading(p, "ANÁLISE INVESTIGATIVA", size=16, bold=True, align="center")
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(8)
+    p.paragraph_format.space_after = Pt(10)
 
-    code_tbl = add_grid_table(doc, [[" DHL - SECURITY "]])
-    for cell in code_tbl.rows[0].cells:
-        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        for run in cell.paragraphs[0].runs:
-            run.font.size = Pt(9)
+    run = p.add_run("ANÁLISE INVESTIGATIVA")
+    run.bold = True
+    run.font.name = "Arial"
+    run.font.size = Pt(17)
+    run.font.color.rgb = RGBColor(31, 41, 55)
 
-    # ===== DADOS DA OPERAÇÃO =====
-    h2 = doc.add_paragraph()
-    style_heading(h2, "Dados da Operação", size=14, bold=True, align="left")
+    # ==========================================================
+    # FAIXA DHL SECURITY
+    # ==========================================================
+    faixa = doc.add_table(rows=1, cols=1)
+    faixa.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-    add_grid_table(
-        doc,
-        [["Nº do Relatório (ID):", id_relatorio]],
-        col_widths_cm=[5.0, 15.5],
-        header_bold_cols=[0],
-    )
+    cell = faixa.rows[0].cells[0]
+    cell.text = "DHL SECURITY"
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
 
-    add_grid_table(
-        doc,
-        [["Empresa:", dados_operacao["Empresa"], "Unidade:", dados_operacao["Unidade"]]],
-        col_widths_cm=[3.0, 8.5, 3.0, 6.0],
-        header_bold_cols=[0, 2],
-    )
+    set_cell_bg(cell, "FFCC00")
+    set_cell_border(cell, color="D40511", size="12")
 
-    add_grid_table(
-        doc,
-        [["Endereço:", dados_operacao["Endereço"]]],
-        col_widths_cm=[3.0, 17.5],
-        header_bold_cols=[0],
-    )
+    p = cell.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(6)
+    p.paragraph_format.space_after = Pt(6)
 
-    add_grid_table(
-        doc,
-        [["Classificação do Site:", dados_operacao["Classificação do Site"]]],
-        col_widths_cm=[5.0, 15.5],
-        header_bold_cols=[0],
-    )
+    for run in p.runs:
+        run.bold = True
+        run.font.name = "Arial"
+        run.font.size = Pt(10)
+        run.font.color.rgb = RGBColor(120, 0, 0)
 
-    add_grid_table(
+    doc.add_paragraph()
+
+    # ==========================================================
+    # DADOS DA OPERAÇÃO
+    # ==========================================================
+    add_section_title(doc, "Dados da Operação")
+
+    add_professional_table(
         doc,
         [
+            ["Nº do Relatório (ID):", id_relatorio],
+            ["Empresa:", dados_operacao["Empresa"]],
+            ["Unidade:", dados_operacao["Unidade"]],
+            ["Endereço:", dados_operacao["Endereço"]],
+            ["Classificação do Site:", dados_operacao["Classificação do Site"]],
             ["Produtos Segmento (Setor):", dados_operacao["Produtos Segmento (Setor)"]],
             ["Cliente(s):", dados_operacao["Cliente(s)"]],
         ],
-        col_widths_cm=[6.0, 14.5],
-        header_bold_cols=[0],
+        col_widths=[6.0, 13.5]
     )
 
-    # ===== DADOS DO LEVANTAMENTO =====
-    h2 = doc.add_paragraph()
-    style_heading(h2, "Dados do Levantamento", size=14, bold=True, align="left")
+    # ==========================================================
+    # DADOS DO LEVANTAMENTO
+    # ==========================================================
+    add_section_title(doc, "Dados do Levantamento")
 
-    add_grid_table(
+    add_professional_table(
         doc,
         [
             ["Objetivo:", dados_levantamento["Objetivo"]],
             ["Responsável pelo Levantamento:", dados_levantamento["Responsável pelo Levantamento"]],
             ["Nome / Função / Data:", dados_levantamento["Nome / Função / Data"]],
         ],
-        col_widths_cm=[6.0, 14.5],
-        header_bold_cols=[0],
+        col_widths=[6.0, 13.5]
     )
 
-    # ===== DESCRIÇÃO DO REGISTRO =====
-    p_sub = doc.add_paragraph()
-    style_heading(p_sub, "Descrição do Registro", size=12, bold=True, align="left")
-    doc.add_paragraph(descricao_registro or "")
+    # ==========================================================
+    # DESCRIÇÃO DO REGISTRO
+    # ==========================================================
+    add_section_title(doc, "Descrição do Registro")
+    add_text_box(doc, descricao_registro or "\n\n\n\n")
 
-    # ===== EVIDÊNCIAS =====
+    # ==========================================================
+    # EVIDÊNCIAS
+    # ==========================================================
     if evidencias:
-        doc.add_paragraph().add_run("EVIDÊNCIAS ABAIXO").bold = True
+        add_section_title(doc, "Evidências")
 
         max_width_cm = 8.0
         row_pair = []
+
         for idx, (fimg, desc) in enumerate(evidencias, start=1):
             bio = BytesIO(fimg.read())
             bio.seek(0)
+
             row_pair.append((bio, f"Imagem {idx}: {desc or ''}"))
 
             if len(row_pair) == 2 or idx == len(evidencias):
@@ -531,57 +736,89 @@ def gerar_analise_investigativa():
 
                 for ci, (img_bytes, legend) in enumerate(row_pair):
                     cell = tbl.rows[0].cells[ci]
-                    run_img = cell.paragraphs[0].add_run()
+                    format_cell(cell, bg="FFFFFF", align="center")
+
+                    p_img = cell.paragraphs[0]
+                    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+                    run_img = p_img.add_run()
                     run_img.add_picture(img_bytes, width=Cm(max_width_cm))
 
                     p_cap = cell.add_paragraph(legend)
                     p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
                     for rn in p_cap.runs:
-                        rn.font.size = Pt(9)
+                        rn.font.name = "Arial"
+                        rn.font.size = Pt(8)
+                        rn.font.color.rgb = RGBColor(90, 90, 90)
 
                 if len(row_pair) == 1:
                     tbl.rows[0].cells[1].text = ""
 
+                doc.add_paragraph()
                 row_pair = []
 
-    # ===== CONCLUSÃO e SUGESTÃO =====
-    h2 = doc.add_paragraph()
-    style_heading(h2, "Conclusão", size=14, bold=True, align="left")
-    doc.add_paragraph(conclusao or "")
+    # ==========================================================
+    # CONCLUSÃO
+    # ==========================================================
+    add_section_title(doc, "Conclusão")
+    add_text_box(doc, conclusao or "\n\n\n\n")
 
-    if (sugestao or "").strip():
-        h2 = doc.add_paragraph()
-        style_heading(h2, "Sugestão", size=14, bold=True, align="left")
-        doc.add_paragraph(sugestao)
+    # ==========================================================
+    # SUGESTÃO
+    # ==========================================================
+    add_section_title(doc, "Sugestão")
+    add_text_box(doc, sugestao or "\n\n\n\n")
 
-    # ===== Rodapé textual =====
+    # ==========================================================
+    # RODAPÉ TEXTUAL
+    # ==========================================================
+    doc.add_paragraph()
+
     code_para = doc.add_paragraph()
     code_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    if id_relatorio:
-        run_id = code_para.add_run(f"Nº do Relatório (ID): {id_relatorio}")
-        run_id.font.name = "Arial"
-        run_id.font.size = Pt(9)
 
+    texto_rodape = (
+        f"Nº do Relatório (ID): {id_relatorio}"
+        if id_relatorio
+        else "Relatório gerado pelo sistema DHL Security"
+    )
+
+    run_id = code_para.add_run(texto_rodape)
+    run_id.font.name = "Arial"
+    run_id.font.size = Pt(8)
+    run_id.font.color.rgb = RGBColor(100, 100, 100)
+
+    # ==========================================================
+    # NOME DO ARQUIVO
+    # ==========================================================
     base_name = "Analise_Investigativa"
+
     if id_relatorio:
         base_name = f"Analise_Investigativa_ID-{id_relatorio}"
 
-    # ===== Gera DOCX em memória =====
+    # ==========================================================
+    # GERA DOCX EM MEMÓRIA
+    # ==========================================================
     docx_buf = BytesIO()
     doc.save(docx_buf)
     docx_buf.seek(0)
 
-    # ===== Converter para PDF e gerar ZIP =====
+    # ==========================================================
+    # CONVERTE PARA PDF E GERA ZIP
+    # ==========================================================
     try:
         pdf_io = convert_doc_to_pdf_bytes(doc, base_name=base_name)
         pdf_io.seek(0)
 
         zip_buf = BytesIO()
+
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr(f"{base_name}.docx", docx_buf.getvalue())
             zf.writestr(f"{base_name}.pdf", pdf_io.getvalue())
 
         zip_buf.seek(0)
+
         return send_file(
             zip_buf,
             as_attachment=True,
@@ -591,6 +828,7 @@ def gerar_analise_investigativa():
 
     except Exception:
         docx_buf.seek(0)
+
         return send_file(
             docx_buf,
             as_attachment=True,
