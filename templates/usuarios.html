@@ -280,7 +280,8 @@
             <tr>
               <th>ID</th>
               <th>Nome</th>
-              <th>Usuário</th>
+              <th>E-mail</th>
+              <th>Site</th>
               <th>Perfil</th>
               <th>Ativo</th>
               <th>Criado em</th>
@@ -293,6 +294,7 @@
               <td><span class="id-pill">{{ u.id }}</span></td>
               <td><strong>{{ u.nome }}</strong></td>
               <td>{{ u.username }}</td>
+              <td>{{ u.site or '-' }}</td>
               <td><span class="perfil">{{ u.perfil }}</span></td>
               <td>
                 {% if u.ativo %}

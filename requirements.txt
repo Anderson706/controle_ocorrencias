@@ -1,0 +1,7 @@
+Flask
+Flask-SQLAlchemy
+Werkzeug
+python-docx
+reportlab
+openpyxl
+python-oracledb

@@ -37,16 +37,22 @@ from reportlab.platypus import (
 )
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_FOLDER = os.path.join(BASE_DIR, "database")
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
-DB_PATH = os.path.join(DB_FOLDER, "controle_ocorrencia.db")
 
-os.makedirs(DB_FOLDER, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+_ORACLE_USER = "SECPANEL"
+_ORACLE_PASS = "SEC003q2w3e4r2026"
+_ORACLE_HOST = "usqasap023-scan.phx-dc.dhl.com"
+_ORACLE_PORT = 1521
+_ORACLE_SVC  = "SECPANEL"
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "controle-ocorrencia-executivo"
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    f"oracle+oracledb://{_ORACLE_USER}:{_ORACLE_PASS}"
+    f"@{_ORACLE_HOST}:{_ORACLE_PORT}/?service_name={_ORACLE_SVC}"
+)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
@@ -65,20 +71,21 @@ EXTENSOES_PERMITIDAS_POST = {"png", "jpg", "jpeg", "webp", "pdf", "doc", "docx",
 # MODELS
 # =========================
 class Usuario(db.Model):
-    __tablename__ = "usuarios"
+    __tablename__ = "USERS_LIVRO"
 
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(120), nullable=False)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    senha_hash = db.Column(db.String(255), nullable=False)
-    perfil = db.Column(db.String(30), nullable=False, default="OPERACIONAL")
-    ativo = db.Column(db.Boolean, default=True)
-    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    id        = db.Column("ID",            db.Integer,     primary_key=True)
+    nome      = db.Column("NOME",          db.String(120), nullable=False)
+    username  = db.Column("EMAIL",         db.String(200), unique=True, nullable=False)
+    senha_hash= db.Column("PASSWORD_HASH", db.String(255), nullable=False)
+    perfil    = db.Column("ROLE",          db.String(30),  nullable=False, default="OPERACIONAL")
+    site      = db.Column("SITE",          db.String(100), nullable=True)
+    ativo     = db.Column("IS_ACTIVE",     db.Integer,     default=1)
+    criado_em = db.Column("CREATED_AT",    db.DateTime,    default=datetime.utcnow)
 
 class AnaliseInvestigativa(db.Model):
     __tablename__ = "analises_investigativas"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
 
     id_relatorio = db.Column(db.Integer, nullable=False)
     empresa = db.Column(db.String(120), nullable=False)
@@ -109,7 +116,7 @@ class AnaliseInvestigativa(db.Model):
 class ImagemAnaliseInvestigativa(db.Model):
     __tablename__ = "imagens_analises_investigativas"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
     analise_id = db.Column(db.Integer, db.ForeignKey("analises_investigativas.id"), nullable=False)
 
     arquivo = db.Column(db.String(255), nullable=False)
@@ -120,7 +127,7 @@ class ImagemAnaliseInvestigativa(db.Model):
 class Ocorrencia(db.Model):
     __tablename__ = "ocorrencias"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
     data_hora = db.Column(db.String(30), nullable=False)
     hora_ocorrencia = db.Column(db.String(10), nullable=False)
     natureza = db.Column(db.String(120), nullable=False)
@@ -845,23 +852,24 @@ def login():
         return redirect(url_for("ocorrencias"))
 
     if request.method == "POST":
-        username = (request.form.get("username") or "").strip().lower()
+        email = (request.form.get("username") or "").strip().lower()
         senha = (request.form.get("senha") or "").strip()
 
-        if not username or not senha:
-            flash("Preencha usuário e senha.", "warning")
+        if not email or not senha:
+            flash("Preencha e-mail e senha.", "warning")
             return render_template("login.html")
 
-        usuario = Usuario.query.filter_by(username=username, ativo=True).first()
+        usuario = Usuario.query.filter_by(username=email, ativo=1).first()
 
         if not usuario or not check_senha(usuario, senha):
-            flash("Usuário ou senha inválidos.", "danger")
+            flash("E-mail ou senha inválidos.", "danger")
             return render_template("login.html")
 
-        session["user_id"] = usuario.id
-        session["user_nome"] = usuario.nome
-        session["username"] = usuario.username
-        session["user_perfil"] = usuario.perfil
+        session["user_id"]    = usuario.id
+        session["user_nome"]  = usuario.nome
+        session["username"]   = usuario.username
+        session["user_perfil"]= usuario.perfil
+        session["user_site"]  = usuario.site or ""
 
         flash("Login realizado com sucesso.", "success")
         return redirect(url_for("ocorrencias"))
@@ -884,16 +892,21 @@ def logout():
 @perfil_required("SUPERUSUARIO")
 def register():
     if request.method == "POST":
-        nome = (request.form.get("nome") or "").strip()
-        username = (request.form.get("username") or "").strip().lower()
-        senha = (request.form.get("senha") or "").strip()
+        nome     = (request.form.get("nome") or "").strip()
+        email    = (request.form.get("email") or "").strip().lower()
+        site     = (request.form.get("site") or "").strip()
+        senha    = (request.form.get("senha") or "").strip()
         confirmar_senha = (request.form.get("confirmar_senha") or "").strip()
-        perfil = (request.form.get("perfil") or "").strip().upper()
+        perfil   = (request.form.get("perfil") or "").strip().upper()
 
         perfis_validos = {"SUPERUSUARIO", "USUARIO", "OPERACIONAL"}
 
-        if not nome or not username or not senha or not confirmar_senha or not perfil:
+        if not nome or not email or not senha or not confirmar_senha or not perfil:
             flash("Preencha todos os campos.", "warning")
+            return render_template("register.html")
+
+        if not email.endswith("@dhl.com"):
+            flash("O e-mail deve ser corporativo (@dhl.com).", "danger")
             return render_template("register.html")
 
         if perfil not in perfis_validos:
@@ -904,15 +917,16 @@ def register():
             flash("As senhas não conferem.", "danger")
             return render_template("register.html")
 
-        if Usuario.query.filter_by(username=username).first():
-            flash("Já existe um usuário com esse login.", "warning")
+        if Usuario.query.filter_by(username=email).first():
+            flash("Já existe um usuário com esse e-mail.", "warning")
             return render_template("register.html")
 
         novo_usuario = Usuario(
             nome=nome,
-            username=username,
+            username=email,
+            site=site,
             perfil=perfil,
-            ativo=True
+            ativo=1
         )
         set_senha(novo_usuario, senha)
 
@@ -1277,15 +1291,16 @@ def uploaded_file(filename):
 with app.app_context():
     db.create_all()
 
-    existe_super = Usuario.query.filter_by(username="admin").first()
+    existe_super = Usuario.query.filter_by(username="admin@dhl.com").first()
     if not existe_super:
         user = Usuario(
             nome="Administrador Master",
-            username="admin",
+            username="admin@dhl.com",
+            site="HQ",
             perfil="SUPERUSUARIO",
-            ativo=True
+            ativo=1
         )
-        set_senha(user, "123456")
+        set_senha(user, "Admin@2026")
         db.session.add(user)
         db.session.commit()
 
