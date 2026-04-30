@@ -4,143 +4,465 @@
   <meta charset="utf-8">
   <title>Login | Controle de Ocorrência</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <style>
     :root{
+      --dhl-yellow:#ffcc00;
       --dhl-red:#d40511;
-      --dhl-red-dark:#b3030e;
-      --bg:#f3f5f7;
-      --card:#ffffff;
+      --dhl-red-dark:#b1030d;
+      --dhl-black:#1f1f1f;
       --line:#e5e7eb;
       --text:#1f2937;
       --muted:#6b7280;
-      --shadow:0 12px 28px rgba(15,23,42,.08);
+      --bg:#f3f5f7;
+      --card:#ffffff;
+      --shadow:0 12px 30px rgba(0,0,0,.12);
+      --sidebar:#161a1d;
+      --sidebar-2:#20262b;
     }
+
     *{ box-sizing:border-box; }
-    body{
+
+    html, body{
       margin:0;
+      padding:0;
       min-height:100vh;
       font-family:Arial, Helvetica, sans-serif;
-      background:linear-gradient(135deg,#f3f5f7,#eceff3);
+      background:var(--bg);
+      color:var(--text);
+    }
+
+    a{ text-decoration:none; }
+
+    .page{
+      min-height:100vh;
+      display:flex;
+      background:var(--bg);
+    }
+
+    .left-panel{
+      width:320px;
+      background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
+      color:#fff;
+      padding:26px 22px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      box-shadow:6px 0 22px rgba(0,0,0,.12);
+    }
+
+    .brand-top{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .logo-box{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    .logo-side{
+      height:21px;
+      width:auto;
+      display:block;
+      object-fit:contain;
+      flex-shrink:0;
+    }
+
+    .brand-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:max-content;
+      padding:7px 12px;
+      border-radius:999px;
+      background:var(--dhl-yellow);
+      color:#111;
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.5px;
+    }
+
+    .brand-title{
+      font-size:26px;
+      font-weight:900;
+      line-height:1.15;
+      letter-spacing:.3px;
+    }
+
+    .brand-sub{
+      color:rgba(255,255,255,.74);
+      font-size:13px;
+      line-height:1.6;
+      max-width:240px;
+    }
+
+    .side-footer{
+      font-size:12px;
+      color:rgba(255,255,255,.55);
+      line-height:1.5;
+    }
+
+    .content{
+      flex:1;
       display:flex;
       align-items:center;
       justify-content:center;
-      padding:24px;
-      color:var(--text);
+      padding:32px;
     }
-    .auth-card{
+
+    .login-wrap{
+      width:100%;
+      max-width:1380px;
+      margin:0 auto;
+    }
+
+    .login-card{
+      width:100%;
+      min-height:calc(100vh - 64px);
+      background:var(--card);
+      border-radius:22px;
+      padding:42px;
+      box-shadow:var(--shadow);
+      border:1px solid var(--line);
+      display:grid;
+      grid-template-columns:1.1fr .9fr;
+      gap:42px;
+      align-items:center;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .login-card::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        radial-gradient(circle at 85% 15%, rgba(255,204,0,.10), transparent 18%),
+        radial-gradient(circle at 12% 88%, rgba(212,5,17,.05), transparent 22%);
+      pointer-events:none;
+    }
+
+    .left{
+      position:relative;
+      z-index:1;
+      padding-right:20px;
+    }
+
+    .login-badge{
+      display:inline-block;
+      margin-bottom:14px;
+      padding:8px 14px;
+      border-radius:999px;
+      background:#fff4db;
+      color:#9a6700;
+      font-weight:800;
+      font-size:12px;
+      letter-spacing:.4px;
+    }
+
+    .title{
+      font-size:42px;
+      color:var(--dhl-red);
+      font-weight:900;
+      margin-bottom:10px;
+      line-height:1.1;
+    }
+
+    .subtitle{
+      color:var(--muted);
+      font-size:16px;
+      line-height:1.7;
+      max-width:620px;
+      margin-bottom:26px;
+    }
+
+    .info-grid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(180px,1fr));
+      gap:14px;
+      max-width:700px;
+    }
+
+    .info-card{
+      background:linear-gradient(180deg,#fff,#fcfcfd);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:16px;
+      box-shadow:0 8px 18px rgba(15,23,42,.05);
+    }
+
+    .info-card strong{
+      display:block;
+      margin-bottom:8px;
+      color:var(--dhl-black);
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:.4px;
+    }
+
+    .info-card span{
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.55;
+      display:block;
+    }
+
+    .form-box{
+      position:relative;
+      z-index:1;
       width:100%;
       max-width:460px;
-      background:var(--card);
+      justify-self:end;
+      background:#fff;
       border:1px solid var(--line);
-      border-radius:24px;
-      padding:30px;
-      box-shadow:var(--shadow);
+      border-radius:20px;
+      padding:24px;
+      box-shadow:0 10px 24px rgba(15,23,42,.08);
     }
-    .logo-box{
-      display:flex;
-      justify-content:center;
+
+    .form-head{
       margin-bottom:18px;
     }
-    .logo-box img{ max-height:52px; }
-    h1{
-      margin:0 0 8px;
-      text-align:center;
-      font-size:28px;
-      color:#1f1f1f;
+
+    .form-head h2{
+      margin:0 0 6px 0;
+      font-size:24px;
+      color:var(--dhl-black);
+      font-weight:900;
     }
-    .sub{
-      margin:0 0 22px;
-      text-align:center;
-      color:var(--muted);
-      font-size:14px;
-    }
-    .field{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-      margin-bottom:14px;
-    }
-    .field label{
+
+    .form-head p{
+      margin:0;
       font-size:13px;
-      font-weight:800;
       color:var(--muted);
+      line-height:1.5;
     }
-    .field input{
+
+    .field{
+      margin-bottom:16px;
+    }
+
+    label{
+      display:block;
+      margin-bottom:6px;
+      font-weight:800;
+      color:var(--text);
+      font-size:13px;
+    }
+
+    input{
       width:100%;
+      padding:14px;
+      border-radius:12px;
       border:1px solid #d6dae1;
-      border-radius:14px;
-      padding:13px 14px;
       font-size:14px;
       outline:none;
+      transition:border-color .18s ease, box-shadow .18s ease;
     }
-    .field input:focus{
-      border-color:#d40511;
-      box-shadow:0 0 0 4px rgba(212,5,17,.08);
+
+    input:focus{
+      border-color:var(--dhl-red);
+      box-shadow:0 0 0 3px rgba(212,5,17,.10);
     }
+
     .btn{
       width:100%;
+      padding:14px;
       border:none;
-      border-radius:14px;
-      padding:13px 16px;
-      cursor:pointer;
+      border-radius:12px;
       font-weight:800;
+      cursor:pointer;
+      margin-top:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      transition:.18s ease;
       font-size:14px;
-      background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
-      color:#fff;
-      margin-top:8px;
     }
+
+    .btn:hover{
+      transform:translateY(-1px);
+    }
+
+    .btn-primary{
+      background:linear-gradient(180deg,var(--dhl-yellow),#f1be00);
+      color:#111;
+    }
+
+    .flash-wrap{
+      margin-bottom:16px;
+    }
+
     .flash{
       margin-bottom:12px;
       padding:12px 14px;
       border-radius:12px;
       font-weight:700;
-      font-size:14px;
+      border:1px solid transparent;
+      font-size:13px;
     }
-    .flash.success{ background:#e6fffa; color:#065f46; }
-    .flash.danger{ background:#ffe4e6; color:#9f1239; }
-    .flash.warning{ background:#fff4db; color:#9a6700; }
-    .hint{
-      margin-top:16px;
-      font-size:12px;
-      color:#6b7280;
-      text-align:center;
+
+    .flash.success{
+      background:#e6fffa;
+      color:#065f46;
+      border-color:#a7f3d0;
     }
+
+    .flash.danger{
+      background:#ffe4e6;
+      color:#9f1239;
+      border-color:#fecdd3;
+    }
+
+    .flash.warning{
+      background:#fff4db;
+      color:#9a6700;
+      border-color:#f5d66f;
+    }
+
+    @media (max-width:1100px){
+      .page{ flex-direction:column; }
+      .left-panel{ width:100%; box-shadow:none; }
+      .content{ padding:20px; }
+      .login-card{
+        grid-template-columns:1fr;
+        min-height:auto;
+        padding:28px;
+      }
+      .left{ padding-right:0; }
+      .form-box{ max-width:100%; justify-self:stretch; }
+    }
+
+    @media (max-width:700px){
+      .title{ font-size:32px; }
+      .info-grid{ grid-template-columns:1fr; }
+      .login-card{ padding:20px; }
+      .content{ padding:14px; }
+    }
+
+    #loading-overlay{
+      position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,.7); z-index:99999;
+      display:none; align-items:center; justify-content:center;
+      flex-direction:column; color:white;
+    }
+    .spinner{
+      border:5px solid rgba(255,255,255,.3);
+      border-radius:50%;
+      border-top:5px solid var(--dhl-yellow);
+      width:50px; height:50px;
+      animation:spin 1s linear infinite;
+    }
+    @keyframes spin{ 0%{ transform:rotate(0deg); } 100%{ transform:rotate(360deg); } }
   </style>
 </head>
 <body>
-  <div class="auth-card">
-    <div class="logo-box">
-      <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL">
-    </div>
 
-    <h1>Acesso ao Sistema</h1>
-    <p class="sub">Controle de Ocorrência</p>
+<div class="page">
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <form method="POST">
-      <div class="field">
-        <label>Usuário</label>
-        <input type="text" name="username" required>
+  <aside class="left-panel">
+    <div class="brand-top">
+      <div class="logo-box">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-side">
       </div>
-
-      <div class="field">
-        <label>Senha</label>
-        <input type="password" name="senha" required>
+      <span class="brand-badge">SECURITY</span>
+      <div class="brand-title">Controle de<br>Ocorrências</div>
+      <div class="brand-sub">
+        Plataforma corporativa de controle operacional e rastreabilidade de ocorrências de segurança.
       </div>
-
-      <button type="submit" class="btn">Entrar</button>
-    </form>
-
-    <div class="hint">
-      Login inicial: <strong>admin</strong> | Senha: <strong>123456</strong>
     </div>
-  </div>
+    <div class="side-footer">
+      Ambiente interno para registro e acompanhamento de ocorrências operacionais.
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="login-wrap">
+      <div class="login-card">
+
+        <div class="left">
+          <div class="login-badge">SECURITY</div>
+          <div class="title">Controle de Ocorrências</div>
+          <div class="subtitle">
+            Sistema corporativo para registro e controle de ocorrências operacionais.
+            Acesse com suas credenciais corporativas para continuar.
+          </div>
+
+          <div class="info-grid">
+            <div class="info-card">
+              <strong>Controle operacional</strong>
+              <span>Centralize registros, pendências e tratativas em um ambiente único.</span>
+            </div>
+            <div class="info-card">
+              <strong>Rastreabilidade</strong>
+              <span>Mantenha histórico estruturado para acompanhamento e auditoria.</span>
+            </div>
+            <div class="info-card">
+              <strong>Segurança</strong>
+              <span>Acesso com credenciais individuais para maior controle e governança.</span>
+            </div>
+            <div class="info-card">
+              <strong>Padrão Security</strong>
+              <span>Interface alinhada ao ambiente corporativo DHL Security.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-box">
+          <div class="form-head">
+            <h2>Acessar sistema</h2>
+            <p>Informe suas credenciais corporativas para entrar no painel.</p>
+          </div>
+
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              <div class="flash-wrap">
+                {% for category, message in messages %}
+                  <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          {% endwith %}
+
+          <form method="POST">
+            <div class="field">
+              <label for="email">E-mail</label>
+              <input type="email" id="email" name="email" placeholder="nome.sobrenome@dhl.com" required>
+            </div>
+
+            <div class="field">
+              <label for="password">Senha</label>
+              <input type="password" id="password" name="password" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Entrar</button>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <h4 style="margin-top:20px; font-family:sans-serif;">Processando, aguarde...</h4>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const overlay = document.getElementById('loading-overlay');
+    document.querySelectorAll('form').forEach(form => {
+      form.addEventListener('submit', function() {
+        overlay.style.display = 'flex';
+      });
+    });
+  });
+</script>
+
 </body>
 </html>

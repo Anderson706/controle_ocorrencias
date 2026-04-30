@@ -713,7 +713,7 @@
         {% if registro.foto %}
           <div class="photo-box">
             <h3>Foto da ocorrência</h3>
-            <img src="{{ url_for('uploaded_file', filename=registro.foto) }}" alt="Foto da ocorrência">
+            <img src="{{ registro.foto }}" alt="Foto da ocorrência">
           </div>
         {% endif %}
       </section>
@@ -754,8 +754,8 @@
           {% if registro.anexo_post %}
             <div class="attachment-box">
               Arquivo atual:
-              <a href="{{ url_for('uploaded_file', filename=registro.anexo_post) }}" target="_blank" style="color:#7a5a00; text-decoration:underline;">
-                {{ registro.anexo_post }}
+              <a href="{{ registro.anexo_post }}" download="{{ registro.anexo_post_nome or 'anexo' }}" style="color:#7a5a00; text-decoration:underline;">
+                {{ registro.anexo_post_nome or 'Baixar anexo' }}
               </a>
             </div>
           {% endif %}

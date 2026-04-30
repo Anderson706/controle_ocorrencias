@@ -2,500 +2,407 @@
 {% block title %}Análise Investigativa | DHL Security{% endblock %}
 
 {% block body %}
-
 <style>
   :root{
     --dhl-yellow:#ffcc00;
-    --dhl-red:#ffcc00;
-    --dhl-red-dark:#ffcc00;
-    --dark:#1f1f1f;
-    --muted:#6b7280;
+    --dhl-red:#d40511;
+    --dhl-red-dark:#b3030e;
+    --dhl-black:#1f1f1f;
+    --bg:#f3f5f7;
+    --card:#ffffff;
     --line:#e5e7eb;
-    --soft:#f8fafc;
-    --white:#ffffff;
+    --text:#1f2937;
+    --muted:#6b7280;
+    --shadow:0 12px 28px rgba(15,23,42,.08);
+    --radius:20px;
+    --sidebar:#161a1d;
+    --sidebar-2:#20262b;
   }
 
-  .ai-page{
+  *{ box-sizing:border-box; }
+  html, body{
+    margin:0; padding:0;
     min-height:100vh;
-    padding:24px;
-    background:
-      radial-gradient(circle at top left, rgba(255,204,0,.22), transparent 35%),
-      linear-gradient(135deg, #f3f4f6 0%, #ffffff 48%, #f9fafb 100%);
+    background:var(--bg);
+    color:var(--text);
+    font-family:Arial, Helvetica, sans-serif;
+  }
+  a{ text-decoration:none; }
+
+  /* ── SHELL ── */
+  .app-shell{ display:flex; min-height:100vh; width:100%; }
+
+  .sidebar{
+    width:260px;
+    background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
+    color:#fff;
+    position:fixed;
+    top:0; left:0; bottom:0;
+    padding:22px 18px;
+    box-shadow:6px 0 22px rgba(0,0,0,.12);
+    z-index:1000;
+    overflow-y:auto;
+  }
+  .brand{
+    display:flex; flex-direction:column; gap:6px;
+    padding-bottom:18px; margin-bottom:18px;
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .brand-badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:max-content; padding:7px 12px; border-radius:999px;
+    background:var(--dhl-yellow); color:#111;
+    font-size:11px; font-weight:900; letter-spacing:.5px;
+  }
+  .brand-title{ font-size:22px; font-weight:900; letter-spacing:.3px; line-height:1.1; }
+  .brand-sub{ font-size:12px; color:rgba(255,255,255,.72); line-height:1.5; }
+
+  .menu-title{
+    margin:18px 0 10px;
+    font-size:11px; color:rgba(255,255,255,.5);
+    font-weight:800; text-transform:uppercase; letter-spacing:.8px;
+  }
+  .menu{ display:flex; flex-direction:column; gap:8px; }
+  .menu a{
+    display:flex; align-items:center; gap:10px;
+    color:#fff; padding:12px 14px; border-radius:14px;
+    font-size:14px; font-weight:700;
+    transition:.18s ease; border:1px solid transparent;
+  }
+  .menu a:hover, .menu a.active{
+    background:rgba(255,255,255,.08);
+    border-color:rgba(255,255,255,.10);
+    transform:translateX(2px);
+  }
+  .menu .dot{
+    width:10px; height:10px; border-radius:50%;
+    background:var(--dhl-yellow); flex:0 0 10px;
   }
 
-  .ai-shell{
-    max-width:1280px;
-    margin:0 auto;
+  /* ── MAIN ── */
+  .main{
+    margin-left:260px;
+    width:calc(100% - 260px);
+    min-height:100vh;
+    display:flex; flex-direction:column;
   }
 
-  .ai-hero{
-    background:linear-gradient(135deg, var(--dhl-yellow), #ffe26a);
-    border-radius:24px;
-    padding:22px 26px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:18px;
-    box-shadow:0 18px 38px rgba(0,0,0,.12);
-    border:1px solid rgba(0,0,0,.08);
-    position:relative;
-    overflow:hidden;
-  }
-
-  .ai-hero::after{
-    content:"";
-    position:absolute;
-    right:-80px;
-    top:-80px;
-    width:240px;
-    height:240px;
-    background:rgba(212,5,17,.12);
-    border-radius:50%;
-  }
-
-  .ai-brand{
-    display:flex;
-    align-items:center;
-    gap:18px;
-    position:relative;
-    z-index:1;
-  }
-
-  .ai-logo{
-    height:58px;
-    max-width:150px;
-    object-fit:contain;
-    background:#ffcc00;
-    padding:4px 4px;
-    border-radius:16px;
-    box-shadow:0 8px 18px rgba(0,0,0,.12);
-  }
-
-  .ai-title h1{
-    margin:0;
-    font-size:25px;
-    color:#111827;
-    font-weight:900;
-    text-transform:uppercase;
-    letter-spacing:.3px;
-  }
-
-  .ai-title p{
-    margin:6px 0 0;
-    color:#374151;
-    font-weight:700;
-    font-size:13px;
-  }
-
-  .ai-unit{
-    text-align:right;
-    position:relative;
-    z-index:1;
-    color:#111827;
-    font-size:13px;
-    font-weight:700;
-  }
-
-  .ai-unit span{
-    display:block;
-    margin-top:5px;
-    font-size:12px;
-    color:#374151;
-    font-weight:600;
-  }
-
-  .ai-card{
-    margin-top:22px;
-    background:rgba(255,255,255,.94);
-    border:1px solid var(--line);
-    border-radius:24px;
-    box-shadow:0 20px 45px rgba(15,23,42,.09);
-    overflow:hidden;
-  }
-
-  .ai-card-top{
-    padding:20px 24px;
+  .topbar{
+    height:76px; background:#fff;
     border-bottom:1px solid var(--line);
-    display:flex;
+    display:flex; align-items:center;
     justify-content:space-between;
-    align-items:center;
-    gap:16px;
-    background:linear-gradient(90deg, #ffffff, #fff8d6);
+    gap:16px; padding:0 24px;
+    position:sticky; top:0; z-index:900;
   }
-
-  .ai-card-top h2{
-    margin:0;
-    color:#111827;
-    font-size:22px;
-    font-weight:900;
-  }
-
-  .ai-card-top p{
-    margin:5px 0 0;
-    color:var(--muted);
-    font-size:13px;
-  }
-
-  .ai-badge{
-    background:var(--dhl-red);
-    color:#fff;
-    padding:10px 14px;
-    border-radius:999px;
-    font-size:12px;
-    font-weight:900;
+  .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+  .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+  .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+  .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+  .top-chip{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:8px 12px; border-radius:999px;
+    font-size:12px; font-weight:800;
+    border:1px solid #efd56f; background:#fff8d8; color:#7a5a00;
     white-space:nowrap;
-    box-shadow:0 10px 22px rgba(212,5,17,.22);
+  }
+  .topbar-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+
+  .content{ padding:24px; }
+
+  /* ── FLASH ── */
+  .flash-wrap{ margin-bottom:16px; }
+  .flash{
+    margin-bottom:12px; padding:12px 14px;
+    border-radius:12px; font-weight:700; border:1px solid transparent;
+  }
+  .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+  .flash.danger { background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+  .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+  /* ── HERO ── */
+  .hero{
+    position:relative; overflow:hidden;
+    background:linear-gradient(135deg,#d40511,#93000a);
+    color:#fff; border-radius:24px;
+    padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px;
+  }
+  .hero h2{ margin:0 0 8px; font-size:30px; font-weight:900; }
+  .hero p{ margin:0; line-height:1.55; font-size:14px; opacity:.96; max-width:850px; }
+
+  /* ── SECTIONS / CARDS ── */
+  .section{ margin-bottom:22px; }
+  .section-head{
+    display:flex; justify-content:space-between;
+    align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap;
+  }
+  .section-head h3{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+  .section-chip{
+    background:#fff8db; color:#7a5a00;
+    border:1px solid #f5d66f; border-radius:999px;
+    padding:7px 12px; font-size:12px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.3px;
   }
 
-  form{
-    padding:24px;
+  .card{
+    background:var(--card); border:1px solid var(--line);
+    border-radius:var(--radius); padding:22px;
+    box-shadow:var(--shadow); min-width:0;
   }
 
-  .secao{
-    margin-bottom:22px;
-    border:1px solid var(--line);
-    border-radius:20px;
-    background:#fff;
-    overflow:hidden;
-    box-shadow:0 10px 24px rgba(15,23,42,.05);
-  }
-
-  .secao h3{
-    margin:0;
-    padding:14px 18px;
-    background:linear-gradient(90deg, var(--dhl-red), var(--dhl-red-dark));
-    color:#fff;
-    font-size:14px;
-    text-transform:uppercase;
-    letter-spacing:.6px;
-  }
-
-  .secao-body{
-    padding:18px;
-  }
-
+  /* ── FORM GRID ── */
   .form-grid{
     display:grid;
-    grid-template-columns:repeat(2, minmax(0, 1fr));
+    grid-template-columns:repeat(2, minmax(0,1fr));
     gap:16px;
   }
-
   .form-grid-3{
     display:grid;
-    grid-template-columns:repeat(3, minmax(0, 1fr));
+    grid-template-columns:repeat(3, minmax(0,1fr));
     gap:16px;
   }
+  .field-full{ grid-column:1 / -1; }
 
-  .field-full{
-    grid-column:1 / -1;
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{
+    font-size:12px; color:#374151; font-weight:900;
+    text-transform:uppercase; letter-spacing:.35px;
   }
-
-  label{
-    display:block;
-    font-size:12px;
-    color:#374151;
-    font-weight:900;
-    text-transform:uppercase;
-    letter-spacing:.35px;
-    margin-bottom:6px;
+  .field input,
+  .field select,
+  .field textarea{
+    width:100%; border:1px solid #d6dae1; background:#fff;
+    border-radius:14px; padding:13px 14px;
+    font-size:14px; color:#111827; outline:none;
+    font-family:Arial, Helvetica, sans-serif;
+    transition:border-color .18s ease, box-shadow .18s ease;
   }
-
-  input,
-  textarea,
-  select{
-    width:100%;
-    border:1px solid #d1d5db;
-    background:#f9fafb;
-    border-radius:14px;
-    padding:12px 13px;
-    font-size:14px;
-    color:#111827;
-    outline:none;
-    transition:.2s ease;
-    font-family:Arial, sans-serif;
-  }
-
-  textarea{
-    resize:vertical;
-    min-height:88px;
-  }
-
-  input:focus,
-  textarea:focus,
-  select:focus{
+  .field textarea{ resize:vertical; min-height:88px; }
+  .field input:focus,
+  .field select:focus,
+  .field textarea:focus{
     border-color:var(--dhl-red);
-    background:#fff;
-    box-shadow:0 0 0 4px rgba(212,5,17,.12);
+    box-shadow:0 0 0 4px rgba(212,5,17,.08);
   }
 
+  /* ── EVIDÊNCIAS ── */
   .imagem-bloco{
     margin-top:14px;
     border:1px dashed #cbd5e1;
     border-radius:18px;
     padding:16px;
-    background:linear-gradient(180deg, #ffffff, #f8fafc);
+    background:linear-gradient(180deg,#ffffff,#f8fafc);
   }
-
   .file-row{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    flex-wrap:wrap;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   }
-
-  .file-row input[type="file"]{
-    flex:1;
-    min-width:260px;
-  }
-
+  .file-row input[type="file"]{ flex:1; min-width:260px; }
   .img-preview{
-    width:100%;
-    max-height:280px;
-    object-fit:contain;
-    margin-top:12px;
-    border-radius:16px;
-    border:1px solid var(--line);
-    background:#fff;
-    display:none;
+    width:100%; max-height:280px; object-fit:contain;
+    margin-top:12px; border-radius:16px;
+    border:1px solid var(--line); background:#fff; display:none;
   }
 
+  /* ── BUTTONS ── */
   .btn{
-    border:none;
-    cursor:pointer;
-    border-radius:999px;
-    font-weight:900;
-    letter-spacing:.2px;
-    transition:.2s ease;
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    gap:8px;
-    text-decoration:none;
+    border:none; cursor:pointer;
+    border-radius:999px; font-weight:900;
+    transition:.2s ease; display:inline-flex;
+    align-items:center; justify-content:center;
+    gap:8px; text-decoration:none;
   }
+  .btn:hover{ transform:translateY(-1px); filter:brightness(.97); }
 
-  .btn:hover{
-    transform:translateY(-1px);
-    filter:brightness(.97);
+  .btn-primary{
+    background:linear-gradient(135deg,var(--dhl-red),var(--dhl-red-dark));
+    color:#fff; padding:13px 24px;
+    box-shadow:0 14px 24px rgba(212,5,17,.25);
   }
-
-  .add-img{
-    margin-top:14px;
-    background:var(--dhl-yellow);
-    color:#111827;
+  .btn-yellow{
+    background:var(--dhl-yellow); color:#111;
     padding:11px 18px;
     box-shadow:0 10px 18px rgba(255,204,0,.25);
   }
-
-  .btn-del-img{
-    background:#991b1b;
-    color:#fff;
-    padding:10px 14px;
-    font-size:12px;
+  .btn-dark{
+    background:#1f2937; color:#fff; padding:13px 22px;
+  }
+  .btn-danger{
+    background:#7f1d1d; color:#fff; padding:10px 14px; font-size:12px;
   }
 
   .buttons-row{
-    display:flex;
-    justify-content:center;
-    gap:12px;
-    flex-wrap:wrap;
-    margin-top:26px;
-    padding-top:22px;
+    display:flex; justify-content:center; gap:12px;
+    flex-wrap:wrap; margin-top:26px; padding-top:22px;
     border-top:1px solid var(--line);
-
   }
 
-  .voltar-red{
-  background:linear-gradient(135deg, #d40511, #a8030d);
-  color:#fff;
-  padding:10px 18px;
-  border-radius:999px;
-  font-size:13px;
-  font-weight:900;
-  box-shadow:0 12px 22px rgba(212,5,17,.25);
-}
-
-.voltar-red:hover{
-  transform:translateY(-1px);
-  filter:brightness(.95);
-}
-
-  .voltar{
-  background:#111827;
-  color:#fff;
-  padding:10px 16px;
-  border-radius:999px;
-  font-size:13px;
-  box-shadow:0 10px 18px rgba(0,0,0,.15);
-}
-
-.voltar:hover{
-  background:#000;
-}
-
-  .gerar{
-    background:linear-gradient(135deg, var(--dhl-red), var(--dhl-red-dark));
-    color:#fff;
-    padding:13px 24px;
-    min-width:190px;
-    box-shadow:0 14px 24px rgba(212,5,17,.25);
+  /* ── RESPONSIVE ── */
+  @media(max-width:1100px){
+    .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
+    .main{ margin-left:0; width:100%; }
+    .app-shell{ flex-direction:column; }
   }
-
-  .sair{
-    background:#374151;
-    color:#fff;
-    padding:13px 22px;
-    min-width:130px;
-  }
-
-  .excluir{
-    background:#7f1d1d;
-    color:#fff;
-    padding:13px 22px;
-    min-width:130px;
-  }
-
   @media(max-width:850px){
-    .ai-hero,
-    .ai-card-top{
-      flex-direction:column;
-      align-items:flex-start;
-    }
-
-    .ai-unit{
-      text-align:left;
-    }
-
-    .form-grid,
-    .form-grid-3{
-      grid-template-columns:1fr;
-    }
+    .topbar{ height:auto; padding:14px 16px; flex-direction:column; align-items:flex-start; }
+    .form-grid, .form-grid-3{ grid-template-columns:1fr; }
   }
 </style>
 
-<div class="ai-page">
-  <div class="ai-shell">
+<div class="app-shell">
 
-    <header class="ai-hero">
-      <div class="ai-brand">
-        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="ai-logo">
-        <div class="ai-title">
-          <h1>Segurança & Loss Prevention</h1>
-          <p>Análise Investigativa de Ocorrências</p>
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">Controle de<br>Ocorrências</div>
+      <div class="brand-sub">Plataforma corporativa DHL Security.</div>
+    </div>
+
+    <div class="menu-title">Navegação</div>
+    <nav class="menu">
+      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Ocorrências</a>
+      <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
+      <a href="{{ url_for('analise_investigativa') }}" class="active"><span class="dot"></span> Análise Investigativa</a>
+    </nav>
+
+    <div class="menu-title">Conta</div>
+    <nav class="menu">
+      <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-topbar">
+        <div>
+          <h1>Análise Investigativa</h1>
+          <p>Segurança &amp; Loss Prevention — DHL Security</p>
         </div>
       </div>
-
-      <div class="ai-unit">
-        DHL SHEIN - GUARULHOS
-        <span>Rua Concretex 800 - Cumbica - Guarulhos/SP</span>
+      <div class="topbar-right">
+        <span class="top-chip">{{ session.get('user_nome','') }} | {{ session.get('user_perfil','') }}</span>
+        <a href="{{ url_for('ocorrencias') }}" class="btn btn-dark" style="padding:11px 16px; border-radius:12px;">← Voltar</a>
       </div>
-      <div style="display:flex; align-items:center; gap:10px;">
-
-<!--        <button type="button" class="btn voltar-red"-->
-<!--        onclick="window.history.back()">-->
-<!--        ← Voltar-->
-<!--        </button>-->
     </header>
 
+    <div class="content">
 
+      <!-- FLASH -->
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-wrap">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
 
-  <div>
-
-    <div class="ai-card">
-      <div class="ai-card-top">
-        <div>
-          <h2>Formulário de Análise Investigativa</h2>
-          <p>Preencha os dados da ocorrência, conclusão e evidências fotográficas.</p>
-        </div>
-        <div class="ai-badge">DHL SECURITY</div>
+      <!-- HERO -->
+      <div class="hero">
+        <h2>Formulário de Análise Investigativa</h2>
+        <p>Preencha os dados da ocorrência, evidências e conclusão para gerar o relatório corporativo DOCX + PDF.</p>
       </div>
 
-      <form id="form" method="POST" action="{{ url_for('gerar_analise_investigativa') }}" enctype="multipart/form-data">
+      <form id="form-ai" method="POST" action="{{ url_for('gerar_analise_investigativa') }}" enctype="multipart/form-data">
 
-        <section class="secao">
-          <h3>Dados da Operação</h3>
-          <div class="secao-body">
+        <!-- DADOS DA OPERAÇÃO -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Dados da Operação</h3>
+            <span class="section-chip">Identificação</span>
+          </div>
+          <div class="card">
             <div class="form-grid-3">
-              <div>
+              <div class="field">
                 <label>Nº do Relatório (ID)</label>
                 <input type="number" name="id_relatorio" placeholder="Ex: 1023" min="1" step="1" required>
               </div>
-
-              <div>
+              <div class="field">
                 <label>Empresa</label>
                 <input type="text" name="empresa" value="DHL" required>
               </div>
-
-              <div>
+              <div class="field">
                 <label>Cliente(s)</label>
-                <input type="text" name="clientes" value="SHEIN" required>
+                <input type="text" name="clientes" placeholder="Ex: SHEIN" required>
               </div>
-
-              <div class="field-full">
+              <div class="field field-full">
                 <label>Unidade</label>
-                <input type="text" name="unidade" value="DHL SHEIN - GUARULHOS" required>
+                <input type="text" name="unidade" placeholder="Ex: DHL SHEIN - GUARULHOS" required>
               </div>
-
-              <div class="field-full">
+              <div class="field field-full">
                 <label>Endereço</label>
-                <input type="text" name="endereco" value="Rua Concretex 800, Bairro Cumbica, Guarulhos - SP" required>
+                <input type="text" name="endereco" placeholder="Ex: Rua Concretex 800, Cumbica, Guarulhos - SP" required>
               </div>
-
-              <div>
+              <div class="field">
                 <label>Classificação do Site</label>
                 <select name="classificacao" required>
-                  <option value="Warehouse ( X )">Warehouse ( X )</option>
-                  <option value="Inhouse ( X )" selected>Inhouse ( X )</option>
+                  <option value="Warehouse ( X )">Warehouse</option>
+                  <option value="Inhouse ( X )" selected>Inhouse</option>
                 </select>
               </div>
-
-              <div>
+              <div class="field">
                 <label>Produtos Segmento (Setor)</label>
-                <input type="text" name="produtos_segmento" value="Retail" required>
+                <input type="text" name="produtos_segmento" placeholder="Ex: Retail" required>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="secao">
-          <h3>Dados do Levantamento</h3>
-          <div class="secao-body">
+        <!-- DADOS DO LEVANTAMENTO -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Dados do Levantamento</h3>
+            <span class="section-chip">Responsabilidade</span>
+          </div>
+          <div class="card">
             <div class="form-grid">
-              <div class="field-full">
+              <div class="field field-full">
                 <label>Objetivo</label>
-                <textarea name="objetivo" rows="2" placeholder="Exemplo: Levantamento de imagens para apurar embalagem vazia" required></textarea>
+                <textarea name="objetivo" rows="2" placeholder="Ex: Levantamento de imagens para apurar embalagem vazia" required></textarea>
               </div>
-
-              <div>
+              <div class="field">
                 <label>Responsável pelo Levantamento</label>
                 <input type="text" name="responsavel" placeholder="Ex: Vanessa França" required>
               </div>
-
-              <div>
+              <div class="field">
                 <label>Nome / Função / Data</label>
-                <input type="text" name="nome_funcao_data" placeholder="Ex: Anderson Souza / Analista de Seg. Junior / 07/11/2025" required>
+                <input type="text" name="nome_funcao_data" placeholder="Ex: Anderson Souza / Analista de Seg. / 07/11/2025" required>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="secao">
-          <h3>Descrição do Registro</h3>
-          <div class="secao-body">
-            <label>Descrição do Registro</label>
-            <textarea name="descricao_registro" rows="3" placeholder="Descreva o que foi registrado em imagens..." required></textarea>
+        <!-- DESCRIÇÃO DO REGISTRO -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Descrição do Registro</h3>
+            <span class="section-chip">Narrativa</span>
+          </div>
+          <div class="card">
+            <div class="field">
+              <label>Descrição</label>
+              <textarea name="descricao_registro" rows="4" placeholder="Descreva o que foi registrado em imagens..." required></textarea>
+            </div>
           </div>
         </section>
 
-        <section class="secao">
-          <h3>Conclusão</h3>
-          <div class="secao-body">
+        <!-- CONCLUSÃO -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Conclusão &amp; Sugestão</h3>
+            <span class="section-chip">Resultado</span>
+          </div>
+          <div class="card">
             <div class="form-grid">
-              <div class="field-full">
+              <div class="field field-full">
                 <label>Conclusão</label>
                 <textarea name="conclusao" rows="3" placeholder="Descreva a conclusão final da análise..." required></textarea>
               </div>
-
-              <div class="field-full">
+              <div class="field field-full">
                 <label>Sugestão</label>
                 <textarea name="sugestao" rows="3" placeholder="Sugestões ou ações recomendadas (opcional)"></textarea>
               </div>
@@ -503,24 +410,30 @@
           </div>
         </section>
 
-        <section class="secao">
-          <h3>Imagens / Evidências</h3>
-          <div class="secao-body">
+        <!-- EVIDÊNCIAS -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Imagens / Evidências</h3>
+            <span class="section-chip">Registro fotográfico</span>
+          </div>
+          <div class="card">
             <div id="imagens-container"></div>
-            <button type="button" class="btn add-img" onclick="adicionarImagem()">+ Adicionar Imagem</button>
+            <button type="button" class="btn btn-yellow" style="margin-top:14px;" onclick="adicionarImagem()">
+              + Adicionar Imagem
+            </button>
           </div>
         </section>
 
+        <!-- AÇÕES -->
         <div class="buttons-row">
-          <button type="submit" class="btn gerar">Gerar DOCX + PDF</button>
-           <button type="button" class="btn voltar-red" onclick="window.history.back()">← Voltar</button>
-          <button type="button" class="btn sair" onclick="window.location.href='{{ url_for('logout') }}'">Sair</button>
-          <button type="button" class="btn excluir" onclick="excluirFormulario()">Limpar</button>
+          <button type="submit" class="btn btn-primary">Gerar DOCX + PDF</button>
+          <button type="button" class="btn btn-dark" onclick="window.history.back()">← Voltar</button>
+          <button type="button" class="btn btn-danger" onclick="excluirFormulario()">Limpar</button>
         </div>
 
       </form>
     </div>
-  </div>
+  </main>
 </div>
 
 <script>
@@ -530,70 +443,51 @@
     bloco.classList.add('imagem-bloco');
 
     bloco.innerHTML = `
-      <label>Imagem</label>
-
-      <div class="file-row">
-        <input type="file" name="imagens[]" accept="image/*" class="file-input" required>
-
-        <button type="button" class="btn btn-del-img" onclick="editarImagem(this)">
-          Editar
-        </button>
-
-        <button type="button" class="btn btn-del-img" onclick="removerImagem(this)">
-          Excluir
-        </button>
+      <div class="field">
+        <label>Imagem</label>
+        <div class="file-row">
+          <input type="file" name="imagens[]" accept="image/*" class="file-input" required>
+          <button type="button" class="btn btn-danger" onclick="editarImagem(this)">Editar</button>
+          <button type="button" class="btn btn-danger" onclick="removerImagem(this)">Excluir</button>
+        </div>
+        <img class="img-preview" alt="Pré-visualização">
       </div>
-
-      <img class="img-preview" alt="Pré-visualização da imagem">
-
-      <label style="margin-top:12px;">Descrição da Imagem</label>
-      <textarea name="descricoes[]" rows="2" required></textarea>
+      <div class="field" style="margin-top:10px;">
+        <label>Descrição da imagem</label>
+        <textarea name="descricoes[]" rows="2" required></textarea>
+      </div>
     `;
 
     container.appendChild(bloco);
-
-    const inputFile = bloco.querySelector('.file-input');
-    inputFile.addEventListener('change', function () {
-      previewImagem(this);
-    });
+    bloco.querySelector('.file-input').addEventListener('change', function(){ previewImagem(this); });
   }
 
   function previewImagem(input) {
-    const file = input.files && input.files[0];
     const img = input.closest('.imagem-bloco').querySelector('.img-preview');
-
-    if (!file) {
-      img.src = "";
-      img.style.display = "none";
-      return;
+    if (input.files && input.files[0]) {
+      img.src = URL.createObjectURL(input.files[0]);
+      img.style.display = 'block';
+    } else {
+      img.src = ''; img.style.display = 'none';
     }
-
-    img.src = URL.createObjectURL(file);
-    img.style.display = 'block';
   }
 
-  function editarImagem(button) {
-    const bloco = button.closest('.imagem-bloco');
-    const inputFile = bloco.querySelector('.file-input');
-    const img = bloco.querySelector('.img-preview');
-
-    inputFile.value = "";
-    img.src = "";
-    img.style.display = "none";
-    inputFile.click();
+  function editarImagem(btn) {
+    const bloco = btn.closest('.imagem-bloco');
+    const input = bloco.querySelector('.file-input');
+    const img   = bloco.querySelector('.img-preview');
+    input.value = ''; img.src = ''; img.style.display = 'none';
+    input.click();
   }
 
-  function removerImagem(button) {
-    const bloco = button.closest('.imagem-bloco');
-    if (bloco) bloco.remove();
+  function removerImagem(btn) {
+    btn.closest('.imagem-bloco').remove();
   }
 
   function excluirFormulario() {
-    if (!confirm('Tem certeza que deseja limpar todas as informações do formulário?')) return;
-
-    document.getElementById('form').reset();
+    if (!confirm('Tem certeza que deseja limpar o formulário?')) return;
+    document.getElementById('form-ai').reset();
     document.getElementById('imagens-container').innerHTML = '';
   }
 </script>
-
 {% endblock %}

@@ -1,9 +1,10 @@
 import os
+import base64
 import zipfile
 from io import BytesIO
 from datetime import datetime
 from functools import wraps
-from uuid import uuid4
+import oracledb
 from docx.shared import Cm, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
@@ -11,12 +12,11 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, session, send_from_directory, send_file, current_app
+    flash, session, send_file, current_app
 )
 
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
 
 from docx import Document
 from docx.shared import Cm, Inches, Pt, RGBColor
@@ -37,18 +37,15 @@ from reportlab.platypus import (
 )
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_FOLDER = os.path.join(BASE_DIR, "database")
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
-DB_PATH = os.path.join(DB_FOLDER, "controle_ocorrencia.db")
-
-os.makedirs(DB_FOLDER, exist_ok=True)
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "controle-ocorrencia-executivo"
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    "oracle+oracledb://SECPANEL:SEC003q2w3e4r2026"
+    "@usqasap023-scan.phx-dc.dhl.com:1521"
+    "/?service_name=SECPANEL"
+)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 db = SQLAlchemy(app)
@@ -65,20 +62,27 @@ EXTENSOES_PERMITIDAS_POST = {"png", "jpg", "jpeg", "webp", "pdf", "doc", "docx",
 # MODELS
 # =========================
 class Usuario(db.Model):
-    __tablename__ = "usuarios"
+    __tablename__ = "USERS_LIVRO"
 
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(120), nullable=False)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    senha_hash = db.Column(db.String(255), nullable=False)
-    perfil = db.Column(db.String(30), nullable=False, default="OPERACIONAL")
-    ativo = db.Column(db.Boolean, default=True)
-    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    id = db.Column("ID", db.Integer, db.Identity(start=1), primary_key=True)
+    nome = db.Column("NOME", db.String(120), nullable=False)
+    email = db.Column("EMAIL", db.String(120), unique=True, nullable=False, index=True)
+    password_hash = db.Column("PASSWORD_HASH", db.String(255), nullable=False)
+    perfil = db.Column("ROLE", db.String(30), nullable=False, default="OPERACIONAL")
+    site = db.Column("SITE", db.String(80), nullable=True)
+    is_active = db.Column("IS_ACTIVE", db.Boolean, nullable=False, default=True)
+    created_at = db.Column("CREATED_AT", db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def set_password(self, senha: str):
+        self.password_hash = generate_password_hash(senha)
+
+    def check_password(self, senha: str) -> bool:
+        return check_password_hash(self.password_hash, senha)
 
 class AnaliseInvestigativa(db.Model):
     __tablename__ = "analises_investigativas"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
 
     id_relatorio = db.Column(db.Integer, nullable=False)
     empresa = db.Column(db.String(120), nullable=False)
@@ -109,7 +113,7 @@ class AnaliseInvestigativa(db.Model):
 class ImagemAnaliseInvestigativa(db.Model):
     __tablename__ = "imagens_analises_investigativas"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
     analise_id = db.Column(db.Integer, db.ForeignKey("analises_investigativas.id"), nullable=False)
 
     arquivo = db.Column(db.String(255), nullable=False)
@@ -120,7 +124,7 @@ class ImagemAnaliseInvestigativa(db.Model):
 class Ocorrencia(db.Model):
     __tablename__ = "ocorrencias"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
     data_hora = db.Column(db.String(30), nullable=False)
     hora_ocorrencia = db.Column(db.String(10), nullable=False)
     natureza = db.Column(db.String(120), nullable=False)
@@ -129,14 +133,15 @@ class Ocorrencia(db.Model):
     operador = db.Column(db.String(120), nullable=False)
     gc = db.Column(db.String(120), nullable=False)
     envolvido = db.Column(db.String(120), nullable=True)
-    foto = db.Column(db.String(255), nullable=True)
+    foto = db.Column(db.Text, nullable=True)
 
     prioridade = db.Column(db.String(20), nullable=False, default="MEDIA")
     status = db.Column(db.String(30), nullable=False, default="PENDENTE")
 
     situacao_investigacao = db.Column(db.String(30), nullable=True)
     conclusao_investigacao = db.Column(db.Text, nullable=True)
-    anexo_post = db.Column(db.String(255), nullable=True)
+    anexo_post = db.Column(db.Text, nullable=True)
+    anexo_post_nome = db.Column(db.String(255), nullable=True)
 
     criado_por = db.Column(db.String(120), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
@@ -147,42 +152,25 @@ class Ocorrencia(db.Model):
 # =========================
 # HELPERS
 # =========================
-def arquivo_permitido(nome_arquivo, extensoes):
-    return "." in nome_arquivo and nome_arquivo.rsplit(".", 1)[1].lower() in extensoes
+MIME_MAP = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "png": "image/png", "webp": "image/webp",
+    "gif": "image/gif", "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 
-
-def salvar_arquivo(arquivo, extensoes):
+def arquivo_para_base64(arquivo, extensoes):
     if not arquivo or not arquivo.filename:
-        return None
-
-    if not arquivo_permitido(arquivo.filename, extensoes):
-        return None
-
-    nome_seguro = secure_filename(arquivo.filename)
-    extensao = nome_seguro.rsplit(".", 1)[1].lower()
-    nome_final = f"{uuid4().hex}.{extensao}"
-    caminho = os.path.join(app.config["UPLOAD_FOLDER"], nome_final)
-    arquivo.save(caminho)
-    return nome_final
-
-
-def set_senha(usuario, senha):
-    usuario.senha_hash = generate_password_hash(senha)
-
-
-def check_senha(usuario, senha):
-    return check_password_hash(usuario.senha_hash, senha)
-
-
-def remover_arquivo(nome_arquivo):
-    if not nome_arquivo:
-        return
-    caminho = os.path.join(app.config["UPLOAD_FOLDER"], nome_arquivo)
-    if os.path.exists(caminho):
-        try:
-            os.remove(caminho)
-        except OSError:
-            pass
+        return None, None
+    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else ""
+    if ext not in extensoes:
+        return None, None
+    mime = MIME_MAP.get(ext, "application/octet-stream")
+    dados = base64.b64encode(arquivo.read()).decode("utf-8")
+    return f"data:{mime};base64,{dados}", arquivo.filename
 
 
 def login_required(func):
@@ -845,23 +833,24 @@ def login():
         return redirect(url_for("ocorrencias"))
 
     if request.method == "POST":
-        username = (request.form.get("username") or "").strip().lower()
-        senha = (request.form.get("senha") or "").strip()
+        email = (request.form.get("email") or "").strip().lower()
+        senha = (request.form.get("password") or "").strip()
 
-        if not username or not senha:
-            flash("Preencha usuário e senha.", "warning")
+        if not email or not senha:
+            flash("Preencha e-mail e senha.", "warning")
             return render_template("login.html")
 
-        usuario = Usuario.query.filter_by(username=username, ativo=True).first()
+        usuario = Usuario.query.filter_by(email=email, is_active=True).first()
 
-        if not usuario or not check_senha(usuario, senha):
-            flash("Usuário ou senha inválidos.", "danger")
+        if not usuario or not usuario.check_password(senha):
+            flash("E-mail ou senha inválidos.", "danger")
             return render_template("login.html")
 
         session["user_id"] = usuario.id
         session["user_nome"] = usuario.nome
-        session["username"] = usuario.username
+        session["username"] = usuario.email
         session["user_perfil"] = usuario.perfil
+        session["user_site"] = usuario.site or ""
 
         flash("Login realizado com sucesso.", "success")
         return redirect(url_for("ocorrencias"))
@@ -885,14 +874,14 @@ def logout():
 def register():
     if request.method == "POST":
         nome = (request.form.get("nome") or "").strip()
-        username = (request.form.get("username") or "").strip().lower()
+        email = (request.form.get("email") or "").strip().lower()
         senha = (request.form.get("senha") or "").strip()
         confirmar_senha = (request.form.get("confirmar_senha") or "").strip()
         perfil = (request.form.get("perfil") or "").strip().upper()
 
         perfis_validos = {"SUPERUSUARIO", "USUARIO", "OPERACIONAL"}
 
-        if not nome or not username or not senha or not confirmar_senha or not perfil:
+        if not nome or not email or not senha or not confirmar_senha or not perfil:
             flash("Preencha todos os campos.", "warning")
             return render_template("register.html")
 
@@ -904,17 +893,20 @@ def register():
             flash("As senhas não conferem.", "danger")
             return render_template("register.html")
 
-        if Usuario.query.filter_by(username=username).first():
-            flash("Já existe um usuário com esse login.", "warning")
+        if Usuario.query.filter_by(email=email).first():
+            flash("Já existe um usuário com esse e-mail.", "warning")
             return render_template("register.html")
+
+        site = (request.form.get("site") or "").strip()
 
         novo_usuario = Usuario(
             nome=nome,
-            username=username,
+            email=email,
             perfil=perfil,
-            ativo=True
+            site=site,
+            is_active=True
         )
-        set_senha(novo_usuario, senha)
+        novo_usuario.set_password(senha)
 
         db.session.add(novo_usuario)
         db.session.commit()
@@ -968,11 +960,11 @@ def ocorrencias():
             return redirect(url_for("ocorrencias"))
 
         foto = request.files.get("foto")
-        novo_nome_foto = None
+        nova_foto_b64 = None
 
         if foto and foto.filename:
-            novo_nome_foto = salvar_arquivo(foto, EXTENSOES_PERMITIDAS_IMAGEM)
-            if not novo_nome_foto:
+            nova_foto_b64, _ = arquivo_para_base64(foto, EXTENSOES_PERMITIDAS_IMAGEM)
+            if not nova_foto_b64:
                 flash("Formato de imagem inválido. Use JPG, JPEG, PNG ou WEBP.", "danger")
                 if ocorrencia_id:
                     return redirect(url_for("ocorrencias", editar=ocorrencia_id))
@@ -992,9 +984,8 @@ def ocorrencias():
             registro.prioridade = prioridade
             registro.status = status
 
-            if novo_nome_foto:
-                remover_arquivo(registro.foto)
-                registro.foto = novo_nome_foto
+            if nova_foto_b64:
+                registro.foto = nova_foto_b64
 
             db.session.commit()
             flash("Ocorrência atualizada com sucesso.", "success")
@@ -1009,7 +1000,7 @@ def ocorrencias():
             operador=operador,
             gc=gc,
             envolvido=envolvido,
-            foto=novo_nome_foto,
+            foto=nova_foto_b64,
             prioridade=prioridade,
             status=status,
             criado_por=session.get("user_nome")
@@ -1075,13 +1066,13 @@ def post_ocorrencia(ocorrencia_id):
         registro.responsavel_fechamento = responsavel
 
         if anexo_post and anexo_post.filename:
-            novo_anexo = salvar_arquivo(anexo_post, EXTENSOES_PERMITIDAS_POST)
-            if not novo_anexo:
+            novo_anexo_b64, nome_original = arquivo_para_base64(anexo_post, EXTENSOES_PERMITIDAS_POST)
+            if not novo_anexo_b64:
                 flash("Formato de arquivo inválido para o post.", "danger")
                 return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
 
-            remover_arquivo(registro.anexo_post)
-            registro.anexo_post = novo_anexo
+            registro.anexo_post = novo_anexo_b64
+            registro.anexo_post_nome = nome_original
 
         db.session.commit()
         flash("Publicação da ocorrência atualizada com sucesso.", "success")
@@ -1093,9 +1084,6 @@ def post_ocorrencia(ocorrencia_id):
 @perfil_required("SUPERUSUARIO", "USUARIO")
 def excluir_ocorrencia(ocorrencia_id):
     registro = Ocorrencia.query.get_or_404(ocorrencia_id)
-
-    remover_arquivo(registro.foto)
-    remover_arquivo(registro.anexo_post)
 
     db.session.delete(registro)
     db.session.commit()
@@ -1263,31 +1251,11 @@ def exportar_pdf():
 
 
 # =========================
-# UPLOADS
-# =========================
-@app.route("/uploads/<filename>")
-@login_required
-def uploaded_file(filename):
-    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
-
-
-# =========================
 # INIT DB
 # =========================
 with app.app_context():
+    # Cria tabelas da aplicação no Oracle (USERS_LIVRO já existe, será ignorada)
     db.create_all()
-
-    existe_super = Usuario.query.filter_by(username="admin").first()
-    if not existe_super:
-        user = Usuario(
-            nome="Administrador Master",
-            username="admin",
-            perfil="SUPERUSUARIO",
-            ativo=True
-        )
-        set_senha(user, "123456")
-        db.session.add(user)
-        db.session.commit()
 
 
 if __name__ == "__main__":

@@ -4,211 +4,328 @@
   <meta charset="utf-8">
   <title>Dashboard | Controle de Ocorrência</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
     :root{
-      --dhl-red:#d40511;
-      --dhl-red-dark:#a3030d;
       --dhl-yellow:#ffcc00;
-      --bg:#eef1f5;
+      --dhl-red:#d40511;
+      --dhl-red-dark:#b1030d;
+      --dhl-black:#1f1f1f;
+      --bg:#f3f5f7;
       --card:#ffffff;
+      --line:#e5e7eb;
       --text:#1f2937;
       --muted:#6b7280;
-      --line:#dfe3e8;
-      --shadow:0 10px 24px rgba(15,23,42,.10);
-      --shadow-soft:0 6px 16px rgba(0,0,0,.08);
-      --radius:20px;
-      --ok-bg:#e8f7ee;
-      --ok-text:#146c43;
+      --sidebar:#161a1d;
+      --sidebar-2:#20262b;
+      --shadow:0 10px 30px rgba(15,23,42,.08);
+      --radius:18px;
+      --success-bg:#e8f7ee;
+      --success-text:#146c43;
       --warn-bg:#fff4db;
       --warn-text:#9a6700;
       --danger-bg:#fde8ea;
       --danger-text:#b42318;
       --neutral-bg:#eef1f4;
-      --neutral-text:#3f4a5a;
+      --neutral-text:#425466;
     }
 
     *{ box-sizing:border-box; }
 
-    body{
-      margin:0;
+    html, body{
+      margin:0; padding:0;
+      min-height:100vh;
       font-family:Arial, Helvetica, sans-serif;
-      background:
-        radial-gradient(circle at top right, rgba(212,5,17,.05), transparent 22%),
-        linear-gradient(180deg, #f5f6f8 0%, #eef1f5 100%);
+      background:var(--bg);
       color:var(--text);
     }
 
-    .page{
-      padding:22px;
-      max-width:1600px;
-      margin:0 auto;
+    a{ text-decoration:none; }
+
+    .app-shell{
+      display:flex;
+      min-height:100vh;
+      width:100%;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar{
+      width:260px;
+      background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
+      color:#fff;
+      position:fixed;
+      top:0; left:0; bottom:0;
+      padding:22px 18px;
+      box-shadow:6px 0 22px rgba(0,0,0,.12);
+      z-index:1000;
+      overflow-y:auto;
+    }
+
+    .brand{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      padding-bottom:18px;
+      margin-bottom:18px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+
+    .brand-badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      width:max-content;
+      padding:7px 12px;
+      border-radius:999px;
+      background:var(--dhl-yellow);
+      color:#111;
+      font-size:11px;
+      font-weight:900;
+      letter-spacing:.5px;
+    }
+
+    .brand-title{
+      font-size:22px;
+      font-weight:900;
+      letter-spacing:.3px;
+      line-height:1.1;
+    }
+
+    .brand-sub{
+      font-size:12px;
+      color:rgba(255,255,255,.7);
+      line-height:1.5;
+    }
+
+    .menu-title{
+      margin:18px 0 10px;
+      font-size:11px;
+      color:rgba(255,255,255,.5);
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.8px;
+    }
+
+    .menu{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .menu a{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:#fff;
+      padding:12px 14px;
+      border-radius:14px;
+      font-size:14px;
+      font-weight:700;
+      transition:.18s ease;
+      border:1px solid transparent;
+    }
+
+    .menu a:hover, .menu a.active{
+      background:rgba(255,255,255,.08);
+      border-color:rgba(255,255,255,.09);
+      transform:translateX(2px);
+    }
+
+    .menu .dot{
+      width:10px; height:10px;
+      border-radius:50%;
+      background:var(--dhl-yellow);
+      flex:0 0 10px;
+    }
+
+    /* ── MAIN ── */
+    .main{
+      margin-left:260px;
+      width:calc(100% - 260px);
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
     }
 
     .topbar{
-      background:linear-gradient(135deg,var(--dhl-red),var(--dhl-red-dark));
-      color:#fff;
-      border-radius:24px;
-      padding:22px 24px;
-      margin-bottom:18px;
+      height:74px;
+      background:#fff;
+      border-bottom:1px solid var(--line);
       display:flex;
-      justify-content:space-between;
       align-items:center;
-      flex-wrap:wrap;
-      gap:18px;
-      box-shadow:var(--shadow);
-      position:relative;
-      overflow:hidden;
-    }
-
-    .topbar::after{
-      content:"";
-      position:absolute;
-      right:-40px;
-      top:-40px;
-      width:180px;
-      height:180px;
-      background:rgba(255,255,255,.08);
-      border-radius:50%;
+      justify-content:space-between;
+      gap:16px;
+      padding:0 24px;
+      position:sticky;
+      top:0;
+      z-index:900;
     }
 
     .topbar-left{
       display:flex;
       align-items:center;
-      gap:16px;
-      position:relative;
-      z-index:1;
+      gap:14px;
+      min-width:0;
     }
 
-    .logo-box{
-      width:72px;
-      height:72px;
-      border-radius:18px;
-      background:rgba(255,255,255,.12);
-      border:1px solid rgba(255,255,255,.16);
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      backdrop-filter:blur(2px);
-      box-shadow:0 10px 20px rgba(0,0,0,.12);
+    .logo-topbar{
+      height:42px;
+      width:auto;
+      display:block;
+      object-fit:contain;
       flex-shrink:0;
     }
 
-    .logo-box img{
-      max-width:54px;
-      max-height:54px;
-      object-fit:contain;
-      display:block;
-    }
-
-    .title-group h1{
+    .topbar-left h1{
       margin:0;
-      font-size:28px;
+      font-size:20px;
       font-weight:900;
-      letter-spacing:.2px;
+      color:var(--dhl-black);
     }
 
-    .title-group p{
-      margin:6px 0 0;
-      font-size:14px;
-      opacity:.95;
+    .topbar-left p{
+      margin:4px 0 0;
+      font-size:12px;
+      color:var(--muted);
     }
 
-    .top-actions{
+    .topbar-right{
       display:flex;
+      align-items:center;
       gap:10px;
       flex-wrap:wrap;
-      position:relative;
-      z-index:1;
     }
 
-    .topbar a,
-    .btn{
-      color:#fff;
-      text-decoration:none;
+    .top-chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:8px 12px;
+      border-radius:999px;
+      font-size:12px;
       font-weight:800;
-      padding:11px 15px;
-      border-radius:14px;
+      border:1px solid #f0d56f;
+      background:#fff7d6;
+      color:#7a5a00;
+      white-space:nowrap;
+    }
+
+    .btn{
+      border:none;
+      cursor:pointer;
       display:inline-flex;
       align-items:center;
       justify-content:center;
       gap:8px;
-      border:none;
-      cursor:pointer;
+      padding:11px 16px;
+      border-radius:12px;
+      font-weight:800;
       transition:.18s ease;
+      font-size:13px;
+      text-decoration:none;
     }
 
-    .topbar a{
-      background:rgba(255,255,255,.12);
-      border:1px solid rgba(255,255,255,.14);
-    }
+    .btn:hover{ transform:translateY(-1px); }
 
-    .topbar a:hover,
-    .btn:hover{
-      transform:translateY(-1px);
-    }
-
-    .btn-dark{
-      background:#1f2937;
-      color:#fff;
-    }
-
-    .btn-soft{
-      background:#fff;
-      color:var(--dhl-red);
-      border:1px solid #e7e7e7;
-    }
-
-    .btn-primary{
+    .btn-red{
       background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
       color:#fff;
-      box-shadow:0 8px 18px rgba(212,5,17,.18);
+      box-shadow:0 8px 18px rgba(212,5,17,.20);
     }
 
-    .panel{
+    .btn-dark{ background:#20242a; color:#fff; }
+    .btn-yellow{ background:var(--dhl-yellow); color:#111; }
+
+    /* ── CONTENT ── */
+    .content{ padding:24px; }
+
+    .hero{
+      position:relative;
+      overflow:hidden;
+      background:linear-gradient(135deg,#d40511,#93000a);
+      color:#fff;
+      border-radius:24px;
+      padding:24px 26px;
+      box-shadow:var(--shadow);
+      margin-bottom:20px;
+    }
+
+    .hero::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        radial-gradient(circle at 85% 18%, rgba(255,204,0,.25), transparent 16%),
+        radial-gradient(circle at 72% 80%, rgba(255,255,255,.08), transparent 20%);
+      pointer-events:none;
+    }
+
+    .hero-inner{
+      position:relative;
+      z-index:1;
+      display:flex;
+      justify-content:space-between;
+      gap:20px;
+      align-items:flex-start;
+      flex-wrap:wrap;
+    }
+
+    .hero h2{ margin:0 0 8px; font-size:30px; font-weight:900; }
+    .hero p{ margin:0; font-size:14px; line-height:1.55; opacity:.95; }
+
+    .hero-actions{ display:flex; flex-wrap:wrap; gap:10px; }
+
+    .hero-badge{
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.18);
+      color:#fff;
+      padding:10px 14px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      white-space:nowrap;
+    }
+
+    /* ── FILTROS ── */
+    .filter-card{
       background:var(--card);
+      border:1px solid var(--line);
       border-radius:var(--radius);
       padding:18px;
-      border:1px solid var(--line);
-      box-shadow:var(--shadow-soft);
-      margin-bottom:18px;
+      box-shadow:var(--shadow);
+      margin-bottom:20px;
     }
 
-    .panel-title{
+    .filter-head{
       display:flex;
       align-items:center;
       justify-content:space-between;
       gap:12px;
-      margin-bottom:14px;
       flex-wrap:wrap;
+      margin-bottom:14px;
     }
 
-    .panel-title h3{
-      margin:0;
-      font-size:20px;
-      font-weight:900;
-      color:#111827;
-    }
+    .filter-head h3{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black); }
 
-    .chip{
+    .section-chip{
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      padding:7px 12px;
+      padding:8px 12px;
       border-radius:999px;
-      background:#fff8db;
-      border:1px solid #f0d66a;
-      color:#7a5a00;
+      background:#fff4cc;
+      border:1px solid #efd470;
+      color:#735500;
       font-size:12px;
       font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.3px;
     }
 
     .filters{
       display:grid;
       grid-template-columns:repeat(5, minmax(0,1fr));
       gap:12px;
-      margin-top:14px;
     }
 
     .filters input,
@@ -216,9 +333,9 @@
       width:100%;
       padding:12px 13px;
       border:1px solid #d7dbe1;
-      border-radius:14px;
-      background:#fff;
-      font-size:14px;
+      border-radius:12px;
+      background:#f9fafb;
+      font-size:13px;
       outline:none;
       transition:border-color .18s ease, box-shadow .18s ease;
     }
@@ -226,29 +343,41 @@
     .filters input:focus,
     .filters select:focus{
       border-color:var(--dhl-red);
-      box-shadow:0 0 0 4px rgba(212,5,17,.08);
+      box-shadow:0 0 0 3px rgba(212,5,17,.08);
     }
 
-    .actions{
+    .filter-actions{
       display:flex;
       gap:10px;
       flex-wrap:wrap;
-      margin-top:14px;
+      margin-top:12px;
     }
 
-    .kpis{
-      display:grid;
-      grid-template-columns:repeat(5, minmax(0,1fr));
-      gap:14px;
-      margin-bottom:18px;
+    /* ── SECTION ── */
+    .section{ margin-bottom:22px; }
+
+    .section-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-bottom:14px;
     }
+
+    .section-title{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+
+    /* ── KPI GRID ── */
+    .grid-5{ display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:16px; }
+    .grid-3{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; }
 
     .card{
-      background:#fff;
-      border-radius:20px;
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
       padding:18px;
-      border:1px solid #e4e7eb;
-      box-shadow:var(--shadow-soft);
+      min-width:0;
     }
 
     .kpi{
@@ -259,98 +388,118 @@
       flex-direction:column;
       justify-content:center;
       gap:8px;
-      background:linear-gradient(180deg,#fff,#fffef8);
       border-left:6px solid var(--dhl-yellow);
+      background:linear-gradient(180deg,#fff,#fffdf8);
     }
 
-    .kpi::before{
+    .kpi::after{
       content:"";
       position:absolute;
-      right:-20px;
-      bottom:-20px;
-      width:80px;
-      height:80px;
+      right:-18px; top:-20px;
+      width:90px; height:90px;
       border-radius:50%;
-      background:rgba(255,204,0,.14);
+      background:rgba(255,204,0,.15);
     }
 
     .kpi .label{
-      font-size:12px;
-      color:var(--muted);
-      font-weight:800;
-      text-transform:uppercase;
-      letter-spacing:.6px;
       position:relative;
       z-index:1;
+      font-size:12px;
+      font-weight:800;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.6px;
     }
 
     .kpi .value{
-      font-size:34px;
-      font-weight:900;
-      color:var(--dhl-red);
-      line-height:1;
       position:relative;
       z-index:1;
+      font-size:34px;
+      font-weight:900;
+      line-height:1;
+      color:var(--dhl-red);
     }
 
-    .grid{
-      display:grid;
-      grid-template-columns:repeat(3, minmax(0,1fr));
-      gap:14px;
-      margin-bottom:18px;
+    .kpi .sub{
+      position:relative;
+      z-index:1;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.45;
     }
 
-    .chart-card h3{
-      margin:0 0 12px 0;
+    /* ── CHART ── */
+    .panel-title{
+      margin:0 0 14px;
       font-size:18px;
       font-weight:900;
-      color:#111827;
+      color:var(--dhl-black);
+      text-align:center;
     }
 
-    .chart-box{
+    .chart-card{
+      min-height:380px;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .chart-wrap{
+      position:relative;
+      width:100%;
       height:300px;
+      min-height:300px;
+      max-height:300px;
     }
 
+    .chart-wrap canvas{ width:100% !important; height:100% !important; }
+
+    .chart-note{
+      margin-top:12px;
+      font-size:12px;
+      color:var(--muted);
+      text-align:center;
+      line-height:1.45;
+    }
+
+    /* ── TABLE ── */
     .table-wrap{
       overflow:auto;
-      border:1px solid #eceff3;
-      border-radius:18px;
+      border:1px solid var(--line);
+      border-radius:14px;
       background:#fff;
     }
 
     table{
       width:100%;
       border-collapse:collapse;
-      min-width:900px;
+      min-width:700px;
     }
 
     th, td{
       padding:12px 14px;
-      border-bottom:1px solid #edf0f4;
+      border-bottom:1px solid #edf1f5;
       text-align:left;
-      font-size:13px;
       vertical-align:middle;
+      font-size:13px;
     }
 
     th{
       background:linear-gradient(180deg,#fff8db,#ffefab);
       color:#4b3c00;
-      font-weight:800;
-      white-space:nowrap;
+      font-weight:900;
       position:sticky;
       top:0;
       z-index:1;
+      white-space:nowrap;
     }
 
-    tbody tr:hover{
-      background:#fffdf5;
-    }
+    tbody tr:hover{ background:#fffdf7; }
 
     .id-badge{
       display:inline-flex;
       align-items:center;
       justify-content:center;
-      padding:7px 10px;
+      padding:6px 10px;
       border-radius:999px;
       font-weight:900;
       color:var(--dhl-red);
@@ -370,414 +519,346 @@
     }
 
     .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
-    .badge-warning{ background:var(--warn-bg); color:var(--warn-text); }
-    .badge-success{ background:var(--ok-bg); color:var(--ok-text); }
+    .badge-warn  { background:var(--warn-bg);   color:var(--warn-text);   }
+    .badge-ok    { background:var(--success-bg); color:var(--success-text); }
     .badge-neutral{ background:var(--neutral-bg); color:var(--neutral-text); }
 
-    @media(max-width:1200px){
-      .kpis{ grid-template-columns:repeat(2,1fr); }
-      .grid{ grid-template-columns:1fr; }
+    .empty{ padding:18px; color:var(--muted); font-size:13px; }
+
+    /* ── RESPONSIVE ── */
+    @media(max-width:1100px){
+      .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
+      .main{ margin-left:0; width:100%; }
+      .app-shell{ flex-direction:column; }
+      .grid-3, .grid-5{ grid-template-columns:repeat(2,1fr); }
       .filters{ grid-template-columns:repeat(2,1fr); }
     }
 
     @media(max-width:700px){
-      .page{ padding:14px; }
-      .topbar{ padding:18px; }
-      .topbar-left{ align-items:flex-start; }
-      .title-group h1{ font-size:24px; }
-      .filters,
-      .kpis{ grid-template-columns:1fr; }
+      .content{ padding:16px; }
+      .topbar{ padding:14px 16px; height:auto; flex-direction:column; align-items:flex-start; }
+      .hero h2{ font-size:24px; }
+      .grid-3, .grid-5, .filters{ grid-template-columns:1fr; }
     }
   </style>
 </head>
 <body>
-<div class="page">
 
-  <div class="topbar">
-    <div class="topbar-left">
-      <div class="logo-box">
-        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL">
-      </div>
+<div class="app-shell">
 
-      <div class="title-group">
-        <h1>Dashboard</h1>
-        <p>Indicadores gerenciais, tendências operacionais e acompanhamento das ocorrências.</p>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">Controle de<br>Ocorrências</div>
+      <div class="brand-sub">
+        Painel corporativo para acompanhamento gerencial e tomada de decisão.
       </div>
     </div>
 
-    <div class="top-actions">
-      <a href="{{ url_for('ocorrencias') }}">OCORRÊNCIAS</a>
-      <a href="{{ url_for('exportar_excel', **filtros) }}">Excel</a>
-      <a href="{{ url_for('exportar_pdf', **filtros) }}">PDF</a>
-    </div>
-  </div>
+    <div class="menu-title">Navegação</div>
+    <nav class="menu">
+      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Ocorrências</a>
+      <a href="{{ url_for('dashboard') }}" class="active"><span class="dot"></span> Dashboard</a>
+      <a href="{{ url_for('analise_investigativa') }}"><span class="dot"></span> Análise Investigativa</a>
+    </nav>
 
-  <div class="panel">
-    <div class="panel-title">
-      <h3>FILTROS DE ANÁLISE</h3>
-      <span class="chip">Consulta dinâmica</span>
-    </div>
+    <div class="menu-title">Exportações</div>
+    <nav class="menu">
+      <a href="{{ url_for('exportar_excel', **filtros) }}"><span class="dot"></span> Exportar Excel</a>
+      <a href="{{ url_for('exportar_pdf', **filtros) }}"><span class="dot"></span> Exportar PDF</a>
+    </nav>
 
-    <form method="GET">
-      <div class="filters">
-        <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}">
-        <input type="date" name="data_final" value="{{ filtros.data_final }}">
-        <input type="text" name="local" placeholder="Local" value="{{ filtros.local }}">
-        <input type="text" name="natureza" placeholder="Natureza" value="{{ filtros.natureza }}">
-        <select name="status">
-          <option value="">Todos os status</option>
-          <option value="PENDENTE" {% if filtros.status == 'PENDENTE' %}selected{% endif %}>PENDENTE</option>
-          <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>EM ANDAMENTO</option>
-          <option value="CONCLUIDO" {% if filtros.status == 'CONCLUIDO' %}selected{% endif %}>CONCLUÍDO</option>
-        </select>
+    <div class="menu-title">Conta</div>
+    <nav class="menu">
+      <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-topbar">
+        <div>
+          <h1>Dashboard de Ocorrências</h1>
+          <p>Visão executiva consolidada dos registros operacionais</p>
+        </div>
       </div>
 
-      <div class="actions">
-        <button class="btn btn-primary" type="submit">APLICAR FILTROS</button>
-        <a class="btn btn-soft" href="{{ url_for('dashboard') }}">Limpar</a>
+      <div class="topbar-right">
+        <span class="top-chip">{{ session.get('user_nome', '') }} | {{ session.get('user_perfil', '') }}</span>
+        <a href="{{ url_for('ocorrencias') }}" class="btn btn-red">← Ocorrências</a>
       </div>
-    </form>
-  </div>
+    </header>
 
-  <div class="kpis">
-    <div class="card kpi">
-      <div class="label">TOTAL</div>
-      <div class="value">{{ resumo.total }}</div>
+    <div class="content">
+
+      <!-- HERO -->
+      <section class="hero">
+        <div class="hero-inner">
+          <div>
+            <h2>Visão estratégica das ocorrências</h2>
+            <p>
+              Painel corporativo para acompanhamento dos indicadores operacionais,
+              leitura do volume total, status das tratativas e criticidade por prioridade.
+            </p>
+          </div>
+          <div class="hero-actions">
+            <span class="hero-badge">Business Intelligence</span>
+            <span class="hero-badge">Operational Control</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- FILTROS -->
+      <div class="filter-card">
+        <div class="filter-head">
+          <h3>Filtros de análise</h3>
+          <span class="section-chip">Consulta dinâmica</span>
+        </div>
+
+        <form method="GET">
+          <div class="filters">
+            <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}">
+            <input type="date" name="data_final"   value="{{ filtros.data_final }}">
+            <input type="text" name="local"     placeholder="Local"     value="{{ filtros.local }}">
+            <input type="text" name="natureza"  placeholder="Natureza"  value="{{ filtros.natureza }}">
+            <select name="status">
+              <option value="">Todos os status</option>
+              <option value="PENDENTE"     {% if filtros.status == 'PENDENTE'     %}selected{% endif %}>PENDENTE</option>
+              <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>EM ANDAMENTO</option>
+              <option value="CONCLUIDO"    {% if filtros.status == 'CONCLUIDO'    %}selected{% endif %}>CONCLUÍDO</option>
+            </select>
+          </div>
+
+          <div class="filter-actions">
+            <button class="btn btn-red" type="submit">Aplicar filtros</button>
+            <a class="btn btn-dark" href="{{ url_for('dashboard') }}">Limpar</a>
+          </div>
+        </form>
+      </div>
+
+      <!-- KPIs -->
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Indicadores principais</h2>
+          <span class="section-chip">KPI Overview</span>
+        </div>
+
+        <div class="grid-5">
+          <div class="card kpi">
+            <div class="label">Total</div>
+            <div class="value">{{ resumo.total }}</div>
+            <div class="sub">Volume total registrado</div>
+          </div>
+          <div class="card kpi">
+            <div class="label">Pendentes</div>
+            <div class="value">{{ resumo.pendentes }}</div>
+            <div class="sub">Aguardando tratativa</div>
+          </div>
+          <div class="card kpi">
+            <div class="label">Em andamento</div>
+            <div class="value">{{ resumo.andamento }}</div>
+            <div class="sub">Em monitoramento</div>
+          </div>
+          <div class="card kpi">
+            <div class="label">Concluídas</div>
+            <div class="value">{{ resumo.concluidas }}</div>
+            <div class="sub">Ocorrências finalizadas</div>
+          </div>
+          <div class="card kpi">
+            <div class="label">Alta prioridade</div>
+            <div class="value">{{ resumo.altas }}</div>
+            <div class="sub">Criticidade elevada</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GRÁFICOS -->
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Painel gráfico</h2>
+          <span class="section-chip">Analytics View</span>
+        </div>
+
+        <div class="grid-3">
+          <div class="card chart-card">
+            <h3 class="panel-title">Ocorrências por Natureza</h3>
+            <div class="chart-wrap"><canvas id="chartNatureza"></canvas></div>
+            <div class="chart-note">Distribuição por tipo de ocorrência.</div>
+          </div>
+
+          <div class="card chart-card">
+            <h3 class="panel-title">Ocorrências por Local</h3>
+            <div class="chart-wrap"><canvas id="chartLocal"></canvas></div>
+            <div class="chart-note">Concentração de registros por área.</div>
+          </div>
+
+          <div class="card chart-card">
+            <h3 class="panel-title">Ocorrências por Status</h3>
+            <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
+            <div class="chart-note">Comparativo entre pendentes, andamento e concluídas.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TABELA RECENTES -->
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">Últimos registros</h2>
+          <span class="section-chip">Resumo recente</span>
+        </div>
+
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Data/Hora</th>
+                  <th>Natureza</th>
+                  <th>Local</th>
+                  <th>Prioridade</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in registros %}
+                <tr>
+                  <td><span class="id-badge">#{{ r.id }}</span></td>
+                  <td>{{ r.data_hora }}</td>
+                  <td>{{ r.natureza }}</td>
+                  <td>{{ r.local }}</td>
+                  <td>
+                    {% if r.prioridade == 'ALTA' %}
+                      <span class="badge badge-danger">{{ r.prioridade }}</span>
+                    {% elif r.prioridade == 'MEDIA' %}
+                      <span class="badge badge-warn">{{ r.prioridade }}</span>
+                    {% else %}
+                      <span class="badge badge-neutral">{{ r.prioridade }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if r.status == 'CONCLUIDO' %}
+                      <span class="badge badge-ok">{{ r.status }}</span>
+                    {% elif r.status == 'EM ANDAMENTO' %}
+                      <span class="badge badge-warn">{{ r.status }}</span>
+                    {% else %}
+                      <span class="badge badge-danger">{{ r.status }}</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty">Sem registros.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </div>
-
-    <div class="card kpi">
-      <div class="label">PENDENTES</div>
-      <div class="value">{{ resumo.pendentes }}</div>
-    </div>
-
-    <div class="card kpi">
-      <div class="label">EM ANDAMENTO</div>
-      <div class="value">{{ resumo.andamento }}</div>
-    </div>
-
-    <div class="card kpi">
-      <div class="label">CONCLUÍDAS</div>
-      <div class="value">{{ resumo.concluidas }}</div>
-    </div>
-
-    <div class="card kpi">
-      <div class="label">PRIORIDADE</div>
-      <div class="value">{{ resumo.altas }}</div>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card chart-card">
-      <h3>OCORRÊNCIAS POR NATUREZA</h3>
-      <div class="chart-box"><canvas id="chartNatureza"></canvas></div>
-    </div>
-
-    <div class="card chart-card">
-      <h3>OCORRÊNCIAS POR LOCAL</h3>
-      <div class="chart-box"><canvas id="chartLocal"></canvas></div>
-    </div>
-
-    <div class="card chart-card">
-      <h3>OCORRÊNCIAS POR STATUS</h3>
-      <div class="chart-box"><canvas id="chartStatus"></canvas></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="panel-title" style="margin-bottom:12px;">
-      <h3>ÚLTIMOS REGISTROS</h3>
-      <span class="chip">RESUMOS</span>
-    </div>
-
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Data/Hora</th>
-            <th>Natureza</th>
-            <th>Local</th>
-            <th>Prioridade</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in registros %}
-          <tr>
-            <td><span class="id-badge">#{{ r.id }}</span></td>
-            <td>{{ r.data_hora }}</td>
-            <td>{{ r.natureza }}</td>
-            <td>{{ r.local }}</td>
-            <td>
-              {% if r.prioridade == 'ALTA' %}
-                <span class="badge badge-danger">{{ r.prioridade }}</span>
-              {% elif r.prioridade == 'MEDIA' %}
-                <span class="badge badge-warning">{{ r.prioridade }}</span>
-              {% else %}
-                <span class="badge badge-neutral">{{ r.prioridade }}</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if r.status == 'CONCLUIDO' %}
-                <span class="badge badge-success">{{ r.status }}</span>
-              {% elif r.status == 'EM ANDAMENTO' %}
-                <span class="badge badge-warning">{{ r.status }}</span>
-              {% else %}
-                <span class="badge badge-danger">{{ r.status }}</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% else %}
-          <tr>
-            <td colspan="6">Sem registros.</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
+  </main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <script>
-Chart.defaults.font.family = "Arial, Helvetica, sans-serif";
-Chart.defaults.color = "#1f2937";
+  Chart.register(ChartDataLabels);
+  Chart.defaults.font.family = "Arial, Helvetica, sans-serif";
 
-const DHL_COLORS = [
-  "#d40511",
-  "#ffcc00",
-  "#1f2937",
-  "#f59e0b",
-  "#22c55e",
-  "#6b7280",
-  "#b3030e"
-];
+  const DHL_COLORS = ["#d40511","#ffcc00","#1f2937","#f59e0b","#22c55e","#6b7280","#b1030d"];
 
-const barLabelPlugin = {
-  id: "barLabelPlugin",
-  afterDatasetsDraw(chart) {
-    const { ctx } = chart;
-
-    chart.data.datasets.forEach((dataset, i) => {
-      const meta = chart.getDatasetMeta(i);
-
-      meta.data.forEach((bar, index) => {
-        const value = dataset.data[index];
-        if (!value) return;
-
-        ctx.save();
-        ctx.font = "bold 13px Arial";
-        ctx.fillStyle = "#111827";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(value, bar.x, bar.y - 8);
-        ctx.restore();
-      });
-    });
-  }
-};
-
-const pieLabelPlugin = {
-  id: "pieLabelPlugin",
-  afterDatasetsDraw(chart) {
-    const { ctx } = chart;
-
-    chart.data.datasets.forEach((dataset, i) => {
-      const total = dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-      const meta = chart.getDatasetMeta(i);
-
-      meta.data.forEach((element, index) => {
-        const value = Number(dataset.data[index]);
-        if (!value || !total) return;
-
-        const percent = Math.round((value / total) * 100);
-        const position = element.tooltipPosition();
-
-        ctx.save();
-        ctx.fillStyle = "#111827";
-        ctx.font = "bold 12px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(`${percent}%`, position.x, position.y);
-        ctx.restore();
-      });
-    });
-  }
-};
-
-const centerTextPlugin = {
-  id: "centerTextPlugin",
-  afterDraw(chart) {
-    if (chart.config.type !== "doughnut") return;
-
-    const { ctx, chartArea } = chart;
-    const dataset = chart.data.datasets[0];
-    const total = dataset.data.reduce((a, b) => Number(a) + Number(b), 0);
-
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.fillStyle = "#d40511";
-    ctx.font = "900 28px Arial";
-    ctx.fillText(total, (chartArea.left + chartArea.right) / 2, (chartArea.top + chartArea.bottom) / 2 - 8);
-
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "bold 11px Arial";
-    ctx.fillText("TOTAL", (chartArea.left + chartArea.right) / 2, (chartArea.top + chartArea.bottom) / 2 + 18);
-
-    ctx.restore();
-  }
-};
-
-new Chart(document.getElementById("chartNatureza"), {
-  type: "bar",
-  data: {
-    labels: {{ labels_natureza|tojson }},
-    datasets: [{
-      data: {{ valores_natureza|tojson }},
-      backgroundColor: "#d40511",
-      borderRadius: 14,
-      maxBarThickness: 42
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: {
-      duration: 1200,
-      easing: "easeOutQuart"
-    },
-    layout: {
-      padding: {
-        top: 30,
-        right: 10,
-        left: 10,
-        bottom: 5
-      }
-    },
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: "#111827",
-        padding: 12,
-        cornerRadius: 10,
-        displayColors: false
-      }
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-        border: { display: false },
-        ticks: {
-          color: "#1f2937",
-          font: {
-            weight: "bold",
-            size: 11
-          }
-        }
-      },
-      y: {
-        grid: { display: false },
-        border: { display: false },
-        ticks: { display: false }
-      }
+  const dhlLegend = {
+    position:'bottom', align:'center',
+    labels:{
+      usePointStyle:true, pointStyle:'circle',
+      boxWidth:10, boxHeight:10, padding:18,
+      color:'#1f2937', font:{size:12, weight:'700'}
     }
-  },
-  plugins: [barLabelPlugin]
-});
+  };
 
-new Chart(document.getElementById("chartLocal"), {
-  type: "pie",
-  data: {
-    labels: {{ labels_local|tojson }},
-    datasets: [{
-      data: {{ valores_local|tojson }},
-      backgroundColor: DHL_COLORS,
-      borderWidth: 4,
-      borderColor: "#ffffff",
-      hoverOffset: 12
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: {
-      duration: 1200,
-      easing: "easeOutQuart"
-    },
-    plugins: {
-      legend: {
-        position: "bottom",
-        labels: {
-          usePointStyle: true,
-          pointStyle: "circle",
-          padding: 18,
-          color: "#1f2937",
-          font: {
-            weight: "bold",
-            size: 11
-          }
-        }
-      },
-      tooltip: {
-        backgroundColor: "#111827",
-        padding: 12,
-        cornerRadius: 10
-      }
-    }
-  },
-  plugins: [pieLabelPlugin]
-});
+  const datalabelBar = {
+    anchor:'end', align:'top', offset:4,
+    color:'#1f2937', font:{weight:'700', size:11},
+    formatter:(v)=>v
+  };
 
-new Chart(document.getElementById("chartStatus"), {
-  type: "doughnut",
-  data: {
-    labels: {{ labels_status|tojson }},
-    datasets: [{
-      data: {{ valores_status|tojson }},
-      backgroundColor: [
-        "#d40511",
-        "#f59e0b",
-        "#22c55e",
-        "#6b7280"
-      ],
-      borderWidth: 4,
-      borderColor: "#ffffff",
-      hoverOffset: 12,
-      cutout: "72%"
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: {
-      duration: 1200,
-      easing: "easeOutQuart"
+  const datalabelPie = {
+    color:'#ffffff', font:{weight:'800', size:11},
+    formatter:(v)=>v>0?v:''
+  };
+
+  const barOptions = {
+    responsive:true, maintainAspectRatio:false,
+    animation:{duration:1200, easing:'easeOutQuart'},
+    layout:{padding:{top:24, right:10, bottom:5, left:10}},
+    plugins:{
+      legend:dhlLegend,
+      tooltip:{backgroundColor:'#1f1f1f', padding:12, cornerRadius:10, displayColors:false},
+      datalabels:datalabelBar
     },
-    plugins: {
-      legend: {
-        position: "bottom",
-        labels: {
-          usePointStyle: true,
-          pointStyle: "circle",
-          padding: 18,
-          color: "#1f2937",
-          font: {
-            weight: "bold",
-            size: 11
-          }
-        }
-      },
-      tooltip: {
-        backgroundColor: "#111827",
-        padding: 12,
-        cornerRadius: 10
-      }
+    scales:{
+      x:{grid:{display:false}, border:{display:false}, ticks:{color:'#1f2937', font:{weight:'bold', size:11}}},
+      y:{grid:{display:false}, border:{display:false}, ticks:{display:false}}
     }
-  },
-  plugins: [pieLabelPlugin, centerTextPlugin]
-});
+  };
+
+  const pieOptions = {
+    responsive:true, maintainAspectRatio:false,
+    animation:{duration:1200, easing:'easeOutQuart'},
+    layout:{padding:16},
+    plugins:{
+      legend:dhlLegend,
+      tooltip:{backgroundColor:'#1f1f1f', padding:12, cornerRadius:10},
+      datalabels:datalabelPie
+    }
+  };
+
+  new Chart(document.getElementById('chartNatureza'), {
+    type:'bar',
+    data:{
+      labels: {{ labels_natureza|tojson }},
+      datasets:[{
+        data: {{ valores_natureza|tojson }},
+        backgroundColor:'#d40511',
+        borderRadius:10,
+        maxBarThickness:52
+      }]
+    },
+    options:barOptions
+  });
+
+  new Chart(document.getElementById('chartLocal'), {
+    type:'pie',
+    data:{
+      labels: {{ labels_local|tojson }},
+      datasets:[{
+        data: {{ valores_local|tojson }},
+        backgroundColor:DHL_COLORS,
+        borderColor:'#ffffff',
+        borderWidth:4,
+        hoverOffset:8
+      }]
+    },
+    options:pieOptions
+  });
+
+  new Chart(document.getElementById('chartStatus'), {
+    type:'doughnut',
+    data:{
+      labels: {{ labels_status|tojson }},
+      datasets:[{
+        data: {{ valores_status|tojson }},
+        backgroundColor:['#d40511','#f59e0b','#22c55e','#6b7280'],
+        borderColor:'#ffffff',
+        borderWidth:4,
+        hoverOffset:8
+      }]
+    },
+    options:{...pieOptions, cutout:'58%'}
+  });
 </script>
+
 </body>
 </html>

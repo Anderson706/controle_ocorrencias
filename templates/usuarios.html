@@ -280,7 +280,8 @@
             <tr>
               <th>ID</th>
               <th>Nome</th>
-              <th>Usuário</th>
+              <th>E-mail</th>
+              <th>Site</th>
               <th>Perfil</th>
               <th>Ativo</th>
               <th>Criado em</th>
@@ -292,16 +293,17 @@
             <tr>
               <td><span class="id-pill">{{ u.id }}</span></td>
               <td><strong>{{ u.nome }}</strong></td>
-              <td>{{ u.username }}</td>
+              <td>{{ u.email }}</td>
+              <td>{{ u.site or '-' }}</td>
               <td><span class="perfil">{{ u.perfil }}</span></td>
               <td>
-                {% if u.ativo %}
+                {% if u.is_active %}
                   <span class="status-ativo">Sim</span>
                 {% else %}
                   <span class="status-inativo">Não</span>
                 {% endif %}
               </td>
-              <td>{{ u.criado_em.strftime('%d/%m/%Y %H:%M') if u.criado_em else '-' }}</td>
+              <td>{{ u.created_at.strftime('%d/%m/%Y %H:%M') if u.created_at else '-' }}</td>
             </tr>
             {% else %}
             <tr>

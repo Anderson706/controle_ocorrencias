@@ -698,8 +698,8 @@
               <div class="field">
                 <label>Foto atual</label>
                 <div class="thumbs">
-                  <a href="{{ url_for('uploaded_file', filename=registro_edicao.foto) }}" target="_blank">
-                    <img src="{{ url_for('uploaded_file', filename=registro_edicao.foto) }}" alt="Foto atual">
+                  <a href="{{ registro_edicao.foto }}" target="_blank">
+                    <img src="{{ registro_edicao.foto }}" alt="Foto atual">
                   </a>
                 </div>
               </div>
@@ -780,8 +780,8 @@
                   <td>
                     {% if r.foto %}
                       <div class="thumbs">
-                        <a href="{{ url_for('uploaded_file', filename=r.foto) }}" target="_blank">
-                          <img src="{{ url_for('uploaded_file', filename=r.foto) }}" alt="Foto">
+                        <a href="{{ r.foto }}" target="_blank">
+                          <img src="{{ r.foto }}" alt="Foto">
                         </a>
                       </div>
                     {% else %}
