@@ -573,14 +573,10 @@
 
     <div class="menu-title">Navegação</div>
     <nav class="menu">
-      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Controle de ocorrência</a>
+      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Controle de Ocorrências</a>
       <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
-
-      {% if session.get('user_perfil') == 'SUPERUSUARIO' %}
-        <a href="{{ url_for('register') }}"><span class="dot"></span> Criar usuário</a>
-        <a href="{{ url_for('listar_usuarios') }}"><span class="dot"></span> Usuários</a>
-      {% endif %}
-
+      <a href="{{ url_for('analise_investigativa') }}"><span class="dot"></span> Nova Análise</a>
+      <a href="{{ url_for('analises') }}"><span class="dot"></span> Controle de Análises</a>
       <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
     </nav>
   </aside>
@@ -623,7 +619,7 @@
             font-size:14px;
             font-weight:800;
           ">
-            ID #{{ registro.id }}
+            {{ registro.codigo or '#' ~ registro.id }}
           </span>
         </h2>
 
@@ -643,7 +639,7 @@
             </div>
           </div>
 
-          <div class="id-pill">Ocorrência #{{ registro.id }}</div>
+          <div class="id-pill">{{ registro.codigo or '#' ~ registro.id }}</div>
         </div>
 
         <div class="info-grid">

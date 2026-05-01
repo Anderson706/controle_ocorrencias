@@ -230,6 +230,15 @@
     background:#7f1d1d; color:#fff; padding:10px 14px; font-size:12px;
   }
 
+  .field-locked{
+    display:flex; align-items:center; gap:10px;
+    background:#f1f5f9; border:1px solid #e2e8f0;
+    border-radius:14px; padding:13px 16px;
+    font-size:14px; color:#475569; font-weight:600;
+    user-select:none; cursor:default;
+  }
+  .lock-icon{ font-size:13px; opacity:.55; }
+
   .buttons-row{
     display:flex; justify-content:center; gap:12px;
     flex-wrap:wrap; margin-top:26px; padding-top:22px;
@@ -260,13 +269,10 @@
 
     <div class="menu-title">Navegação</div>
     <nav class="menu">
-      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Ocorrências</a>
+      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Controle de Ocorrências</a>
       <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
-      <a href="{{ url_for('analise_investigativa') }}" class="active"><span class="dot"></span> Análise Investigativa</a>
-    </nav>
-
-    <div class="menu-title">Conta</div>
-    <nav class="menu">
+      <a href="{{ url_for('analise_investigativa') }}" class="active"><span class="dot"></span> Nova Análise</a>
+      <a href="{{ url_for('analises') }}"><span class="dot"></span> Controle de Análises</a>
       <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
     </nav>
   </aside>
@@ -308,6 +314,7 @@
       </div>
 
       <form id="form-ai" method="POST" action="{{ url_for('gerar_analise_investigativa') }}" enctype="multipart/form-data">
+        <input type="hidden" name="site" value="{{ site_atual.nome_do_site if site_atual else '' }}">
 
         <!-- DADOS DA OPERAÇÃO -->
         <section class="section">
@@ -319,7 +326,10 @@
             <div class="form-grid-3">
               <div class="field">
                 <label>Nº do Relatório (ID)</label>
-                <input type="number" name="id_relatorio" placeholder="Ex: 1023" min="1" step="1" required>
+                <div class="field-locked">
+                  <span class="lock-icon">🔒</span>
+                  {{ proximo_numero }}
+                </div>
               </div>
               <div class="field">
                 <label>Empresa</label>
@@ -331,11 +341,26 @@
               </div>
               <div class="field field-full">
                 <label>Unidade</label>
-                <input type="text" name="unidade" placeholder="Ex: DHL SHEIN - GUARULHOS" required>
+                <input type="hidden" name="unidade" value="{{ site_atual.nome_do_site if site_atual else '' }}">
+                <div class="field-locked">
+                  <span class="lock-icon">🔒</span>
+                  {{ site_atual.nome_do_site if site_atual else '— site não configurado para este usuário —' }}
+                </div>
               </div>
               <div class="field field-full">
                 <label>Endereço</label>
-                <input type="text" name="endereco" placeholder="Ex: Rua Concretex 800, Cumbica, Guarulhos - SP" required>
+                {% set end_partes = [] %}
+                {% if site_atual %}
+                  {% if site_atual.endereco %}{% set _ = end_partes.append(site_atual.endereco) %}{% endif %}
+                  {% if site_atual.cidade %}{% set _ = end_partes.append(site_atual.cidade) %}{% endif %}
+                  {% if site_atual.estado %}{% set _ = end_partes.append(site_atual.estado) %}{% endif %}
+                {% endif %}
+                {% set end_valor = end_partes | join(', ') %}
+                <input type="hidden" name="endereco" value="{{ end_valor }}">
+                <div class="field-locked">
+                  <span class="lock-icon">🔒</span>
+                  {{ end_valor if end_valor else '— endereço não cadastrado —' }}
+                </div>
               </div>
               <div class="field">
                 <label>Classificação do Site</label>
@@ -346,7 +371,11 @@
               </div>
               <div class="field">
                 <label>Produtos Segmento (Setor)</label>
-                <input type="text" name="produtos_segmento" placeholder="Ex: Retail" required>
+                <input type="hidden" name="produtos_segmento" value="{{ site_atual.sector if site_atual else '' }}">
+                <div class="field-locked">
+                  <span class="lock-icon">🔒</span>
+                  {{ site_atual.sector if site_atual and site_atual.sector else '— setor não cadastrado —' }}
+                </div>
               </div>
             </div>
           </div>
@@ -426,7 +455,7 @@
 
         <!-- AÇÕES -->
         <div class="buttons-row">
-          <button type="submit" class="btn btn-primary">Gerar DOCX + PDF</button>
+          <button type="submit" class="btn btn-primary">Gerar DOCX</button>
           <button type="button" class="btn btn-dark" onclick="window.history.back()">← Voltar</button>
           <button type="button" class="btn btn-danger" onclick="excluirFormulario()">Limpar</button>
         </div>

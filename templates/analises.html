@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Controle de Análises | DHL Security</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00;
+      --dhl-red:#d40511;
+      --dhl-red-dark:#b3030e;
+      --dhl-black:#1f1f1f;
+      --bg:#f3f5f7;
+      --card:#ffffff;
+      --line:#e5e7eb;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --shadow:0 12px 28px rgba(15,23,42,.08);
+      --radius:20px;
+      --sidebar:#161a1d;
+      --sidebar-2:#20262b;
+      --ok-bg:#e8f7ee;   --ok-text:#146c43;
+      --warn-bg:#fff4db; --warn-text:#9a6700;
+      --danger-bg:#fde8ea; --danger-text:#b42318;
+      --neutral-bg:#eef1f4; --neutral-text:#3f4a5a;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+    a{ text-decoration:none; }
+
+    .app-shell{ display:flex; min-height:100vh; width:100%; }
+
+    .sidebar{
+      width:260px; background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
+      color:#fff; position:fixed; top:0; left:0; bottom:0;
+      padding:22px 18px; box-shadow:6px 0 22px rgba(0,0,0,.12);
+      z-index:1000; overflow-y:auto;
+    }
+    .brand{ display:flex; flex-direction:column; gap:6px; padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; width:max-content; padding:7px 12px; border-radius:999px; background:var(--dhl-yellow); color:#111; font-size:11px; font-weight:900; letter-spacing:.5px; }
+    .brand-title{ font-size:22px; font-weight:900; letter-spacing:.3px; line-height:1.1; }
+    .brand-sub{ font-size:12px; color:rgba(255,255,255,.72); line-height:1.5; }
+    .menu-title{ margin:18px 0 10px; font-size:11px; color:rgba(255,255,255,.5); font-weight:800; text-transform:uppercase; letter-spacing:.8px; }
+    .menu{ display:flex; flex-direction:column; gap:8px; }
+    .menu a{ display:flex; align-items:center; gap:10px; color:#fff; padding:12px 14px; border-radius:14px; font-size:14px; font-weight:700; transition:.18s ease; border:1px solid transparent; }
+    .menu a:hover,.menu a.active{ background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.10); transform:translateX(2px); }
+    .menu .dot{ width:10px; height:10px; border-radius:50%; background:var(--dhl-yellow); flex:0 0 10px; }
+
+    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
+    .topbar{ height:76px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+    .top-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; font-size:12px; font-weight:800; border:1px solid #efd56f; background:#fff8d8; color:#7a5a00; white-space:nowrap; }
+
+    .content{ padding:24px; }
+    .flash-wrap{ margin-bottom:16px; }
+    .flash{ margin-bottom:12px; padding:12px 14px; border-radius:12px; font-weight:700; border:1px solid transparent; }
+    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+    .hero{ position:relative; overflow:hidden; background:linear-gradient(135deg,#d40511,#93000a); color:#fff; border-radius:24px; padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px; }
+    .hero h2{ margin:0 0 8px 0; font-size:30px; font-weight:900; }
+    .hero p{ margin:0; line-height:1.55; font-size:14px; opacity:.96; max-width:850px; }
+
+    .section{ margin-bottom:22px; }
+    .section-title{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+    .section-title h3{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+    .section-chip{ background:#fff8db; color:#7a5a00; border:1px solid #f5d66f; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
+
+    .grid{ display:grid; gap:16px; }
+    .grid-4{ grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); min-width:0; }
+    .kpi{ min-height:128px; display:flex; flex-direction:column; justify-content:center; gap:8px; position:relative; overflow:hidden; background:linear-gradient(180deg,#fff,#fffef7); border-left:6px solid var(--dhl-yellow); }
+    .kpi .label{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.6px; font-weight:800; }
+    .kpi .value{ font-size:34px; font-weight:900; color:var(--dhl-red); line-height:1; }
+
+    .btn{ border:none; border-radius:14px; padding:12px 16px; cursor:pointer; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:.18s ease; font-size:13px; }
+    .btn:hover{ transform:translateY(-1px); }
+    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#ffcc00; box-shadow:0 8px 18px rgba(212,5,17,.20); }
+    .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
+    .btn-danger{ background:linear-gradient(180deg,#b91c1c,#7f1d1d); color:#fff; padding:8px 12px; font-size:12px; }
+
+    .badge{ display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:900; white-space:nowrap; }
+    .badge-success{ background:var(--ok-bg); color:var(--ok-text); }
+    .badge-neutral{ background:var(--neutral-bg); color:var(--neutral-text); }
+
+    .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
+    table{ width:100%; border-collapse:collapse; min-width:1100px; background:#fff; }
+    th,td{ padding:10px 12px; border-bottom:1px solid #edf0f4; text-align:left; vertical-align:top; font-size:13px; }
+    thead th{ background:linear-gradient(180deg,#fff8db,#ffefab); color:#4b3c00; position:sticky; top:0; z-index:2; font-weight:800; white-space:nowrap; }
+    tbody tr:hover{ background:#fffdf5; }
+    tbody tr:last-child td{ border-bottom:none; }
+
+    @media(max-width:1100px){
+      .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
+      .main{ margin-left:0; width:100%; }
+      .app-shell{ flex-direction:column; }
+    }
+    @media(max-width:700px){
+      .content{ padding:16px; }
+      .topbar{ padding:14px 16px; height:auto; flex-direction:column; align-items:flex-start; }
+      .hero h2{ font-size:24px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">Controle de<br>Ocorrência</div>
+      <div class="brand-sub">Registro corporativo de ocorrências, evidências e acompanhamento operacional.</div>
+    </div>
+    <div class="menu-title">Navegação</div>
+    <nav class="menu">
+      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Controle de Ocorrências</a>
+      <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
+      <a href="{{ url_for('analise_investigativa') }}"><span class="dot"></span> Nova Análise</a>
+      <a href="{{ url_for('analises') }}" class="active"><span class="dot"></span> Controle de Análises</a>
+      <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="DHL" class="logo-topbar">
+        <div>
+          <h1>Controle de Análises Investigativas</h1>
+          <p>DHL Security — histórico de análises registradas</p>
+        </div>
+      </div>
+      <span class="top-chip">{{ session.get('user_nome','') }} | {{ session.get('user_perfil','') }}</span>
+    </header>
+
+    <div class="content">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-wrap">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <div class="hero">
+        <h2>Análises Investigativas</h2>
+        <p>Histórico completo de análises registradas{% if not is_admin %} para o site <strong>{{ session.get('user_site','') }}</strong>{% endif %}. Clique em "Nova Análise" para gerar e registrar uma nova.</p>
+      </div>
+
+      <!-- KPIs -->
+      <section class="section">
+        <div class="grid grid-4">
+          <div class="card kpi">
+            <div class="label">Total de análises</div>
+            <div class="value">{{ resumo.total }}</div>
+          </div>
+          {% if is_admin %}
+          <div class="card kpi">
+            <div class="label">Sites distintos</div>
+            <div class="value">{{ resumo.sites }}</div>
+          </div>
+          {% endif %}
+          <div class="card kpi" style="border-left-color:var(--dhl-red);">
+            <div class="label">Nova análise</div>
+            <a href="{{ url_for('analise_investigativa') }}" class="btn btn-red" style="margin-top:8px;">+ Criar análise</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- TABELA -->
+      <section class="section">
+        <div class="section-title">
+          <h3>Análises registradas</h3>
+          <span class="section-chip">Registros</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nº</th>
+                {% if is_admin %}<th>Site</th>{% endif %}
+                <th>Data</th>
+                <th>ID Relatório</th>
+                <th>Empresa</th>
+                <th>Unidade</th>
+                <th>Responsável</th>
+                <th>Conclusão</th>
+                <th>Criado por</th>
+                <th>Arquivo</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in registros %}
+              <tr>
+                <td><strong style="color:#d40511;">{{ r.numero_site or r.id }}</strong></td>
+                {% if is_admin %}
+                  <td><span style="font-size:12px; font-weight:700; color:#374151;">{{ r.site or '-' }}</span></td>
+                {% endif %}
+                <td style="white-space:nowrap;">{{ r.criado_em.strftime('%d/%m/%Y %H:%M') if r.criado_em else '-' }}</td>
+                <td>{{ r.id_relatorio or '-' }}</td>
+                <td>{{ r.empresa or '-' }}</td>
+                <td style="max-width:220px;">{{ r.unidade or '-' }}</td>
+                <td>{{ r.responsavel or '-' }}</td>
+                <td style="max-width:260px;">
+                  {% if r.conclusao %}
+                    <span class="badge badge-success">Concluída</span>
+                  {% else %}
+                    <span class="badge badge-neutral">—</span>
+                  {% endif %}
+                </td>
+                <td>{{ r.criado_por or '-' }}</td>
+                <td>
+                  {% if r.link_arquivo %}
+                    <a href="{{ r.link_arquivo }}" target="_blank" rel="noopener"
+                       class="btn btn-dark" style="padding:7px 11px; font-size:12px;">
+                      📄 OneDrive
+                    </a>
+                  {% else %}
+                    <span style="color:var(--muted); font-size:12px;">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if session.get('user_perfil') in ['ADMIN', 'USUARIO'] %}
+                  <form method="POST" action="{{ url_for('excluir_analise', analise_id=r.id) }}"
+                        onsubmit="return confirm('Excluir esta análise?');" style="display:inline;">
+                    <button type="submit" class="btn btn-danger">Excluir</button>
+                  </form>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="11" style="text-align:center; padding:28px; color:var(--muted); font-weight:700;">
+                  Nenhuma análise registrada.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

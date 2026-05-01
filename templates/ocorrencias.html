@@ -325,6 +325,14 @@
       color:#6b7280;
       font-weight:700;
     }
+    .field-locked{
+      display:flex; align-items:center; gap:10px;
+      background:#f1f5f9; border:1px solid #e2e8f0;
+      border-radius:14px; padding:13px 16px;
+      font-size:14px; color:#475569; font-weight:600;
+      user-select:none; cursor:default;
+    }
+    .lock-icon{ font-size:13px; opacity:.55; }
     .small{
       font-size:12px;
       color:var(--muted);
@@ -459,16 +467,8 @@
     <nav class="menu">
       <a href="{{ url_for('ocorrencias') }}" class="active"><span class="dot"></span> Controle de ocorrência</a>
       <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
-      <a href="{{ url_for('analise_investigativa') }}"
-     class="{% if request.endpoint == 'analise_investigativa' %}active{% endif %}">
-     <span class="dot"></span> Análise Investigativa
-     </a>
-
-      {% if session.get('user_perfil') == 'SUPERUSUARIO' %}
-        <a href="{{ url_for('register') }}"><span class="dot"></span> Criar usuário</a>
-        <a href="{{ url_for('listar_usuarios') }}"><span class="dot"></span> Usuários</a>
-      {% endif %}
-
+      <a href="{{ url_for('analise_investigativa') }}"><span class="dot"></span> Nova Análise</a>
+      <a href="{{ url_for('analises') }}"><span class="dot"></span> Controle de Análises</a>
       <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
     </nav>
   </aside>
@@ -616,6 +616,15 @@
 
             <div class="row">
               <div class="field">
+                <label>Site</label>
+                <input type="hidden" name="site" value="{{ (registro_edicao.site if modo_edicao else site_usuario) or '' }}">
+                <div class="field-locked">
+                  <span class="lock-icon">🔒</span>
+                  {{ (registro_edicao.site if modo_edicao else site_usuario) or '— site não configurado —' }}
+                </div>
+              </div>
+
+              <div class="field">
                 <label>Natureza</label>
                 <select name="natureza" required>
                   <option value="">Selecione</option>
@@ -627,12 +636,10 @@
 
               <div class="field">
                 <label>Local</label>
-                <select name="local" required>
-                  <option value="">Selecione</option>
-                  {% for item in ['Portaria','Inbound','Armários','Condomínio'] %}
-                    <option value="{{ item }}" {% if modo_edicao and registro_edicao.local == item %}selected{% endif %}>{{ item }}</option>
-                  {% endfor %}
-                </select>
+                <input type="text" name="local"
+                       value="{% if modo_edicao %}{{ registro_edicao.local }}{% endif %}"
+                       placeholder="Ex: Portaria, Inbound, Pátio..."
+                       required>
               </div>
             </div>
 
@@ -729,7 +736,8 @@
             <table>
               <thead>
                 <tr>
-                  <th>ID</th>
+                  <th>Nº</th>
+                  <th>Site</th>
                   <th>Data / Hora</th>
                   <th>Hora ocorrência</th>
                   <th>Natureza</th>
@@ -750,7 +758,8 @@
               <tbody>
                 {% for r in registros %}
                 <tr>
-                  <td><strong style="color:#d40511;">#{{ r.id }}</strong></td>
+                  <td><strong style="color:#d40511;">{{ r.numero_site or r.id }}</strong></td>
+                  <td style="white-space:nowrap;">{{ r.site or '-' }}</td>
                   <td>{{ r.data_hora }}</td>
                   <td>{{ r.hora_ocorrencia }}</td>
                   <td>{{ r.natureza }}</td>
@@ -796,7 +805,7 @@
                     <div class="actions" style="margin-top:0;">
                       <a href="{{ url_for('ocorrencias', editar=r.id) }}" class="btn btn-dark" style="padding:8px 12px;">Editar</a>
 
-                      {% if session.get('user_perfil') in ['SUPERUSUARIO', 'USUARIO'] %}
+                      {% if session.get('user_perfil') in ['ADMIN', 'USUARIO'] %}
                       <form method="POST" action="{{ url_for('excluir_ocorrencia', ocorrencia_id=r.id) }}" onsubmit="return confirm('Deseja realmente excluir este registro?');">
                         <button type="submit" class="btn btn-red" style="padding:8px 12px;">Excluir</button>
                       </form>

@@ -1,10 +1,11 @@
 import os
+import re
 import base64
-import zipfile
 from io import BytesIO
 from datetime import datetime
 from functools import wraps
 import oracledb
+import requests
 from docx.shared import Cm, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
@@ -48,6 +49,12 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
+# OneDrive / Microsoft Graph API
+app.config["ONEDRIVE_TENANT_ID"]     = os.environ.get("ONEDRIVE_TENANT_ID", "")
+app.config["ONEDRIVE_CLIENT_ID"]     = os.environ.get("ONEDRIVE_CLIENT_ID", "")
+app.config["ONEDRIVE_CLIENT_SECRET"] = os.environ.get("ONEDRIVE_CLIENT_SECRET", "")
+app.config["ONEDRIVE_DRIVE_ID"]      = os.environ.get("ONEDRIVE_DRIVE_ID", "")
+
 db = SQLAlchemy(app)
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
@@ -79,28 +86,49 @@ class Usuario(db.Model):
     def check_password(self, senha: str) -> bool:
         return check_password_hash(self.password_hash, senha)
 
+class SiteCompleto(db.Model):
+    __tablename__ = "SITES_COMPLETO"
+
+    nome_do_site = db.Column("NOME_DO_SITE", db.String(128), primary_key=True)
+    endereco     = db.Column("ENDEREÇO", db.String(255), nullable=True)
+    cidade       = db.Column("CIDADE", db.String(50), nullable=True)
+    estado       = db.Column("ESTADO", db.String(2), nullable=True)
+    pais         = db.Column("PAÍS", db.String(26), nullable=True)
+    responsavel_security = db.Column("RESPONSÁVEL_SECURITY", db.String(128), nullable=True)
+    coordenador  = db.Column("COORDENADOR", db.String(26), nullable=True)
+    latitude     = db.Column("LATIDUDE", db.Numeric(38, 0), nullable=True)
+    longitude    = db.Column("LONGITUDE", db.Numeric(38, 0), nullable=True)
+    sector       = db.Column("SECTOR", db.String(26), nullable=True)
+    security_responsible = db.Column("SECURITY_RESPONSIBLE", db.String(26), nullable=True)
+
+
 class AnaliseInvestigativa(db.Model):
     __tablename__ = "analises_investigativas"
 
     id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    codigo = db.Column(db.String(30), nullable=True, unique=True)
+    numero_site = db.Column(db.Integer, nullable=True)
+    site = db.Column(db.String(128), nullable=True)
 
-    id_relatorio = db.Column(db.Integer, nullable=False)
-    empresa = db.Column(db.String(120), nullable=False)
-    unidade = db.Column(db.String(180), nullable=False)
-    endereco = db.Column(db.String(255), nullable=False)
-    classificacao = db.Column(db.String(80), nullable=False)
-    produtos_segmento = db.Column(db.String(120), nullable=False)
-    clientes = db.Column(db.String(120), nullable=False)
+    id_relatorio = db.Column(db.String(30), nullable=True)
+    empresa = db.Column(db.String(120), nullable=True)
+    unidade = db.Column(db.String(180), nullable=True)
+    endereco = db.Column(db.String(255), nullable=True)
+    classificacao = db.Column(db.String(80), nullable=True)
+    produtos_segmento = db.Column(db.String(120), nullable=True)
+    clientes = db.Column(db.String(120), nullable=True)
 
-    objetivo = db.Column(db.Text, nullable=False)
-    responsavel = db.Column(db.String(150), nullable=False)
-    nome_funcao_data = db.Column(db.String(255), nullable=False)
+    objetivo = db.Column(db.Text, nullable=True)
+    responsavel = db.Column(db.String(150), nullable=True)
+    nome_funcao_data = db.Column(db.String(255), nullable=True)
 
-    descricao_registro = db.Column(db.Text, nullable=False)
-    conclusao = db.Column(db.Text, nullable=False)
+    descricao_registro = db.Column(db.Text, nullable=True)
+    conclusao = db.Column(db.Text, nullable=True)
     sugestao = db.Column(db.Text, nullable=True)
 
+    criado_por = db.Column(db.String(120), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    link_arquivo = db.Column(db.Text, nullable=True)
 
     imagens = db.relationship(
         "ImagemAnaliseInvestigativa",
@@ -125,10 +153,13 @@ class Ocorrencia(db.Model):
     __tablename__ = "ocorrencias"
 
     id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    codigo = db.Column(db.String(30), nullable=True, unique=True)
+    numero_site = db.Column(db.Integer, nullable=True)
     data_hora = db.Column(db.String(30), nullable=False)
     hora_ocorrencia = db.Column(db.String(10), nullable=False)
     natureza = db.Column(db.String(120), nullable=False)
     descricao = db.Column(db.Text, nullable=False)
+    site = db.Column(db.String(128), nullable=True)
     local = db.Column(db.String(120), nullable=False)
     operador = db.Column(db.String(120), nullable=False)
     gc = db.Column(db.String(120), nullable=False)
@@ -161,6 +192,71 @@ MIME_MAP = {
     "xls": "application/vnd.ms-excel",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
+
+def gerar_codigo(model_class, site):
+    clean = re.sub(r'[^A-Z0-9]', '', (site or "SITE").upper())[:8] or "SITE"
+    ano = datetime.now().year
+    seq = model_class.query.filter_by(site=site).count() + 1
+    return f"{clean}-{ano}-{seq:04d}", seq
+
+
+def get_graph_token():
+    tenant_id     = app.config.get("ONEDRIVE_TENANT_ID", "")
+    client_id     = app.config.get("ONEDRIVE_CLIENT_ID", "")
+    client_secret = app.config.get("ONEDRIVE_CLIENT_SECRET", "")
+    if not (tenant_id and client_id and client_secret):
+        return None
+    resp = requests.post(
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": "https://graph.microsoft.com/.default",
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json().get("access_token")
+
+
+def upload_to_onedrive(docx_bytes, filename, pais, estado, site):
+    token    = get_graph_token()
+    drive_id = app.config.get("ONEDRIVE_DRIVE_ID", "")
+    if not token or not drive_id:
+        return None
+
+    safe = lambda s: re.sub(r'[<>:"/\\|?*]', '_', (s or "").strip()) or "DESCONHECIDO"
+    file_path = (
+        f"ANÁLISES INVESTIGATIVAS/{safe(pais)}/{safe(estado)}"
+        f"/{safe(site)}/{filename}"
+    )
+
+    docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    upload_url = (
+        f"https://graph.microsoft.com/v1.0/drives/{drive_id}"
+        f"/root:/{file_path}:/content"
+    )
+    put_resp = requests.put(
+        upload_url,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": docx_mime},
+        data=docx_bytes,
+        timeout=60,
+    )
+    put_resp.raise_for_status()
+    item_id = put_resp.json().get("id")
+    if not item_id:
+        return None
+
+    link_resp = requests.post(
+        f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}/createLink",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json={"type": "view", "scope": "organization"},
+        timeout=15,
+    )
+    link_resp.raise_for_status()
+    return link_resp.json().get("link", {}).get("webUrl")
+
 
 def arquivo_para_base64(arquivo, extensoes):
     if not arquivo or not arquivo.filename:
@@ -264,7 +360,42 @@ def index():
 @app.route("/analise-investigativa", methods=["GET"])
 @login_required
 def analise_investigativa():
-    return render_template("analise_investigativa.html")
+    usuario = Usuario.query.get(session.get("user_id"))
+    site_atual = None
+    if usuario and usuario.site:
+        site_atual = SiteCompleto.query.filter_by(nome_do_site=usuario.site).first()
+    proximo_numero = AnaliseInvestigativa.query.filter_by(site=usuario.site if usuario else None).count() + 1
+    return render_template("analise_investigativa.html", site_atual=site_atual, proximo_numero=proximo_numero)
+
+
+@app.route("/analises")
+@login_required
+def analises():
+    usuario = Usuario.query.get(session.get("user_id"))
+    is_admin = usuario and (usuario.perfil or "").upper() == "ADMIN"
+    site_usuario = usuario.site if usuario else None
+
+    if is_admin:
+        registros = AnaliseInvestigativa.query.order_by(AnaliseInvestigativa.id.desc()).all()
+    else:
+        registros = AnaliseInvestigativa.query.filter_by(site=site_usuario).order_by(AnaliseInvestigativa.id.desc()).all()
+
+    resumo = {
+        "total": len(registros),
+        "sites": len(set(r.site for r in registros if r.site)),
+    }
+    return render_template("analises.html", registros=registros, resumo=resumo, is_admin=is_admin)
+
+
+@app.route("/analises/excluir/<int:analise_id>", methods=["POST"])
+@login_required
+@perfil_required("ADMIN", "USUARIO")
+def excluir_analise(analise_id):
+    registro = AnaliseInvestigativa.query.get_or_404(analise_id)
+    db.session.delete(registro)
+    db.session.commit()
+    flash("Análise excluída com sucesso.", "success")
+    return redirect(url_for("analises"))
 
 
 def classify_line(valor):
@@ -323,35 +454,6 @@ def add_grid_table(doc, data, col_widths_cm=None, header_bold_cols=None):
 
     return table
 
-
-def convert_doc_to_pdf_bytes(doc, base_name="documento"):
-    """
-    PDF simples com o mesmo conteúdo textual.
-    A conversão visual idêntica ao DOCX só acontece usando LibreOffice/Word.
-    """
-    buffer = BytesIO()
-
-    pdf = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=36,
-        leftMargin=36,
-        topMargin=36,
-        bottomMargin=36
-    )
-
-    styles = getSampleStyleSheet()
-    story = []
-
-    story.append(Paragraph("ANÁLISE INVESTIGATIVA", styles["Title"]))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph("DHL - SECURITY", styles["Heading2"]))
-    story.append(Spacer(1, 12))
-
-    pdf.build(story)
-    buffer.seek(0)
-
-    return buffer
 
 def set_cell_bg(cell, color):
     tcPr = cell._tc.get_or_add_tcPr()
@@ -438,8 +540,34 @@ def add_professional_table(doc, rows, col_widths):
     return table
 
 @app.route("/gerar_docx", methods=["POST"])
+@login_required
 def gerar_analise_investigativa():
     f = request.form
+
+    # ===== Salva no banco =====
+    site_val = (f.get("site") or "").strip()
+    _codigo_analise, _seq_analise = gerar_codigo(AnaliseInvestigativa, site_val)
+    nova_analise = AnaliseInvestigativa(
+        codigo=_codigo_analise,
+        numero_site=_seq_analise,
+        site=site_val,
+        id_relatorio=(f.get("id_relatorio") or "").strip(),
+        empresa=(f.get("empresa") or "").strip(),
+        unidade=(f.get("unidade") or "").strip(),
+        endereco=(f.get("endereco") or "").strip(),
+        classificacao=(f.get("classificacao") or "").strip(),
+        produtos_segmento=(f.get("produtos_segmento") or "").strip(),
+        clientes=(f.get("clientes") or "").strip(),
+        objetivo=(f.get("objetivo") or "").strip(),
+        responsavel=(f.get("responsavel") or "").strip(),
+        nome_funcao_data=(f.get("nome_funcao_data") or "").strip(),
+        descricao_registro=(f.get("descricao_registro") or "").strip(),
+        conclusao=(f.get("conclusao") or "").strip(),
+        sugestao=(f.get("sugestao") or "").strip(),
+        criado_por=session.get("user_nome"),
+    )
+    db.session.add(nova_analise)
+    db.session.commit()
 
     # ===== Coleta do form =====
     id_relatorio = (f.get("id_relatorio", "") or "").strip()
@@ -704,47 +832,50 @@ def gerar_analise_investigativa():
     add_text_box(doc, descricao_registro or "\n\n\n\n")
 
     # ==========================================================
-    # EVIDÊNCIAS
+    # EVIDÊNCIAS  (imagem esquerda | descrição direita)
     # ==========================================================
     if evidencias:
         add_section_title(doc, "Evidências")
-
-        max_width_cm = 8.0
-        row_pair = []
 
         for idx, (fimg, desc) in enumerate(evidencias, start=1):
             bio = BytesIO(fimg.read())
             bio.seek(0)
 
-            row_pair.append((bio, f"Imagem {idx}: {desc or ''}"))
+            tbl = doc.add_table(rows=1, cols=2)
+            tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+            tbl.autofit = False
 
-            if len(row_pair) == 2 or idx == len(evidencias):
-                tbl = doc.add_table(rows=1, cols=2)
-                tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+            img_cell  = tbl.rows[0].cells[0]
+            desc_cell = tbl.rows[0].cells[1]
 
-                for ci, (img_bytes, legend) in enumerate(row_pair):
-                    cell = tbl.rows[0].cells[ci]
-                    format_cell(cell, bg="FFFFFF", align="center")
+            img_cell.width  = Cm(7.0)
+            desc_cell.width = Cm(10.5)
 
-                    p_img = cell.paragraphs[0]
-                    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            # célula esquerda — imagem
+            p_img = img_cell.paragraphs[0]
+            p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_img.add_run().add_picture(bio, width=Cm(6.5))
 
-                    run_img = p_img.add_run()
-                    run_img.add_picture(img_bytes, width=Cm(max_width_cm))
+            p_num = img_cell.add_paragraph(f"Imagem {idx}")
+            p_num.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for rn in p_num.runs:
+                rn.font.name = "Arial"
+                rn.font.size = Pt(8)
+                rn.italic = True
+                rn.font.color.rgb = RGBColor(100, 100, 100)
 
-                    p_cap = cell.add_paragraph(legend)
-                    p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            format_cell(img_cell, bg="F5F5F5", align="center")
 
-                    for rn in p_cap.runs:
-                        rn.font.name = "Arial"
-                        rn.font.size = Pt(8)
-                        rn.font.color.rgb = RGBColor(90, 90, 90)
+            # célula direita — descrição
+            desc_cell.text = desc or "Sem descrição"
+            format_cell(desc_cell, bg="FFFFFF", align="left")
 
-                if len(row_pair) == 1:
-                    tbl.rows[0].cells[1].text = ""
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(6)
 
-                doc.add_paragraph()
-                row_pair = []
+            # quebra de página a cada 5 imagens
+            if idx % 5 == 0 and idx < len(evidencias):
+                doc.add_page_break()
 
     # ==========================================================
     # CONCLUSÃO
@@ -792,37 +923,13 @@ def gerar_analise_investigativa():
     doc.save(docx_buf)
     docx_buf.seek(0)
 
-    # ==========================================================
-    # CONVERTE PARA PDF E GERA ZIP
-    # ==========================================================
-    try:
-        pdf_io = convert_doc_to_pdf_bytes(doc, base_name=base_name)
-        pdf_io.seek(0)
-
-        zip_buf = BytesIO()
-
-        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.writestr(f"{base_name}.docx", docx_buf.getvalue())
-            zf.writestr(f"{base_name}.pdf", pdf_io.getvalue())
-
-        zip_buf.seek(0)
-
-        return send_file(
-            zip_buf,
-            as_attachment=True,
-            download_name=f"{base_name}_DOCX_PDF.zip",
-            mimetype="application/zip",
-        )
-
-    except Exception:
-        docx_buf.seek(0)
-
-        return send_file(
-            docx_buf,
-            as_attachment=True,
-            download_name=f"{base_name}.docx",
-            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
+    docx_buf.seek(0)
+    return send_file(
+        docx_buf,
+        as_attachment=True,
+        download_name=f"{base_name}.docx",
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
 
 
@@ -868,63 +975,6 @@ def logout():
 # =========================
 # USERS
 # =========================
-@app.route("/register", methods=["GET", "POST"])
-@login_required
-@perfil_required("SUPERUSUARIO")
-def register():
-    if request.method == "POST":
-        nome = (request.form.get("nome") or "").strip()
-        email = (request.form.get("email") or "").strip().lower()
-        senha = (request.form.get("senha") or "").strip()
-        confirmar_senha = (request.form.get("confirmar_senha") or "").strip()
-        perfil = (request.form.get("perfil") or "").strip().upper()
-
-        perfis_validos = {"SUPERUSUARIO", "USUARIO", "OPERACIONAL"}
-
-        if not nome or not email or not senha or not confirmar_senha or not perfil:
-            flash("Preencha todos os campos.", "warning")
-            return render_template("register.html")
-
-        if perfil not in perfis_validos:
-            flash("Perfil inválido.", "danger")
-            return render_template("register.html")
-
-        if senha != confirmar_senha:
-            flash("As senhas não conferem.", "danger")
-            return render_template("register.html")
-
-        if Usuario.query.filter_by(email=email).first():
-            flash("Já existe um usuário com esse e-mail.", "warning")
-            return render_template("register.html")
-
-        site = (request.form.get("site") or "").strip()
-
-        novo_usuario = Usuario(
-            nome=nome,
-            email=email,
-            perfil=perfil,
-            site=site,
-            is_active=True
-        )
-        novo_usuario.set_password(senha)
-
-        db.session.add(novo_usuario)
-        db.session.commit()
-
-        flash("Usuário criado com sucesso.", "success")
-        return redirect(url_for("listar_usuarios"))
-
-    return render_template("register.html")
-
-
-@app.route("/usuarios")
-@login_required
-@perfil_required("SUPERUSUARIO")
-def listar_usuarios():
-    usuarios = Usuario.query.order_by(Usuario.nome.asc()).all()
-    return render_template("usuarios.html", usuarios=usuarios)
-
-
 # =========================
 # OCORRENCIAS
 # =========================
@@ -939,6 +989,9 @@ def ocorrencias():
         registro_edicao = Ocorrencia.query.get_or_404(editar_id)
         modo_edicao = True
 
+    usuario = Usuario.query.get(session.get("user_id"))
+    site_usuario = usuario.site if usuario else None
+
     if request.method == "POST":
         ocorrencia_id = request.form.get("ocorrencia_id", type=int)
 
@@ -952,6 +1005,7 @@ def ocorrencias():
         envolvido = (request.form.get("envolvido") or "").strip()
         prioridade = normalizar_prioridade(request.form.get("prioridade"))
         status = normalizar_status(request.form.get("status") or "PENDENTE")
+        site = (request.form.get("site") or site_usuario or "").strip()
 
         if not data_hora or not hora_ocorrencia or not natureza or not descricao or not local or not operador or not gc or not prioridade:
             flash("Preencha todos os campos obrigatórios.", "warning")
@@ -977,6 +1031,7 @@ def ocorrencias():
             registro.hora_ocorrencia = hora_ocorrencia
             registro.natureza = natureza
             registro.descricao = descricao
+            registro.site = site
             registro.local = local
             registro.operador = operador
             registro.gc = gc
@@ -991,11 +1046,15 @@ def ocorrencias():
             flash("Ocorrência atualizada com sucesso.", "success")
             return redirect(url_for("ocorrencias"))
 
+        _codigo, _seq = gerar_codigo(Ocorrencia, site)
         nova = Ocorrencia(
+            codigo=_codigo,
+            numero_site=_seq,
             data_hora=data_hora,
             hora_ocorrencia=hora_ocorrencia,
             natureza=natureza,
             descricao=descricao,
+            site=site,
             local=local,
             operador=operador,
             gc=gc,
@@ -1011,7 +1070,11 @@ def ocorrencias():
         flash("Ocorrência cadastrada com sucesso.", "success")
         return redirect(url_for("ocorrencias"))
 
-    query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
+    is_admin = usuario and (usuario.perfil or "").upper() == "ADMIN"
+    if is_admin:
+        query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
+    else:
+        query = Ocorrencia.query.filter_by(site=site_usuario).order_by(Ocorrencia.id.desc())
     registros, filtros = aplicar_filtros(query)
 
     hoje_str = datetime.now().strftime("%Y-%m-%d")
@@ -1035,7 +1098,8 @@ def ocorrencias():
         registro_edicao=registro_edicao,
         agora=agora,
         hora_atual=hora_atual,
-        filtros=filtros
+        filtros=filtros,
+        site_usuario=site_usuario
     )
 
 
@@ -1081,7 +1145,7 @@ def post_ocorrencia(ocorrencia_id):
     return render_template("post_ocorrencia.html", registro=registro)
 @app.route("/excluir/<int:ocorrencia_id>", methods=["POST"])
 @login_required
-@perfil_required("SUPERUSUARIO", "USUARIO")
+@perfil_required("ADMIN", "USUARIO")
 def excluir_ocorrencia(ocorrencia_id):
     registro = Ocorrencia.query.get_or_404(ocorrencia_id)
 

@@ -37,10 +37,6 @@
     <p>Perfil: <strong>{{ session.get('user_perfil') }}</strong></p>
 
     <div style="margin-top:20px;">
-      {% if session.get('user_perfil') == 'SUPERUSUARIO' %}
-        <a href="{{ url_for('register') }}" class="btn btn-red">Criar usuário</a>
-        <a href="{{ url_for('listar_usuarios') }}" class="btn btn-dark">Listar usuários</a>
-      {% endif %}
       <a href="{{ url_for('logout') }}" class="btn btn-dark">Sair</a>
     </div>
   </div>
