@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Análise Investigativa | DHL Security{% endblock %}
+{% block title %}Análise Investigativa | CCTV Control Panel{% endblock %}
 
 {% block body %}
 <style>
@@ -32,52 +32,33 @@
   /* ── SHELL ── */
   .app-shell{ display:flex; min-height:100vh; width:100%; }
 
-  .sidebar{
-    width:260px;
-    background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
-    color:#fff;
-    position:fixed;
-    top:0; left:0; bottom:0;
-    padding:22px 18px;
-    box-shadow:6px 0 22px rgba(0,0,0,.12);
-    z-index:1000;
-    overflow-y:auto;
-  }
-  .brand{
-    display:flex; flex-direction:column; gap:6px;
-    padding-bottom:18px; margin-bottom:18px;
-    border-bottom:1px solid rgba(255,255,255,.08);
-  }
-  .brand-badge{
-    display:inline-flex; align-items:center; justify-content:center;
-    width:max-content; padding:7px 12px; border-radius:999px;
-    background:var(--dhl-yellow); color:#111;
-    font-size:11px; font-weight:900; letter-spacing:.5px;
-  }
-  .brand-title{ font-size:22px; font-weight:900; letter-spacing:.3px; line-height:1.1; }
-  .brand-sub{ font-size:12px; color:rgba(255,255,255,.72); line-height:1.5; }
-
-  .menu-title{
-    margin:18px 0 10px;
-    font-size:11px; color:rgba(255,255,255,.5);
-    font-weight:800; text-transform:uppercase; letter-spacing:.8px;
-  }
-  .menu{ display:flex; flex-direction:column; gap:8px; }
-  .menu a{
-    display:flex; align-items:center; gap:10px;
-    color:#fff; padding:12px 14px; border-radius:14px;
-    font-size:14px; font-weight:700;
-    transition:.18s ease; border:1px solid transparent;
-  }
-  .menu a:hover, .menu a.active{
-    background:rgba(255,255,255,.08);
-    border-color:rgba(255,255,255,.10);
-    transform:translateX(2px);
-  }
-  .menu .dot{
-    width:10px; height:10px; border-radius:50%;
-    background:var(--dhl-yellow); flex:0 0 10px;
-  }
+  /* ── Loading overlay ── */
+  #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+  #loading-overlay.show{ display:flex; }
+  .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+  .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
+  /* ── Sidebar ── */
+  .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+  .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+  .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+  .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+  .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+  .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+  .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+  .nav-icon{ font-size:15px; flex-shrink:0; }
+  .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+  .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+  .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+  .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  .sub-link.cur{ color:#ffcc00; font-weight:800; }
+  .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid rgba(255,255,255,.08); }
+  .nav-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:12px; color:rgba(255,255,255,.52); font-size:13px; font-weight:700; transition:.18s; text-decoration:none; }
+  .nav-logout:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  /* ── Footer ── */
+  .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
 
   /* ── MAIN ── */
   .main{
@@ -257,24 +238,43 @@
   }
 </style>
 
+<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
 <div class="app-shell">
 
-  <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="brand">
       <span class="brand-badge">DHL SECURITY</span>
-      <div class="brand-title">Controle de<br>Ocorrências</div>
-      <div class="brand-sub">Plataforma corporativa DHL Security.</div>
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
     </div>
-
-    <div class="menu-title">Navegação</div>
-    <nav class="menu">
-      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Controle de Ocorrências</a>
-      <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
-      <a href="{{ url_for('analise_investigativa') }}" class="active"><span class="dot"></span> Nova Análise</a>
-      <a href="{{ url_for('analises') }}"><span class="dot"></span> Controle de Análises</a>
-      <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc'] -%}
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Ocorrências</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}<div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle de Ocorrências</a>
+        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}<div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+      </div>{% endif %}
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}<div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+      </div>{% endif %}
     </nav>
+    <div class="sidebar-footer">
+      <a href="{{ url_for('logout') }}" class="nav-logout">⏻ &nbsp;Sair</a>
+    </div>
   </aside>
 
   <!-- MAIN -->
@@ -285,7 +285,7 @@
         <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-topbar">
         <div>
           <h1>Análise Investigativa</h1>
-          <p>Segurança &amp; Loss Prevention — DHL Security</p>
+          <p>CCTV Control Panel — DHL Supply Chain</p>
         </div>
       </div>
       <div class="topbar-right">
@@ -455,13 +455,17 @@
 
         <!-- AÇÕES -->
         <div class="buttons-row">
-          <button type="submit" class="btn btn-primary">Gerar DOCX</button>
+          <button type="submit" class="btn btn-primary">Salvar Análise</button>
           <button type="button" class="btn btn-dark" onclick="window.history.back()">← Voltar</button>
           <button type="button" class="btn btn-danger" onclick="excluirFormulario()">Limpar</button>
         </div>
 
       </form>
     </div>
+    <footer class="app-footer">
+      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+    </footer>
   </main>
 </div>
 
@@ -518,5 +522,24 @@
     document.getElementById('form-ai').reset();
     document.getElementById('imagens-container').innerHTML = '';
   }
+</script>
+<script>
+(function(){
+  var ov=document.getElementById('loading-overlay');
+  function show(){ov.classList.add('show');}
+  document.querySelectorAll('form').forEach(function(f){
+    f.addEventListener('submit',function(){show();});
+  });
+  document.querySelectorAll('a[href]').forEach(function(a){
+    var h=a.getAttribute('href')||'';
+    if(h.startsWith('#')||h.startsWith('javascript:')) return;
+    if(a.target==='_blank') return;
+    if(h.indexOf('exportar')!==-1||h.indexOf('download')!==-1) return;
+    a.addEventListener('click',function(e){
+      if(e.ctrlKey||e.metaKey||e.shiftKey) return;
+      show();
+    });
+  });
+})();
 </script>
 {% endblock %}

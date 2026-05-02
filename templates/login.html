@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
-  <title>Login | Controle de Ocorrência</title>
+  <title>Login | CCTV Control Panel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <style>
@@ -287,6 +287,15 @@
       transform:translateY(-1px);
     }
 
+    .lgpd-notice{
+      margin-top:14px; text-align:center;
+      font-size:11px; color:var(--muted); line-height:1.6;
+    }
+    .lgpd-notice a{
+      color:var(--dhl-red); font-weight:800; text-decoration:underline;
+    }
+    .lgpd-notice a:hover{ color:var(--dhl-red-dark); }
+
     .btn-primary{
       background:linear-gradient(180deg,var(--dhl-yellow),#f1be00);
       color:#111;
@@ -369,7 +378,7 @@
         <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-side">
       </div>
       <span class="brand-badge">SECURITY</span>
-      <div class="brand-title">Controle de<br>Ocorrências</div>
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
       <div class="brand-sub">
         Plataforma corporativa de controle operacional e rastreabilidade de ocorrências de segurança.
       </div>
@@ -385,7 +394,7 @@
 
         <div class="left">
           <div class="login-badge">SECURITY</div>
-          <div class="title">Controle de Ocorrências</div>
+          <div class="title">CCTV CONTROL PANEL</div>
           <div class="subtitle">
             Sistema corporativo para registro e controle de ocorrências operacionais.
             Acesse com suas credenciais corporativas para continuar.
@@ -440,6 +449,11 @@
 
             <button type="submit" class="btn btn-primary">Entrar</button>
           </form>
+          <p class="lgpd-notice">
+            Ao realizar o login, você concorda com o tratamento de dados conforme a
+            <a href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm" target="_blank" rel="noopener">LGPD</a>
+            (Lei Geral de Proteção de Dados).
+          </p>
         </div>
 
       </div>

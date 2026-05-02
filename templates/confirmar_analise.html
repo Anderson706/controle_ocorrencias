@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Análise Registrada | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b3030e;
+      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
+      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+      --shadow:0 12px 28px rgba(15,23,42,.08); --radius:20px;
+      --sidebar:#161a1d; --sidebar-2:#20262b;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg);
+               color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+    a{ text-decoration:none; }
+
+    .app-shell{ display:flex; min-height:100vh; width:100%; }
+
+    /* ── Loading overlay ── */
+    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+    #loading-overlay.show{ display:flex; }
+    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
+    /* ── Sidebar ── */
+    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+    .nav-icon{ font-size:15px; flex-shrink:0; }
+    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .sub-link.cur{ color:#ffcc00; font-weight:800; }
+    .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid rgba(255,255,255,.08); }
+    .nav-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:12px; color:rgba(255,255,255,.52); font-size:13px; font-weight:700; transition:.18s; text-decoration:none; }
+    .nav-logout:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    /* ── Footer ── */
+    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+
+    .main{ margin-left:260px; width:calc(100% - 260px);
+      min-height:100vh; display:flex; flex-direction:column; }
+    .topbar{ height:76px; background:#fff; border-bottom:1px solid var(--line);
+      display:flex; align-items:center; justify-content:space-between;
+      gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+    .top-chip{ display:inline-flex; align-items:center; justify-content:center;
+      padding:8px 12px; border-radius:999px; font-size:12px; font-weight:800;
+      border:1px solid #efd56f; background:#fff8d8; color:#7a5a00; white-space:nowrap; }
+
+    .content{ padding:24px; display:flex; flex-direction:column; align-items:center;
+      justify-content:center; min-height:calc(100vh - 76px); }
+
+    .confirm-card{ background:#fff; border:1px solid var(--line);
+      border-radius:28px; padding:40px 48px; box-shadow:var(--shadow);
+      max-width:580px; width:100%; text-align:center; }
+
+    .check-circle{ width:72px; height:72px; border-radius:50%;
+      background:linear-gradient(135deg,#22c55e,#16a34a);
+      display:flex; align-items:center; justify-content:center;
+      margin:0 auto 20px; font-size:34px; box-shadow:0 8px 20px rgba(34,197,94,.3); }
+
+    .confirm-title{ margin:0 0 8px; font-size:26px; font-weight:900; color:var(--dhl-black); }
+    .confirm-sub{ margin:0 0 28px; font-size:14px; color:var(--muted); line-height:1.6; }
+
+    .info-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px;
+      margin-bottom:28px; text-align:left; }
+    .info-item{ background:#f8fafc; border:1px solid var(--line); border-radius:14px;
+      padding:12px 14px; }
+    .info-label{ font-size:11px; font-weight:800; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+    .info-value{ font-size:14px; font-weight:700; color:var(--dhl-black); }
+
+    .btn{ border:none; border-radius:14px; padding:14px 22px; cursor:pointer;
+      font-weight:800; text-decoration:none; display:inline-flex;
+      align-items:center; justify-content:center; gap:9px;
+      transition:.18s ease; font-size:14px; }
+    .btn:hover{ transform:translateY(-2px); }
+    .btn-pdf{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
+      color:#ffcc00; box-shadow:0 10px 22px rgba(212,5,17,.25); font-size:15px;
+      padding:16px 32px; border-radius:16px; width:100%; margin-bottom:12px; }
+    .btn-outline{ background:#fff; color:var(--dhl-black);
+      border:2px solid var(--line); padding:12px 20px; }
+    .btn-outline:hover{ border-color:#9ca3af; }
+
+    .no-pdf-warn{ background:#fff4db; border:1px solid #f5d66f; border-radius:14px;
+      padding:14px 16px; font-size:13px; color:#9a6700; font-weight:700;
+      margin-bottom:20px; }
+
+    .actions{ display:flex; flex-direction:column; gap:10px; }
+
+    @media(max-width:1100px){
+      .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
+      .main{ margin-left:0; width:100%; }
+      .app-shell{ flex-direction:column; }
+    }
+    @media(max-width:600px){
+      .confirm-card{ padding:28px 20px; }
+      .info-grid{ grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc'] -%}
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Ocorrências</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}<div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle de Ocorrências</a>
+        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}<div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+      </div>{% endif %}
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}<div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+      </div>{% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <a href="{{ url_for('logout') }}" class="nav-logout">⏻ &nbsp;Sair</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="DHL" class="logo-topbar">
+        <div>
+          <h1>Análise Registrada</h1>
+          <p>CCTV Control Panel — confirmação de registro</p>
+        </div>
+      </div>
+      <span class="top-chip">{{ session.get('user_nome','') }} | {{ session.get('user_perfil','') }}</span>
+    </header>
+
+    <div class="content">
+      <div class="confirm-card">
+
+        <div class="check-circle">✓</div>
+        <h2 class="confirm-title">Análise salva com sucesso!</h2>
+        <p class="confirm-sub">
+          O registro foi salvo no banco de dados.<br>
+          Faça o download do PDF abaixo enquanto ele está disponível.
+        </p>
+
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Código</div>
+            <div class="info-value">{{ registro.codigo or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Nº no site</div>
+            <div class="info-value" style="color:var(--dhl-red);">{{ registro.numero_site or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Site</div>
+            <div class="info-value">{{ registro.site or '—' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Data</div>
+            <div class="info-value">{{ registro.criado_em.strftime('%d/%m/%Y %H:%M') if registro.criado_em else '—' }}</div>
+          </div>
+          <div class="info-item" style="grid-column:1/-1;">
+            <div class="info-label">Empresa / Responsável</div>
+            <div class="info-value">{{ registro.empresa or '—' }} — {{ registro.responsavel or '—' }}</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          {% if tem_pdf %}
+            <a href="{{ url_for('download_analise', analise_id=registro.id) }}"
+               class="btn btn-pdf">
+              ⬇ Baixar DOCX
+            </a>
+          {% else %}
+            <div class="no-pdf-warn">
+              PDF não disponível. O servidor pode ter sido reiniciado após o envio.
+              Regere a análise para obter o PDF.
+            </div>
+          {% endif %}
+
+          <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+            <a href="{{ url_for('analise_investigativa') }}" class="btn btn-outline">+ Nova Análise</a>
+            <a href="{{ url_for('analises') }}" class="btn btn-outline">Ver todas as análises</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <footer class="app-footer">
+      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+    </footer>
+  </main>
+</div>
+<script>
+(function(){
+  var ov=document.getElementById('loading-overlay');
+  function show(){ov.classList.add('show');}
+  document.querySelectorAll('form').forEach(function(f){
+    f.addEventListener('submit',function(){show();});
+  });
+  document.querySelectorAll('a[href]').forEach(function(a){
+    var h=a.getAttribute('href')||'';
+    if(h.startsWith('#')||h.startsWith('javascript:')) return;
+    if(a.target==='_blank') return;
+    if(h.indexOf('exportar')!==-1||h.indexOf('download')!==-1) return;
+    a.addEventListener('click',function(e){
+      if(e.ctrlKey||e.metaKey||e.shiftKey) return;
+      show();
+    });
+  });
+})();
+</script>
+</body>
+</html>

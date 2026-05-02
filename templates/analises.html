@@ -2,26 +2,17 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
-  <title>Controle de Análises | DHL Security</title>
+  <title>Análises | CCTV Control Panel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root{
-      --dhl-yellow:#ffcc00;
-      --dhl-red:#d40511;
-      --dhl-red-dark:#b3030e;
-      --dhl-black:#1f1f1f;
-      --bg:#f3f5f7;
-      --card:#ffffff;
-      --line:#e5e7eb;
-      --text:#1f2937;
-      --muted:#6b7280;
-      --shadow:0 12px 28px rgba(15,23,42,.08);
-      --radius:20px;
-      --sidebar:#161a1d;
-      --sidebar-2:#20262b;
-      --ok-bg:#e8f7ee;   --ok-text:#146c43;
+      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b3030e;
+      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
+      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+      --shadow:0 12px 28px rgba(15,23,42,.08); --radius:20px;
+      --sidebar:#161a1d; --sidebar-2:#20262b;
+      --ok-bg:#e8f7ee; --ok-text:#146c43;
       --warn-bg:#fff4db; --warn-text:#9a6700;
-      --danger-bg:#fde8ea; --danger-text:#b42318;
       --neutral-bg:#eef1f4; --neutral-text:#3f4a5a;
     }
     *{ box-sizing:border-box; }
@@ -29,22 +20,33 @@
     a{ text-decoration:none; }
 
     .app-shell{ display:flex; min-height:100vh; width:100%; }
-
-    .sidebar{
-      width:260px; background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
-      color:#fff; position:fixed; top:0; left:0; bottom:0;
-      padding:22px 18px; box-shadow:6px 0 22px rgba(0,0,0,.12);
-      z-index:1000; overflow-y:auto;
-    }
-    .brand{ display:flex; flex-direction:column; gap:6px; padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid rgba(255,255,255,.08); }
-    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; width:max-content; padding:7px 12px; border-radius:999px; background:var(--dhl-yellow); color:#111; font-size:11px; font-weight:900; letter-spacing:.5px; }
-    .brand-title{ font-size:22px; font-weight:900; letter-spacing:.3px; line-height:1.1; }
-    .brand-sub{ font-size:12px; color:rgba(255,255,255,.72); line-height:1.5; }
-    .menu-title{ margin:18px 0 10px; font-size:11px; color:rgba(255,255,255,.5); font-weight:800; text-transform:uppercase; letter-spacing:.8px; }
-    .menu{ display:flex; flex-direction:column; gap:8px; }
-    .menu a{ display:flex; align-items:center; gap:10px; color:#fff; padding:12px 14px; border-radius:14px; font-size:14px; font-weight:700; transition:.18s ease; border:1px solid transparent; }
-    .menu a:hover,.menu a.active{ background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.10); transform:translateX(2px); }
-    .menu .dot{ width:10px; height:10px; border-radius:50%; background:var(--dhl-yellow); flex:0 0 10px; }
+    /* ── Loading overlay ── */
+    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+    #loading-overlay.show{ display:flex; }
+    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
+    /* ── Sidebar ── */
+    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+    .nav-icon{ font-size:15px; flex-shrink:0; }
+    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .sub-link.cur{ color:#ffcc00; font-weight:800; }
+    .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid rgba(255,255,255,.08); }
+    .nav-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:12px; color:rgba(255,255,255,.52); font-size:13px; font-weight:700; transition:.18s; text-decoration:none; }
+    .nav-logout:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    /* ── Footer ── */
+    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
 
     .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
     .topbar{ height:76px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
@@ -70,6 +72,18 @@
     .section-title h3{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
     .section-chip{ background:#fff8db; color:#7a5a00; border:1px solid #f5d66f; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
 
+    /* ── Filter bar ── */
+    .filter-bar{ background:#fff; border:1px solid var(--line); border-radius:18px; padding:18px 20px; margin-bottom:16px; box-shadow:0 4px 12px rgba(15,23,42,.05); }
+    .filter-row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+    .filter-field{ display:flex; flex-direction:column; gap:5px; min-width:150px; flex:1; }
+    .filter-field label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+    .filter-field input,.filter-field select{ border:1px solid var(--line); border-radius:10px; padding:9px 12px; font-size:13px; font-family:inherit; background:#f8fafc; color:var(--text); transition:.15s; outline:none; width:100%; }
+    .filter-field input:focus,.filter-field select:focus{ border-color:#d40511; background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+    .filter-actions{ display:flex; align-items:flex-end; gap:8px; flex-shrink:0; }
+    .btn-clear{ background:#f3f4f6; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 16px; cursor:pointer; font-size:12px; font-weight:800; transition:.15s; white-space:nowrap; font-family:inherit; }
+    .btn-clear:hover{ background:#e5e7eb; }
+    .filter-count{ font-size:12px; font-weight:800; color:var(--muted); white-space:nowrap; padding-bottom:2px; }
+
     .grid{ display:grid; gap:16px; }
     .grid-4{ grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
     .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); min-width:0; }
@@ -81,48 +95,81 @@
     .btn:hover{ transform:translateY(-1px); }
     .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#ffcc00; box-shadow:0 8px 18px rgba(212,5,17,.20); }
     .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
-    .btn-danger{ background:linear-gradient(180deg,#b91c1c,#7f1d1d); color:#fff; padding:8px 12px; font-size:12px; }
+    .btn-danger{ background:linear-gradient(180deg,#b91c1c,#7f1d1d); color:#fff; }
+    .btn-sm{ padding:8px 14px; font-size:12px; border-radius:10px; }
 
     .badge{ display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:900; white-space:nowrap; }
     .badge-success{ background:var(--ok-bg); color:var(--ok-text); }
     .badge-neutral{ background:var(--neutral-bg); color:var(--neutral-text); }
 
     .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
-    table{ width:100%; border-collapse:collapse; min-width:1100px; background:#fff; }
-    th,td{ padding:10px 12px; border-bottom:1px solid #edf0f4; text-align:left; vertical-align:top; font-size:13px; }
+    table{ width:100%; border-collapse:collapse; min-width:800px; background:#fff; }
+    th,td{ padding:10px 14px; border-bottom:1px solid #edf0f4; text-align:left; vertical-align:middle; font-size:13px; }
     thead th{ background:linear-gradient(180deg,#fff8db,#ffefab); color:#4b3c00; position:sticky; top:0; z-index:2; font-weight:800; white-space:nowrap; }
     tbody tr:hover{ background:#fffdf5; }
     tbody tr:last-child td{ border-bottom:none; }
 
-    @media(max-width:1100px){
-      .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
-      .main{ margin-left:0; width:100%; }
-      .app-shell{ flex-direction:column; }
-    }
-    @media(max-width:700px){
-      .content{ padding:16px; }
-      .topbar{ padding:14px 16px; height:auto; flex-direction:column; align-items:flex-start; }
-      .hero h2{ font-size:24px; }
-    }
+    /* ── MODAL ── */
+    .modal-overlay{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:2000; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open{ display:flex; }
+    .modal-box{ background:#fff; border-radius:24px; width:100%; max-width:600px; box-shadow:0 24px 60px rgba(0,0,0,.22); overflow:hidden; animation:slideUp .22s ease; }
+    @keyframes slideUp{ from{ transform:translateY(24px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+    .modal-head{ background:linear-gradient(135deg,#d40511,#93000a); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .modal-head h3{ margin:0; font-size:18px; font-weight:900; }
+    .modal-head .modal-codigo{ font-size:13px; opacity:.85; margin-top:3px; }
+    .modal-close{ background:rgba(255,255,255,.18); border:none; color:#fff; width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; transition:.15s; flex-shrink:0; }
+    .modal-close:hover{ background:rgba(255,255,255,.32); }
+    .modal-body{ padding:22px 24px; }
+    .modal-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+    .modal-item{ background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px 13px; }
+    .modal-item.full{ grid-column:1/-1; }
+    .modal-lbl{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
+    .modal-val{ font-size:13px; font-weight:700; color:var(--dhl-black); line-height:1.4; }
+    .modal-val.red{ color:var(--dhl-red); }
+    .modal-foot{ padding:16px 24px; border-top:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fafafa; }
+
+    @media(max-width:1100px){ .sidebar{ position:relative; width:100%; height:auto; inset:auto; } .main{ margin-left:0; width:100%; } .app-shell{ flex-direction:column; } }
+    @media(max-width:700px){ .content{ padding:16px; } .topbar{ padding:14px 16px; height:auto; flex-direction:column; align-items:flex-start; } .hero h2{ font-size:24px; } .modal-grid{ grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
+<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
 <div class="app-shell">
 
   <aside class="sidebar">
     <div class="brand">
       <span class="brand-badge">DHL SECURITY</span>
-      <div class="brand-title">Controle de<br>Ocorrência</div>
-      <div class="brand-sub">Registro corporativo de ocorrências, evidências e acompanhamento operacional.</div>
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
     </div>
-    <div class="menu-title">Navegação</div>
-    <nav class="menu">
-      <a href="{{ url_for('ocorrencias') }}"><span class="dot"></span> Controle de Ocorrências</a>
-      <a href="{{ url_for('dashboard') }}"><span class="dot"></span> Dashboard</a>
-      <a href="{{ url_for('analise_investigativa') }}"><span class="dot"></span> Nova Análise</a>
-      <a href="{{ url_for('analises') }}" class="active"><span class="dot"></span> Controle de Análises</a>
-      <a href="{{ url_for('logout') }}"><span class="dot"></span> Sair</a>
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc'] -%}
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Ocorrências</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}<div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle de Ocorrências</a>
+        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}<div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+      </div>{% endif %}
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}<div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+      </div>{% endif %}
     </nav>
+    <div class="sidebar-footer">
+      <a href="{{ url_for('logout') }}" class="nav-logout">⏻ &nbsp;Sair</a>
+    </div>
   </aside>
 
   <main class="main">
@@ -131,7 +178,7 @@
         <img src="{{ url_for('static', filename='logo.png') }}" alt="DHL" class="logo-topbar">
         <div>
           <h1>Controle de Análises Investigativas</h1>
-          <p>DHL Security — histórico de análises registradas</p>
+          <p>CCTV Control Panel — histórico de análises</p>
         </div>
       </div>
       <span class="top-chip">{{ session.get('user_nome','') }} | {{ session.get('user_perfil','') }}</span>
@@ -151,10 +198,9 @@
 
       <div class="hero">
         <h2>Análises Investigativas</h2>
-        <p>Histórico completo de análises registradas{% if not is_admin %} para o site <strong>{{ session.get('user_site','') }}</strong>{% endif %}. Clique em "Nova Análise" para gerar e registrar uma nova.</p>
+        <p>Histórico completo de análises registradas{% if not is_admin %} para o site <strong>{{ session.get('user_site','') }}</strong>{% endif %}.</p>
       </div>
 
-      <!-- KPIs -->
       <section class="section">
         <div class="grid grid-4">
           <div class="card kpi">
@@ -174,12 +220,50 @@
         </div>
       </section>
 
-      <!-- TABELA -->
       <section class="section">
         <div class="section-title">
           <h3>Análises registradas</h3>
           <span class="section-chip">Registros</span>
         </div>
+        <div class="filter-bar">
+          <div class="filter-row">
+            <div class="filter-field" style="flex:2; min-width:200px;">
+              <label>Busca geral</label>
+              <input type="text" id="f-busca" placeholder="Empresa, responsável, unidade...">
+            </div>
+            {% if is_admin %}
+            <div class="filter-field">
+              <label>Site</label>
+              <input type="text" id="f-site" placeholder="Filtrar por site">
+            </div>
+            {% endif %}
+            <div class="filter-field">
+              <label>Empresa</label>
+              <input type="text" id="f-empresa" placeholder="Nome da empresa">
+            </div>
+            <div class="filter-field" style="min-width:140px;">
+              <label>Data início</label>
+              <input type="date" id="f-data-ini">
+            </div>
+            <div class="filter-field" style="min-width:140px;">
+              <label>Data fim</label>
+              <input type="date" id="f-data-fim">
+            </div>
+            <div class="filter-field" style="min-width:140px;">
+              <label>Conclusão</label>
+              <select id="f-conclusao">
+                <option value="">Todas</option>
+                <option value="concluida">Concluída</option>
+                <option value="pendente">Pendente</option>
+              </select>
+            </div>
+            <div class="filter-actions">
+              <button class="btn-clear" id="btn-limpar" type="button">Limpar</button>
+              <span class="filter-count" id="f-count"></span>
+            </div>
+          </div>
+        </div>
+
         <div class="table-wrap">
           <table>
             <thead>
@@ -187,14 +271,12 @@
                 <th>Nº</th>
                 {% if is_admin %}<th>Site</th>{% endif %}
                 <th>Data</th>
-                <th>ID Relatório</th>
                 <th>Empresa</th>
                 <th>Unidade</th>
                 <th>Responsável</th>
                 <th>Conclusão</th>
                 <th>Criado por</th>
-                <th>Arquivo</th>
-                <th>Ações</th>
+                <th style="text-align:center;">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -205,11 +287,10 @@
                   <td><span style="font-size:12px; font-weight:700; color:#374151;">{{ r.site or '-' }}</span></td>
                 {% endif %}
                 <td style="white-space:nowrap;">{{ r.criado_em.strftime('%d/%m/%Y %H:%M') if r.criado_em else '-' }}</td>
-                <td>{{ r.id_relatorio or '-' }}</td>
                 <td>{{ r.empresa or '-' }}</td>
-                <td style="max-width:220px;">{{ r.unidade or '-' }}</td>
+                <td style="max-width:200px;">{{ r.unidade or '-' }}</td>
                 <td>{{ r.responsavel or '-' }}</td>
-                <td style="max-width:260px;">
+                <td>
                   {% if r.conclusao %}
                     <span class="badge badge-success">Concluída</span>
                   {% else %}
@@ -217,28 +298,28 @@
                   {% endif %}
                 </td>
                 <td>{{ r.criado_por or '-' }}</td>
-                <td>
-                  {% if r.link_arquivo %}
-                    <a href="{{ r.link_arquivo }}" target="_blank" rel="noopener"
-                       class="btn btn-dark" style="padding:7px 11px; font-size:12px;">
-                      📄 OneDrive
-                    </a>
-                  {% else %}
-                    <span style="color:var(--muted); font-size:12px;">—</span>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if session.get('user_perfil') in ['ADMIN', 'USUARIO'] %}
-                  <form method="POST" action="{{ url_for('excluir_analise', analise_id=r.id) }}"
-                        onsubmit="return confirm('Excluir esta análise?');" style="display:inline;">
-                    <button type="submit" class="btn btn-danger">Excluir</button>
-                  </form>
-                  {% endif %}
+                <td style="text-align:center;">
+                  <button class="btn btn-dark btn-sm" onclick="abrirModal(this)"
+                    data-id="{{ r.id }}"
+                    data-codigo="{{ r.codigo or '-' }}"
+                    data-numero="{{ r.numero_site or r.id }}"
+                    data-site="{{ r.site or '-' }}"
+                    data-data="{{ r.criado_em.strftime('%d/%m/%Y %H:%M') if r.criado_em else '-' }}"
+                    data-empresa="{{ r.empresa or '-' }}"
+                    data-unidade="{{ r.unidade or '-' }}"
+                    data-responsavel="{{ r.responsavel or '-' }}"
+                    data-objetivo="{{ (r.objetivo or '')[:200] }}"
+                    data-conclusao="{{ r.conclusao or '' }}"
+                    data-criado_por="{{ r.criado_por or '-' }}"
+                    data-tem_docx="{{ '1' if r.docx_arquivo else '0' }}"
+                    data-url_download="{{ url_for('download_analise', analise_id=r.id) }}"
+                    data-url_excluir="{{ url_for('excluir_analise', analise_id=r.id) }}"
+                  >Detalhes</button>
                 </td>
               </tr>
               {% else %}
               <tr>
-                <td colspan="11" style="text-align:center; padding:28px; color:var(--muted); font-weight:700;">
+                <td colspan="{{ 9 if is_admin else 8 }}" style="text-align:center; padding:28px; color:var(--muted); font-weight:700;">
                   Nenhuma análise registrada.
                 </td>
               </tr>
@@ -249,7 +330,210 @@
       </section>
 
     </div>
+    <footer class="app-footer">
+      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+    </footer>
   </main>
 </div>
+
+<!-- ── MODAL ── -->
+<div class="modal-overlay" id="modal" onclick="fecharModalFora(event)">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <h3>Detalhes da Análise</h3>
+        <div class="modal-codigo" id="m-codigo"></div>
+      </div>
+      <button class="modal-close" onclick="fecharModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="modal-item">
+          <div class="modal-lbl">Nº no site</div>
+          <div class="modal-val red" id="m-numero"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Data</div>
+          <div class="modal-val" id="m-data"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Site</div>
+          <div class="modal-val" id="m-site"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Criado por</div>
+          <div class="modal-val" id="m-criado_por"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Empresa</div>
+          <div class="modal-val" id="m-empresa"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Responsável</div>
+          <div class="modal-val" id="m-responsavel"></div>
+        </div>
+        <div class="modal-item full">
+          <div class="modal-lbl">Unidade</div>
+          <div class="modal-val" id="m-unidade"></div>
+        </div>
+        <div class="modal-item full">
+          <div class="modal-lbl">Objetivo</div>
+          <div class="modal-val" id="m-objetivo" style="font-weight:500; color:#374151;"></div>
+        </div>
+        <div class="modal-item full">
+          <div class="modal-lbl">Conclusão</div>
+          <div class="modal-val" id="m-conclusao" style="font-weight:500; color:#374151;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <a id="m-download" href="#" class="btn btn-red" style="flex:1; justify-content:center;">⬇ Baixar DOCX</a>
+      <span id="m-sem-docx" style="display:none; color:var(--muted); font-size:12px; font-weight:700;">Arquivo não disponível</span>
+      {% if is_admin %}
+      <form id="m-form-excluir" method="POST" action="" onsubmit="return confirm('Tem certeza que deseja excluir esta análise? Esta ação não pode ser desfeita.');" style="margin:0;">
+        <button type="submit" class="btn btn-danger">Excluir análise</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  function abrirModal(btn) {
+    const d = btn.dataset;
+    document.getElementById('m-codigo').textContent    = d.codigo;
+    document.getElementById('m-numero').textContent    = d.numero;
+    document.getElementById('m-data').textContent      = d.data;
+    document.getElementById('m-site').textContent      = d.site;
+    document.getElementById('m-criado_por').textContent= d.criado_por;
+    document.getElementById('m-empresa').textContent   = d.empresa;
+    document.getElementById('m-responsavel').textContent= d.responsavel;
+    document.getElementById('m-unidade').textContent   = d.unidade;
+    document.getElementById('m-objetivo').textContent  = d.objetivo || '—';
+    document.getElementById('m-conclusao').textContent = d.conclusao || '—';
+
+    const dl  = document.getElementById('m-download');
+    const sem = document.getElementById('m-sem-docx');
+    if (d.tem_docx === '1') {
+      dl.href = d.url_download;
+      dl.style.display = '';
+      sem.style.display = 'none';
+    } else {
+      dl.style.display = 'none';
+      sem.style.display = '';
+    }
+
+    const form = document.getElementById('m-form-excluir');
+    if (form) form.action = d.url_excluir;
+
+    document.getElementById('modal').classList.add('open');
+  }
+
+  function fecharModal() {
+    document.getElementById('modal').classList.remove('open');
+  }
+
+  function fecharModalFora(e) {
+    if (e.target === document.getElementById('modal')) fecharModal();
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
+</script>
+<script>
+(function(){
+  var tbody = document.querySelector('tbody');
+  var allRows = Array.from(tbody ? tbody.querySelectorAll('tr') : []).filter(function(tr){
+    return !(tr.children.length === 1 && tr.children[0].colSpan > 1);
+  });
+  var total = allRows.length;
+
+  function val(id){ var el = document.getElementById(id); return el ? el.value : ''; }
+
+  function filtrar(){
+    var busca    = val('f-busca').toLowerCase().trim();
+    var site     = val('f-site').toLowerCase().trim();
+    var empresa  = val('f-empresa').toLowerCase().trim();
+    var dataIni  = val('f-data-ini');
+    var dataFim  = val('f-data-fim');
+    var conclusao= val('f-conclusao');
+    var visible  = 0;
+
+    allRows.forEach(function(tr){
+      var btn = tr.querySelector('button[data-id]');
+
+      if(busca && tr.textContent.toLowerCase().indexOf(busca) === -1){
+        tr.style.display = 'none'; return;
+      }
+      if(site && btn && btn.dataset.site.toLowerCase().indexOf(site) === -1){
+        tr.style.display = 'none'; return;
+      }
+      if(empresa && btn && btn.dataset.empresa.toLowerCase().indexOf(empresa) === -1){
+        tr.style.display = 'none'; return;
+      }
+      if(dataIni || dataFim){
+        var dm = tr.textContent.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if(dm){
+          var rowDate = new Date(+dm[3], +dm[2]-1, +dm[1]);
+          if(dataIni){
+            var p1 = dataIni.split('-');
+            if(rowDate < new Date(+p1[0], +p1[1]-1, +p1[2])){ tr.style.display='none'; return; }
+          }
+          if(dataFim){
+            var p2 = dataFim.split('-');
+            if(rowDate > new Date(+p2[0], +p2[1]-1, +p2[2])){ tr.style.display='none'; return; }
+          }
+        }
+      }
+      if(conclusao){
+        var badge = tr.querySelector('.badge');
+        var ok = badge && badge.classList.contains('badge-success');
+        if(conclusao === 'concluida' && !ok){ tr.style.display='none'; return; }
+        if(conclusao === 'pendente'  &&  ok){ tr.style.display='none'; return; }
+      }
+
+      tr.style.display = '';
+      visible++;
+    });
+
+    var countEl = document.getElementById('f-count');
+    if(countEl) countEl.textContent = visible + ' de ' + total + ' registros';
+  }
+
+  ['f-busca','f-site','f-empresa','f-data-ini','f-data-fim','f-conclusao'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.addEventListener('input', filtrar);
+  });
+
+  document.getElementById('btn-limpar').addEventListener('click', function(){
+    ['f-busca','f-site','f-empresa','f-data-ini','f-data-fim','f-conclusao'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+    filtrar();
+  });
+
+  filtrar();
+})();
+</script>
+<script>
+(function(){
+  var ov=document.getElementById('loading-overlay');
+  function show(){ov.classList.add('show');}
+  document.querySelectorAll('form').forEach(function(f){
+    f.addEventListener('submit',function(){show();});
+  });
+  document.querySelectorAll('a[href]').forEach(function(a){
+    var h=a.getAttribute('href')||'';
+    if(h.startsWith('#')||h.startsWith('javascript:')) return;
+    if(a.target==='_blank') return;
+    if(h.indexOf('exportar')!==-1||h.indexOf('download')!==-1) return;
+    a.addEventListener('click',function(e){
+      if(e.ctrlKey||e.metaKey||e.shiftKey) return;
+      show();
+    });
+  });
+})();
+</script>
 </body>
 </html>

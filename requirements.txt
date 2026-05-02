@@ -6,4 +6,3 @@ openpyxl
 reportlab
 python-oracledb
 sqlalchemy
-requests

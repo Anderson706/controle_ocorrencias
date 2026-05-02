@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>ANC | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b3030e;
+      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
+      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+      --shadow:0 12px 28px rgba(15,23,42,.08); --radius:20px;
+      --sidebar:#161a1d; --sidebar-2:#20262b;
+      --ok-bg:#dcfce7; --ok-text:#166534;
+      --warn-bg:#fef9c3; --warn-text:#854d0e;
+      --danger-bg:#fee2e2; --danger-text:#991b1b;
+      --neutral-bg:#f1f5f9; --neutral-text:#475569;
+      --blue-bg:#dbeafe; --blue-text:#1d4ed8;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg);
+               color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+    a{ text-decoration:none; }
+
+    .app-shell{ display:flex; min-height:100vh; width:100%; }
+
+    /* ── Loading overlay ── */
+    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+    #loading-overlay.show{ display:flex; }
+    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
+    /* ── Sidebar ── */
+    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+    .nav-icon{ font-size:15px; flex-shrink:0; }
+    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .sub-link.cur{ color:#ffcc00; font-weight:800; }
+    .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid rgba(255,255,255,.08); }
+    .nav-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:12px; color:rgba(255,255,255,.52); font-size:13px; font-weight:700; transition:.18s; text-decoration:none; }
+    .nav-logout:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    /* ── Footer ── */
+    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+
+    /* ── Main ── */
+    .main{ margin-left:260px; width:calc(100% - 260px);
+      min-height:100vh; display:flex; flex-direction:column; }
+    .topbar{ height:76px; background:#fff; border-bottom:1px solid var(--line);
+      display:flex; align-items:center; justify-content:space-between;
+      gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+    .top-chip{ display:inline-flex; align-items:center; justify-content:center;
+      padding:8px 12px; border-radius:999px; font-size:12px; font-weight:800;
+      border:1px solid #efd56f; background:#fff8d8; color:#7a5a00; white-space:nowrap; }
+
+    .content{ padding:24px; flex:1; }
+
+    /* ── Alerts ── */
+    .alert{ padding:14px 18px; border-radius:14px; font-size:14px; font-weight:700; margin-bottom:18px; }
+    .alert-success{ background:#dcfce7; color:#166534; border:1px solid #86efac; }
+    .alert-warning{ background:#fef9c3; color:#854d0e; border:1px solid #fde047; }
+    .alert-danger{  background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+
+    /* ── Hero / KPIs ── */
+    .hero{ margin-bottom:24px; }
+    .hero h2{ margin:0 0 6px; font-size:26px; font-weight:900; color:var(--dhl-black); }
+    .hero p{ margin:0; font-size:14px; color:var(--muted); }
+    .kpi-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px; }
+    .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:16px;
+      padding:16px 18px; box-shadow:var(--shadow); border-left:5px solid var(--dhl-yellow);
+      display:flex; flex-direction:column; gap:4px; }
+    .kpi-label{ font-size:11px; font-weight:800; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.6px; }
+    .kpi-value{ font-size:30px; font-weight:900; color:var(--dhl-red); line-height:1; }
+    .kpi-card.critico{ border-left-color:var(--dhl-red); }
+    .kpi-card.ok{ border-left-color:#22c55e; }
+    .kpi-card.blue{ border-left-color:#3b82f6; }
+    .kpi-card.amber{ border-left-color:#f59e0b; }
+
+    /* ── Card ── */
+    .card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+      padding:20px 24px; box-shadow:var(--shadow); margin-bottom:20px; }
+    .card-title{ font-size:16px; font-weight:900; color:var(--dhl-black);
+      margin:0 0 16px; display:flex; align-items:center; gap:8px; }
+    .card-title span{ width:4px; height:20px; background:var(--dhl-red);
+      border-radius:2px; display:inline-block; }
+
+    /* ── Form ── */
+    .form-sec-hdr{
+      background:linear-gradient(90deg,var(--dhl-red),var(--dhl-red-dark));
+      color:#ffcc00; font-size:12px; font-weight:900; letter-spacing:.8px;
+      text-transform:uppercase; padding:9px 16px; border-radius:10px;
+      margin-bottom:8px; }
+    .form-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+    .form-group{ display:flex; flex-direction:column; gap:6px; }
+    .form-group.full{ grid-column:1/-1; }
+    .form-group.half{ grid-column:span 2; }
+    label{ font-size:12px; font-weight:800; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.4px; }
+    input,select,textarea{
+      border:1.5px solid var(--line); border-radius:10px; padding:10px 12px;
+      font-size:13px; font-family:inherit; color:var(--text);
+      background:#fff; outline:none; transition:.15s;
+      width:100%; }
+    input:focus,select:focus,textarea:focus{ border-color:var(--dhl-red); }
+    textarea{ resize:vertical; min-height:80px; }
+    input[type="file"]{ padding:6px 10px; }
+
+    /* ── Filter bar ── */
+    .filter-bar{ background:#fff; border:1px solid var(--line); border-radius:16px;
+      padding:16px 20px; margin-bottom:20px; }
+    .filter-row{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+    .filter-group{ display:flex; flex-direction:column; gap:4px; min-width:140px; flex:1; }
+    .filter-group label{ font-size:11px; font-weight:800; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.4px; }
+    .filter-group input,.filter-group select{
+      border:1.5px solid var(--line); border-radius:10px;
+      padding:8px 10px; font-size:12px; }
+    .filter-actions{ display:flex; gap:8px; }
+
+    /* ── Buttons ── */
+    .btn{ border:none; border-radius:12px; padding:10px 16px; cursor:pointer;
+      font-weight:800; text-decoration:none; display:inline-flex;
+      align-items:center; justify-content:center; gap:7px;
+      transition:.18s ease; font-size:13px; }
+    .btn:hover{ transform:translateY(-1px); }
+    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
+      color:#ffcc00; box-shadow:0 8px 18px rgba(212,5,17,.20); }
+    .btn-yellow{ background:var(--dhl-yellow); color:#111; font-weight:900; }
+    .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
+    .btn-danger{ background:linear-gradient(180deg,#b91c1c,#7f1d1d); color:#fff; }
+    .btn-outline{ background:#fff; color:var(--dhl-black);
+      border:2px solid var(--line); }
+    .btn-outline:hover{ border-color:#9ca3af; }
+    .btn-sm{ padding:7px 12px; font-size:12px; border-radius:9px; }
+
+    /* ── Table ── */
+    .table-wrap{ overflow-x:auto; border-radius:14px; border:1px solid var(--line); }
+    table{ width:100%; border-collapse:collapse; font-size:12px; background:#fff; }
+    thead tr{ background:var(--dhl-yellow); }
+    th{ padding:12px 14px; font-size:11px; font-weight:900; color:#111;
+      text-transform:uppercase; letter-spacing:.5px; text-align:left; white-space:nowrap; }
+    td{ padding:11px 14px; border-bottom:1px solid var(--line);
+      vertical-align:middle; color:var(--text); }
+    tbody tr:last-child td{ border-bottom:none; }
+    tbody tr:hover{ background:#f9fafb; }
+    td.desc-cell{ max-width:220px; overflow:hidden;
+      text-overflow:ellipsis; white-space:nowrap; }
+
+    /* ── Badges ── */
+    .badge{ display:inline-flex; align-items:center; justify-content:center;
+      padding:4px 9px; border-radius:999px; font-size:10px; font-weight:900; white-space:nowrap; }
+    .badge-aberto   { background:var(--danger-bg); color:var(--danger-text); }
+    .badge-andamento{ background:var(--warn-bg);   color:var(--warn-text);   }
+    .badge-concluido{ background:var(--ok-bg);     color:var(--ok-text);     }
+    .badge-critica  { background:#7f1d1d; color:#fff; }
+    .badge-alta     { background:#fee2e2; color:#991b1b; }
+    .badge-media    { background:#fef3c7; color:#92400e; }
+    .badge-baixa    { background:#dcfce7; color:#166534; }
+
+    /* ── Modal ── */
+    .modal-overlay{ display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.45); z-index:2000;
+      align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open{ display:flex; }
+    .modal-box{ background:#fff; border-radius:22px; max-width:700px; width:100%;
+      box-shadow:0 24px 60px rgba(0,0,0,.25); overflow:hidden; max-height:90vh;
+      display:flex; flex-direction:column; }
+    .modal-head{ padding:20px 24px; border-bottom:1px solid var(--line);
+      display:flex; justify-content:space-between; align-items:center; }
+    .modal-head h3{ margin:0; font-size:17px; font-weight:900; color:var(--dhl-black); }
+    .modal-close{ border:none; background:none; font-size:22px;
+      cursor:pointer; color:var(--muted); line-height:1; padding:4px 8px; border-radius:8px; }
+    .modal-close:hover{ background:var(--line); }
+    .modal-body{ padding:20px 24px; overflow-y:auto; flex:1; }
+    .modal-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .modal-item{ background:#f8fafc; border:1px solid var(--line);
+      border-radius:12px; padding:10px 14px; }
+    .modal-item.full{ grid-column:1/-1; }
+    .modal-lbl{ font-size:11px; font-weight:800; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
+    .modal-val{ font-size:13px; font-weight:700; color:var(--dhl-black); line-height:1.4; }
+    .modal-val.red{ color:var(--dhl-red); }
+    .modal-foot{ padding:16px 24px; border-top:1px solid var(--line);
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fafafa; }
+
+    .toolbar{ display:flex; align-items:center; justify-content:space-between;
+      flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+    .toolbar-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+
+    /* Status quick-form */
+    .status-form{ display:inline-flex; gap:4px; align-items:center; }
+    .status-form select{ padding:4px 8px; font-size:11px; border-radius:8px;
+      border:1.5px solid var(--line); }
+    .status-form button{ padding:4px 8px; font-size:11px; border-radius:8px;
+      background:var(--dhl-red); color:#fff; border:none; cursor:pointer; font-weight:800; }
+
+    @media(max-width:1100px){
+      .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
+      .main{ margin-left:0; width:100%; }
+      .app-shell{ flex-direction:column; }
+      .kpi-grid{ grid-template-columns:repeat(3,1fr); }
+      .form-grid{ grid-template-columns:1fr 1fr; }
+    }
+    @media(max-width:700px){
+      .content{ padding:16px; }
+      .kpi-grid{ grid-template-columns:1fr 1fr; }
+      .form-grid{ grid-template-columns:1fr; }
+      .filter-row{ flex-direction:column; }
+      .modal-grid{ grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc'] -%}
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Ocorrências</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}<div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle de Ocorrências</a>
+        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}<div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+      </div>{% endif %}
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}<div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+      </div>{% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <a href="{{ url_for('logout') }}" class="nav-logout">⏻ &nbsp;Sair</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="DHL" class="logo-topbar">
+        <div>
+          <h1>Avisos de Não Conformidade</h1>
+          <p>CCTV Control Panel — Avisos de Não Conformidade</p>
+        </div>
+      </div>
+      <span class="top-chip">{{ session.get('user_nome','') }} | {{ session.get('user_perfil','') }}</span>
+    </header>
+
+    <div class="content">
+
+      {% with msgs = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in msgs %}
+          <div class="alert alert-{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      <!-- KPIs -->
+      <div class="hero">
+        <h2>Controle de ANC</h2>
+        <p>Gerencie e acompanhe os Avisos de Não Conformidade do seu site.</p>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Total</div>
+          <div class="kpi-value">{{ resumo.total }}</div>
+        </div>
+        <div class="kpi-card amber">
+          <div class="kpi-label">Abertos</div>
+          <div class="kpi-value" style="color:#d97706;">{{ resumo.abertos }}</div>
+        </div>
+        <div class="kpi-card blue">
+          <div class="kpi-label">Em Andamento</div>
+          <div class="kpi-value" style="color:#2563eb;">{{ resumo.andamento }}</div>
+        </div>
+        <div class="kpi-card ok">
+          <div class="kpi-label">Concluídos</div>
+          <div class="kpi-value" style="color:#16a34a;">{{ resumo.concluidos }}</div>
+        </div>
+        <div class="kpi-card critico">
+          <div class="kpi-label">Críticos</div>
+          <div class="kpi-value">{{ resumo.criticos }}</div>
+        </div>
+      </div>
+
+      <!-- Formulário Criar / Editar -->
+      <div class="card" style="padding:0; overflow:hidden;">
+
+        <!-- Cabeçalho do card -->
+        <div style="background:linear-gradient(90deg,var(--dhl-red),var(--dhl-red-dark));
+                    padding:16px 24px; display:flex; align-items:center; gap:12px;">
+          <div style="width:6px; height:28px; background:var(--dhl-yellow); border-radius:3px; flex-shrink:0;"></div>
+          <div>
+            <div style="color:#fff; font-size:16px; font-weight:900; letter-spacing:.3px;">
+              {% if modo_edicao %}EDITAR ANC — Nº {{ registro_edicao.numero_site or registro_edicao.id }}{% else %}NOVO AVISO DE NÃO CONFORMIDADE{% endif %}
+            </div>
+            <div style="color:rgba(255,255,255,.7); font-size:12px; margin-top:2px;">
+              {% if modo_edicao %}Atualize os dados do registro{% else %}Preencha todos os campos obrigatórios (*){% endif %}
+            </div>
+          </div>
+        </div>
+
+        <form method="POST" action="{{ url_for('anc') }}" enctype="multipart/form-data" style="padding:24px;">
+          {% if modo_edicao %}
+            <input type="hidden" name="anc_id" value="{{ registro_edicao.id }}">
+          {% endif %}
+
+          <!-- SEÇÃO: IDENTIFICAÇÃO -->
+          <div class="form-sec-hdr">📋 IDENTIFICAÇÃO DO INCIDENTE</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Data *</label>
+              <input type="date" name="data_nc" required
+                value="{{ registro_edicao.data_nc if modo_edicao else '' }}">
+            </div>
+            <div class="form-group">
+              <label>Hora *</label>
+              <input type="time" name="hora_nc" required
+                value="{{ registro_edicao.hora_nc if modo_edicao else hora_atual }}">
+            </div>
+            <div class="form-group">
+              <label>Site</label>
+              <input type="text" name="site" readonly
+                value="{{ registro_edicao.site if modo_edicao else (site_usuario or '') }}"
+                style="background:#f9fafb; color:var(--muted); cursor:not-allowed;">
+            </div>
+            <div class="form-group">
+              <label>Setor *</label>
+              <select name="setor" required>
+                <option value="">Selecione...</option>
+                {% for s in ['Sorter','Docas','Inbound','Outbound','Portaria','Condomínio','Adm','Sala RF','Armários','Manutenção'] %}
+                  <option value="{{ s }}" {{ 'selected' if modo_edicao and registro_edicao.setor == s }}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Tipo de Ocorrência *</label>
+              <select name="tipo_ocorrencia" required>
+                <option value="">Selecione...</option>
+                {% for t in ['Corretivo','Preventivo'] %}
+                  <option value="{{ t }}" {{ 'selected' if modo_edicao and registro_edicao.tipo_ocorrencia == t }}>{{ t }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Turno *</label>
+              <select name="turno" required>
+                <option value="">Selecione...</option>
+                {% for t in ['TURNO A','TURNO B','TURNO C','ADM'] %}
+                  <option value="{{ t }}" {{ 'selected' if modo_edicao and registro_edicao.turno == t }}>{{ t }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- SEÇÃO: CLASSIFICAÇÃO -->
+          <div class="form-sec-hdr" style="margin-top:20px;">⚠️ CLASSIFICAÇÃO</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Gravidade *</label>
+              <select name="gravidade" required>
+                <option value="">Selecione...</option>
+                {% for g in ['BAIXA','MÉDIA','ALTA','CRÍTICA'] %}
+                  <option value="{{ g }}" {{ 'selected' if modo_edicao and registro_edicao.gravidade == g }}>{{ g }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Natureza *</label>
+              <select name="natureza" required>
+                <option value="">Selecione...</option>
+                {% for n in ['Desvio de Conduta','Acidente','Desinteligência','Furto','Assédio','Roubo','Ato Inseguro','Agressão','Desvio de Informação','Desvio de Processo','Adornos','Substâncias Ilícitas'] %}
+                  <option value="{{ n }}" {{ 'selected' if modo_edicao and registro_edicao.natureza == n }}>{{ n }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Tipo *</label>
+              <select name="tipo" required>
+                <option value="">Selecione...</option>
+                {% for t in ['Operacional','Comportamental','Segurança','Processo','Patrimonial'] %}
+                  <option value="{{ t }}" {{ 'selected' if modo_edicao and registro_edicao.tipo == t }}>{{ t }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Local *</label>
+              <input type="text" name="local" required placeholder="Ex: Portaria, Sorter, Docas..."
+                value="{{ registro_edicao.local if modo_edicao else '' }}">
+            </div>
+            <div class="form-group half">
+              <label>Pessoas Envolvidas</label>
+              <input type="text" name="envolvido" placeholder="Nome(s) do(s) envolvido(s)"
+                value="{{ registro_edicao.envolvido if modo_edicao else '' }}">
+            </div>
+          </div>
+
+          <!-- SEÇÃO: RESPONSABILIDADE -->
+          <div class="form-sec-hdr" style="margin-top:20px;">👤 RESPONSABILIDADE</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Responsável *</label>
+              <input type="text" name="responsavel" required placeholder="Nome do responsável"
+                value="{{ registro_edicao.responsavel if modo_edicao else '' }}">
+            </div>
+            <div class="form-group">
+              <label>Gestor Responsável *</label>
+              <input type="text" name="gestor_responsavel" required placeholder="Nome do gestor"
+                value="{{ registro_edicao.gestor_responsavel if modo_edicao else '' }}">
+            </div>
+            <div class="form-group">
+              <label>Status</label>
+              <select name="status">
+                {% for s in ['ABERTO','EM ANDAMENTO','CONCLUÍDO'] %}
+                  <option value="{{ s }}" {{ 'selected' if modo_edicao and registro_edicao.status == s else ('selected' if not modo_edicao and s == 'ABERTO') }}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- SEÇÃO: INVESTIGAÇÃO -->
+          <div class="form-sec-hdr" style="margin-top:20px;">🔍 INVESTIGAÇÃO</div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Início da Investigação</label>
+              <input type="datetime-local" name="inicio_investigacao"
+                value="{{ registro_edicao.inicio_investigacao if modo_edicao else '' }}">
+            </div>
+            <div class="form-group">
+              <label>Fim da Investigação</label>
+              <input type="datetime-local" name="fim_investigacao"
+                value="{{ registro_edicao.fim_investigacao if modo_edicao else '' }}">
+            </div>
+            <div class="form-group" style="display:flex; align-items:flex-end;">
+              <div style="font-size:11px; color:var(--muted); padding-bottom:4px;">
+                Preencha apenas se houver investigação em andamento ou concluída.
+              </div>
+            </div>
+          </div>
+
+          <!-- SEÇÃO: DESCRIÇÃO -->
+          <div class="form-sec-hdr" style="margin-top:20px;">📝 DESCRIÇÃO DA OCORRÊNCIA</div>
+          <textarea name="descricao" required
+            placeholder="Descreva detalhadamente a não conformidade identificada..."
+            style="width:100%; min-height:110px; border:1.5px solid var(--line);
+                   border-radius:12px; padding:12px 14px; font-size:13px;
+                   font-family:inherit; resize:vertical; outline:none;"
+            onfocus="this.style.borderColor='var(--dhl-red)'"
+            onblur="this.style.borderColor='var(--line)'">{{ registro_edicao.descricao if modo_edicao else '' }}</textarea>
+
+          <!-- SEÇÃO: IMAGENS -->
+          <div class="form-sec-hdr" style="margin-top:20px;">📷 REGISTROS FOTOGRÁFICOS</div>
+
+          {% if modo_edicao %}
+            {% set imgs_ed = [registro_edicao.imagem_1, registro_edicao.imagem_2,
+                              registro_edicao.imagem_3, registro_edicao.imagem_4,
+                              registro_edicao.imagem_5, registro_edicao.imagem_6] %}
+            {% if imgs_ed | select | list %}
+            <div style="margin-bottom:16px;">
+              <div style="font-size:11px; font-weight:800; color:var(--muted);
+                          text-transform:uppercase; letter-spacing:.4px; margin-bottom:10px;">
+                Imagens atuais
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:12px;">
+                {% for i in range(1,7) %}
+                  {% set img = imgs_ed[i-1] %}
+                  {% if img %}
+                  <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+                    <img src="{{ img }}" alt="Imagem {{ i }}"
+                         style="width:120px; height:88px; object-fit:cover; border-radius:12px;
+                                border:2px solid var(--line); box-shadow:0 4px 10px rgba(0,0,0,.08);">
+                    <label style="display:flex; align-items:center; gap:5px;
+                                  font-size:11px; cursor:pointer; color:var(--danger-text);
+                                  font-weight:700;">
+                      <input type="checkbox" name="remover_img_{{ i }}" value="1"> Remover
+                    </label>
+                  </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+          {% endif %}
+
+          <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px;">
+            {% for i in range(1,7) %}
+            <div style="background:#f8fafc; border:1.5px dashed var(--line);
+                        border-radius:12px; padding:12px; display:flex;
+                        flex-direction:column; gap:6px;">
+              <div style="font-size:11px; font-weight:800; color:var(--muted);
+                          text-transform:uppercase; letter-spacing:.4px;">
+                📷 Imagem {{ i }}
+              </div>
+              <input type="file" name="imagem_{{ i }}" accept="image/*"
+                     style="font-size:12px; border:none; background:none; padding:2px 0;">
+            </div>
+            {% endfor %}
+          </div>
+
+          <div style="display:flex; gap:10px; margin-top:24px; flex-wrap:wrap;
+                      padding-top:20px; border-top:1px solid var(--line);">
+            <button type="submit" class="btn btn-red" style="padding:14px 28px; font-size:14px;">
+              {{ '💾 Salvar Alterações' if modo_edicao else '+ Registrar ANC' }}
+            </button>
+            {% if modo_edicao %}
+              <a href="{{ url_for('anc') }}" class="btn btn-outline"
+                 style="padding:14px 20px;">Cancelar</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+
+      <!-- Filtros -->
+      <div class="filter-bar">
+        <form method="GET" action="{{ url_for('anc') }}">
+          <div class="filter-row">
+            <div class="filter-group">
+              <label>Data Inicial</label>
+              <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}">
+            </div>
+            <div class="filter-group">
+              <label>Data Final</label>
+              <input type="date" name="data_final" value="{{ filtros.data_final }}">
+            </div>
+            <div class="filter-group">
+              <label>Status</label>
+              <select name="status">
+                <option value="">Todos</option>
+                {% for s in ['ABERTO','EM ANDAMENTO','CONCLUÍDO'] %}
+                  <option value="{{ s }}" {{ 'selected' if filtros.status == s }}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Gravidade</label>
+              <select name="gravidade">
+                <option value="">Todas</option>
+                {% for g in ['BAIXA','MÉDIA','ALTA','CRÍTICA'] %}
+                  <option value="{{ g }}" {{ 'selected' if filtros.gravidade == g }}>{{ g }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Turno</label>
+              <select name="turno">
+                <option value="">Todos</option>
+                {% for t in ['TURNO A','TURNO B','TURNO C','ADM'] %}
+                  <option value="{{ t }}" {{ 'selected' if filtros.turno == t }}>{{ t }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Natureza</label>
+              <input type="text" name="natureza" placeholder="Filtrar..." value="{{ filtros.natureza }}">
+            </div>
+            <div class="filter-actions">
+              <button type="submit" class="btn btn-red btn-sm">Filtrar</button>
+              <a href="{{ url_for('anc') }}" class="btn btn-outline btn-sm">Limpar</a>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Toolbar + Tabela -->
+      <div class="card" style="padding:0; overflow:hidden;">
+        <div style="padding:16px 20px; display:flex; align-items:center;
+                    justify-content:space-between; flex-wrap:wrap; gap:10px;
+                    border-bottom:1px solid var(--line);">
+          <div style="font-weight:900; font-size:15px; color:var(--dhl-black);">
+            {{ registros|length }} registro(s)
+          </div>
+          <div style="display:flex; gap:8px;">
+            <a href="{{ url_for('exportar_anc_excel') }}" class="btn btn-yellow btn-sm">
+              📊 Exportar Excel
+            </a>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="border-radius:0; border:none;">
+          <table>
+            <thead>
+              <tr>
+                <th>Nº ANC</th>
+                <th>Data</th>
+                <th>Hora</th>
+                {% if is_admin %}<th>Site</th>{% endif %}
+                <th>Setor</th>
+                <th>Gravidade</th>
+                <th>Natureza</th>
+                <th>Turno</th>
+                <th>Responsável</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in registros %}
+              <tr>
+                <td><strong style="color:var(--dhl-red);">{{ r.numero_site or r.id }}</strong></td>
+                <td>{{ r.data_nc or '—' }}</td>
+                <td>{{ r.hora_nc or '—' }}</td>
+                {% if is_admin %}<td>{{ r.site or '—' }}</td>{% endif %}
+                <td>{{ r.setor or '—' }}</td>
+                <td>
+                  {% set g = (r.gravidade or '').upper() %}
+                  {% if g == 'CRÍTICA' %}
+                    <span class="badge badge-critica">{{ r.gravidade }}</span>
+                  {% elif g == 'ALTA' %}
+                    <span class="badge badge-alta">{{ r.gravidade }}</span>
+                  {% elif g == 'MÉDIA' %}
+                    <span class="badge badge-media">{{ r.gravidade }}</span>
+                  {% else %}
+                    <span class="badge badge-baixa">{{ r.gravidade or '—' }}</span>
+                  {% endif %}
+                </td>
+                <td class="desc-cell" title="{{ r.natureza }}">{{ r.natureza or '—' }}</td>
+                <td>{{ r.turno or '—' }}</td>
+                <td>{{ r.responsavel or '—' }}</td>
+                <td>
+                  {% set st = (r.status or '').upper() %}
+                  {% if st == 'ABERTO' %}
+                    <span class="badge badge-aberto">Aberto</span>
+                  {% elif st == 'EM ANDAMENTO' %}
+                    <span class="badge badge-andamento">Em Andamento</span>
+                  {% else %}
+                    <span class="badge badge-concluido">Concluído</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn btn-outline btn-sm"
+                      onclick="abrirModal(this)"
+                      data-id="{{ r.id }}"
+                      data-numero="{{ r.numero_site or r.id }}"
+                      data-data="{{ r.data_nc or '—' }}"
+                      data-hora="{{ r.hora_nc or '—' }}"
+                      data-site="{{ r.site or '—' }}"
+                      data-setor="{{ r.setor or '—' }}"
+                      data-tipo-ocorrencia="{{ r.tipo_ocorrencia or '—' }}"
+                      data-gravidade="{{ r.gravidade or '—' }}"
+                      data-natureza="{{ r.natureza or '—' }}"
+                      data-tipo="{{ r.tipo or '—' }}"
+                      data-turno="{{ r.turno or '—' }}"
+                      data-responsavel="{{ r.responsavel or '—' }}"
+                      data-gestor="{{ r.gestor_responsavel or '—' }}"
+                      data-envolvido="{{ r.envolvido or '—' }}"
+                      data-status="{{ r.status or '—' }}"
+                      data-descricao="{{ (r.descricao or '') | truncate(300, true, '...') }}"
+                      data-url-pdf="{{ url_for('exportar_anc_pdf', anc_id=r.id) }}"
+                      data-url-editar="{{ url_for('anc', editar=r.id) }}"
+                      data-url-excluir="{{ url_for('excluir_anc', anc_id=r.id) }}">
+                      Detalhes
+                    </button>
+                    <a href="{{ url_for('exportar_anc_pdf', anc_id=r.id) }}"
+                       class="btn btn-dark btn-sm" title="Baixar PDF">PDF</a>
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="{{ 11 if is_admin else 10 }}"
+                    style="text-align:center; color:var(--muted); padding:32px;">
+                  Nenhum ANC encontrado com os filtros selecionados.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+    <footer class="app-footer">
+      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+    </footer>
+  </main>
+</div>
+
+<!-- Modal Detalhes -->
+<div class="modal-overlay" id="modal" onclick="fecharModalFora(event)">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="m-numero" style="color:var(--dhl-red);">ANC</h3>
+      <button class="modal-close" onclick="fecharModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-grid">
+        <div class="modal-item">
+          <div class="modal-lbl">Data</div>
+          <div class="modal-val" id="m-data"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Hora</div>
+          <div class="modal-val" id="m-hora"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Site</div>
+          <div class="modal-val" id="m-site"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Setor</div>
+          <div class="modal-val" id="m-setor"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Tipo Ocorrência</div>
+          <div class="modal-val" id="m-tipo-ocorrencia"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Turno</div>
+          <div class="modal-val" id="m-turno"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Gravidade</div>
+          <div class="modal-val red" id="m-gravidade"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Natureza</div>
+          <div class="modal-val" id="m-natureza"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Tipo</div>
+          <div class="modal-val" id="m-tipo"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Status</div>
+          <div class="modal-val" id="m-status"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Responsável</div>
+          <div class="modal-val" id="m-responsavel"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Gestor</div>
+          <div class="modal-val" id="m-gestor"></div>
+        </div>
+        <div class="modal-item full">
+          <div class="modal-lbl">Envolvido</div>
+          <div class="modal-val" id="m-envolvido"></div>
+        </div>
+        <div class="modal-item full">
+          <div class="modal-lbl">Descrição</div>
+          <div class="modal-val" id="m-descricao" style="font-weight:500; color:#374151;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <a id="m-pdf" href="#" class="btn btn-red" style="flex:1; justify-content:center;">
+        📄 Baixar PDF
+      </a>
+      {% if is_admin %}
+      <a id="m-editar" href="#" class="btn btn-yellow">✏️ Editar</a>
+      <form id="m-form-excluir" method="POST" action=""
+            onsubmit="return confirm('Tem certeza que deseja excluir este ANC? Esta ação não pode ser desfeita.');"
+            style="margin:0;">
+        <button type="submit" class="btn btn-danger">Excluir</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirModal(btn) {
+  const d = btn.dataset;
+  document.getElementById('m-numero').textContent        = d.numero;
+  document.getElementById('m-data').textContent          = d.data;
+  document.getElementById('m-hora').textContent          = d.hora;
+  document.getElementById('m-site').textContent          = d.site;
+  document.getElementById('m-setor').textContent         = d.setor;
+  document.getElementById('m-tipo-ocorrencia').textContent = d.tipoOcorrencia;
+  document.getElementById('m-turno').textContent         = d.turno;
+  document.getElementById('m-gravidade').textContent     = d.gravidade;
+  document.getElementById('m-natureza').textContent      = d.natureza;
+  document.getElementById('m-tipo').textContent          = d.tipo;
+  document.getElementById('m-status').textContent        = d.status;
+  document.getElementById('m-responsavel').textContent   = d.responsavel;
+  document.getElementById('m-gestor').textContent        = d.gestor;
+  document.getElementById('m-envolvido').textContent     = d.envolvido;
+  document.getElementById('m-descricao').textContent     = d.descricao;
+  document.getElementById('m-pdf').href                  = d.urlPdf;
+  const editar = document.getElementById('m-editar');
+  if (editar) editar.href = d.urlEditar;
+  const form = document.getElementById('m-form-excluir');
+  if (form) form.action = d.urlExcluir;
+  document.getElementById('modal').classList.add('open');
+}
+function fecharModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+function fecharModalFora(e) {
+  if (e.target === document.getElementById('modal')) fecharModal();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
+</script>
+<script>
+(function(){
+  var ov=document.getElementById('loading-overlay');
+  function show(){ov.classList.add('show');}
+  document.querySelectorAll('form').forEach(function(f){
+    f.addEventListener('submit',function(){show();});
+  });
+  document.querySelectorAll('a[href]').forEach(function(a){
+    var h=a.getAttribute('href')||'';
+    if(h.startsWith('#')||h.startsWith('javascript:')) return;
+    if(a.target==='_blank') return;
+    if(h.indexOf('exportar')!==-1||h.indexOf('download')!==-1) return;
+    a.addEventListener('click',function(e){
+      if(e.ctrlKey||e.metaKey||e.shiftKey) return;
+      show();
+    });
+  });
+})();
+</script>
+</body>
+</html>
