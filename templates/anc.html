@@ -142,6 +142,7 @@
     .btn-yellow{ background:var(--dhl-yellow); color:#111; font-weight:900; }
     .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
     .btn-danger{ background:linear-gradient(180deg,#b91c1c,#7f1d1d); color:#fff; }
+    .btn-success{ background:linear-gradient(180deg,#16a34a,#15803d); color:#fff; box-shadow:0 6px 14px rgba(22,163,74,.25); }
     .btn-outline{ background:#fff; color:var(--dhl-black);
       border:2px solid var(--line); }
     .btn-outline:hover{ border-color:#9ca3af; }
@@ -441,7 +442,7 @@
               <label>Status</label>
               <select name="status">
                 {% for s in ['ABERTO','EM ANDAMENTO','CONCLUÍDO'] %}
-                  <option value="{{ s }}" {{ 'selected' if modo_edicao and registro_edicao.status == s else ('selected' if not modo_edicao and s == 'ABERTO') }}>{{ s }}</option>
+                  <option value="{{ s }}" {{ 'selected' if modo_edicao and registro_edicao.status == s else ('selected' if not modo_edicao and s == 'EM ANDAMENTO') }}>{{ s }}</option>
                 {% endfor %}
               </select>
             </div>
@@ -677,7 +678,9 @@
                       data-descricao="{{ (r.descricao or '') | truncate(300, true, '...') }}"
                       data-url-pdf="{{ url_for('exportar_anc_pdf', anc_id=r.id) }}"
                       data-url-editar="{{ url_for('anc', editar=r.id) }}"
-                      data-url-excluir="{{ url_for('excluir_anc', anc_id=r.id) }}">
+                      data-url-excluir="{{ url_for('excluir_anc', anc_id=r.id) }}"
+                      data-url-fechar="{{ url_for('fechar_anc', anc_id=r.id) }}"
+                      data-criado-por="{{ r.criado_por or '' }}">
                       Detalhes
                     </button>
                     <a href="{{ url_for('exportar_anc_pdf', anc_id=r.id) }}"
@@ -777,6 +780,10 @@
       <a id="m-pdf" href="#" class="btn btn-red" style="flex:1; justify-content:center;">
         📄 Baixar PDF
       </a>
+      <form id="m-form-fechar" method="POST" action="" style="margin:0; display:none;"
+            onsubmit="return confirm('Deseja fechar esta ANC? O status será alterado para Concluído.');">
+        <button type="submit" class="btn btn-success">✔ Fechar ANC</button>
+      </form>
       {% if is_admin %}
       <a id="m-editar" href="#" class="btn btn-yellow">✏️ Editar</a>
       <form id="m-form-excluir" method="POST" action=""
@@ -790,28 +797,41 @@
 </div>
 
 <script>
+const IS_ADMIN    = {{ 'true' if is_admin else 'false' }};
+const CURRENT_USER = "{{ session.get('user_nome', '') }}";
+
 function abrirModal(btn) {
   const d = btn.dataset;
-  document.getElementById('m-numero').textContent        = d.numero;
-  document.getElementById('m-data').textContent          = d.data;
-  document.getElementById('m-hora').textContent          = d.hora;
-  document.getElementById('m-site').textContent          = d.site;
-  document.getElementById('m-setor').textContent         = d.setor;
+  document.getElementById('m-numero').textContent          = d.numero;
+  document.getElementById('m-data').textContent            = d.data;
+  document.getElementById('m-hora').textContent            = d.hora;
+  document.getElementById('m-site').textContent            = d.site;
+  document.getElementById('m-setor').textContent           = d.setor;
   document.getElementById('m-tipo-ocorrencia').textContent = d.tipoOcorrencia;
-  document.getElementById('m-turno').textContent         = d.turno;
-  document.getElementById('m-gravidade').textContent     = d.gravidade;
-  document.getElementById('m-natureza').textContent      = d.natureza;
-  document.getElementById('m-tipo').textContent          = d.tipo;
-  document.getElementById('m-status').textContent        = d.status;
-  document.getElementById('m-responsavel').textContent   = d.responsavel;
-  document.getElementById('m-gestor').textContent        = d.gestor;
-  document.getElementById('m-envolvido').textContent     = d.envolvido;
-  document.getElementById('m-descricao').textContent     = d.descricao;
-  document.getElementById('m-pdf').href                  = d.urlPdf;
+  document.getElementById('m-turno').textContent           = d.turno;
+  document.getElementById('m-gravidade').textContent       = d.gravidade;
+  document.getElementById('m-natureza').textContent        = d.natureza;
+  document.getElementById('m-tipo').textContent            = d.tipo;
+  document.getElementById('m-status').textContent          = d.status;
+  document.getElementById('m-responsavel').textContent     = d.responsavel;
+  document.getElementById('m-gestor').textContent          = d.gestor;
+  document.getElementById('m-envolvido').textContent       = d.envolvido;
+  document.getElementById('m-descricao').textContent       = d.descricao;
+  document.getElementById('m-pdf').href                    = d.urlPdf;
+
   const editar = document.getElementById('m-editar');
   if (editar) editar.href = d.urlEditar;
-  const form = document.getElementById('m-form-excluir');
-  if (form) form.action = d.urlExcluir;
+
+  const formExcluir = document.getElementById('m-form-excluir');
+  if (formExcluir) formExcluir.action = d.urlExcluir;
+
+  // Botão Fechar ANC: visível para admin ou criador, e só se ainda não estiver concluído
+  const formFechar  = document.getElementById('m-form-fechar');
+  const podeFFechar = (IS_ADMIN || d.criadoPor === CURRENT_USER)
+                      && (d.status || '').toUpperCase() !== 'CONCLUÍDO';
+  formFechar.style.display = podeFFechar ? '' : 'none';
+  if (podeFFechar) formFechar.action = d.urlFechar;
+
   document.getElementById('modal').classList.add('open');
 }
 function fecharModal() {

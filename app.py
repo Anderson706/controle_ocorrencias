@@ -1,6 +1,10 @@
 import os
+import sys
 import re
 import base64
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from io import BytesIO
 from datetime import datetime
 from functools import wraps
@@ -39,9 +43,16 @@ from reportlab.platypus import (
     Image as RLImage, Table, TableStyle, PageBreak
 )
 
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=os.path.join(BASE_DIR, 'static'),
+)
 app.config["SECRET_KEY"] = "controle-ocorrencia-executivo"
 app.config["SQLALCHEMY_DATABASE_URI"] = (
     "oracle+oracledb://SECPANEL:SEC003q2w3e4r2026"
@@ -52,6 +63,72 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 db = SQLAlchemy(app)
+
+# =========================
+# LOGGING DE ERROS
+# =========================
+import logging, traceback as _tb
+
+_log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else BASE_DIR
+logging.basicConfig(
+    filename=os.path.join(_log_dir, 'cctv_error.log'),
+    level=logging.ERROR,
+    format='%(asctime)s %(levelname)s: %(message)s'
+)
+
+@app.errorhandler(500)
+def _erro_500(e):
+    trace = _tb.format_exc()
+    logging.error(trace)
+    return (
+        f"<pre style='font-family:monospace;padding:20px;color:#b91c1c'>"
+        f"Erro interno — reporte ao suporte:\n\n{trace}</pre>"
+    ), 500
+
+
+# =========================
+# CONTROLE DE VERSÃO
+# =========================
+APP_VERSION = "1.0"
+
+SMTP_HOST     = "smtp.dhl.com"
+SMTP_PORT     = 25
+EMAIL_FROM    = "Security.processassistant@dhl.com"
+EMAIL_PASSWORD= "L0sspr3v3ntion@D3VT3AML4TAM"
+EMAIL_DEVS    = [
+    "deivid.martinsl@dhl.com",
+    "Gilmar.SantosGJ@dhl.com",
+    "anderson.rodriguesd@dhl.com",
+]
+
+_v_cache: dict = {}   # cache por processo: {"ok": bool, "db_version": str}
+
+def _get_versao_banco():
+    """Consulta SISTEMA_CONFIG uma vez e armazena em cache."""
+    if _v_cache:
+        return _v_cache["ok"], _v_cache["db_version"]
+    try:
+        row = db.session.execute(
+            db.text("SELECT CCTV_CP FROM SISTEMA_CONFIG WHERE ROWNUM = 1")
+        ).fetchone()
+        db_ver = (row[0] or "").strip() if row else "?"
+        ok = db_ver == APP_VERSION
+    except Exception:
+        ok = True      # fail-open: não bloqueia se o banco estiver inacessível
+        db_ver = "?"
+    _v_cache["ok"]         = ok
+    _v_cache["db_version"] = db_ver
+    return ok, db_ver
+
+ROTAS_LIVRES = {"static", "versao_bloqueada", "solicitar_atualizacao"}
+
+@app.before_request
+def _verificar_versao():
+    if request.endpoint in ROTAS_LIVRES or request.endpoint is None:
+        return
+    ok, _ = _get_versao_banco()
+    if not ok:
+        return redirect(url_for("versao_bloqueada"))
 
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
@@ -165,7 +242,7 @@ class ANC(db.Model):
     envolvido = db.Column(db.String(255), nullable=True)
     tipo = db.Column(db.String(80), nullable=True)
     turno = db.Column(db.String(20), nullable=True)
-    status = db.Column(db.String(30), nullable=False, default="ABERTO")
+    status = db.Column(db.String(30), nullable=False, default="EM ANDAMENTO")
     descricao = db.Column(db.Text, nullable=True)
     inicio_investigacao = db.Column(db.String(16), nullable=True)
     fim_investigacao = db.Column(db.String(16), nullable=True)
@@ -1626,6 +1703,21 @@ def anc_status(anc_id):
     return redirect(url_for("anc"))
 
 
+@app.route("/anc/<int:anc_id>/fechar", methods=["POST"])
+@login_required
+def fechar_anc(anc_id):
+    reg = ANC.query.get_or_404(anc_id)
+    usuario = Usuario.query.get(session.get("user_id"))
+    is_admin = usuario and (usuario.perfil or "").upper() == "ADMIN"
+    if not is_admin and reg.criado_por != session.get("user_nome", ""):
+        flash("Você não tem permissão para fechar esta ANC.", "danger")
+        return redirect(url_for("anc"))
+    reg.status = "CONCLUÍDO"
+    db.session.commit()
+    flash("ANC fechada com sucesso.", "success")
+    return redirect(url_for("anc"))
+
+
 @app.route("/anc/<int:anc_id>/excluir", methods=["POST"])
 @login_required
 @perfil_required("ADMIN")
@@ -2064,11 +2156,74 @@ def exportar_pdf():
 
 
 # =========================
+# VERSÃO BLOQUEADA
+# =========================
+@app.route("/versao-desatualizada")
+def versao_bloqueada():
+    _, db_ver = _get_versao_banco()
+    return render_template("versao_bloqueada.html",
+                           v_atual=APP_VERSION, v_nova=db_ver)
+
+
+@app.route("/solicitar-atualizacao", methods=["POST"])
+def solicitar_atualizacao():
+    from flask import jsonify
+    data          = request.get_json(force=True) or {}
+    nome          = data.get("nome", "N/A")
+    email_usuario = data.get("email", "N/A")
+    site          = data.get("site",  "N/A")
+    _, v_nova     = _get_versao_banco()
+    v_atual       = APP_VERSION
+
+    destinatarios = EMAIL_DEVS + [email_usuario]
+
+    msg = MIMEMultipart()
+    msg["From"]    = EMAIL_FROM
+    msg["To"]      = ", ".join(destinatarios)
+    msg["Subject"] = "Solicitação de Atualização - CCTV Control Panel"
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+            <div style="background-color: #FFCC00; border-bottom: 4px solid #D40511; padding: 20px; text-align: center;">
+                <h2 style="margin: 0; color: #1A1A1A;">Solicitação de Executável Atualizado</h2>
+            </div>
+            <div style="padding: 30px;">
+                <p>O utilizador abaixo solicitou a versão mais recente do hub:</p>
+                <div style="background-color: #f9f9f9; border-left: 4px solid #D40511; padding: 15px 20px; border-radius: 0 4px 4px 0;">
+                    <p><strong>👤 Usuário:</strong> {nome}</p>
+                    <p><strong>✉️ E-mail:</strong> {email_usuario}</p>
+                    <p><strong>🏢 Site:</strong> {site}</p>
+                    <p><strong>⚠️ Versão no PC:</strong> {v_atual}</p>
+                    <p><strong>✅ Versão do Banco:</strong> {v_nova}</p>
+                </div>
+            </div>
+            <div style="background-color: #1A1A1A; color: #f4f4f4; padding: 15px; text-align: center; font-size: 12px;">
+                <p>Security Tool Show &middot; Sistema de Bloqueio Automático</p>
+            </div>
+        </div>
+    </div>
+    """
+    msg.attach(MIMEText(html_body, "html"))
+
+    try:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        return jsonify({"status": "sucesso", "mensagem": "Solicitação enviada! Verifique seu e-mail em breve."}), 200
+    except Exception as e:
+        return jsonify({"status": "erro", "mensagem": "Erro ao processar e-mail."}), 500
+
+
+# =========================
 # INIT DB
 # =========================
 with app.app_context():
-    # Cria tabelas da aplicação no Oracle (USERS_LIVRO já existe, será ignorada)
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as _e:
+        print(f"[AVISO] Não foi possível conectar ao banco na inicialização: {_e}")
 
 
 if __name__ == "__main__":
