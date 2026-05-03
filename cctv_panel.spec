@@ -72,10 +72,24 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# ── Splash nativo (aparece antes da extração) ─────────────────────────────────
+splash = Splash(
+    'static/splash.png',
+    binaries=a.binaries,
+    datas=a.datas,
+    text_pos=(240, 200),
+    text_size=10,
+    text_color='#888888',
+    minify_script=True,
+    always_on_top=True,
+)
+
 # ── EXE --onefile ─────────────────────────────────────────────────────────────
 exe = EXE(
     pyz,
     a.scripts,
+    splash,
+    splash.binaries,
     a.binaries,
     a.zipfiles,
     a.datas,

@@ -684,6 +684,7 @@
                       Detalhes
                     </button>
                     <a href="{{ url_for('exportar_anc_pdf', anc_id=r.id) }}"
+                       data-filename="ANC {{ r.numero_anc or r.id }} - {{ (r.natureza or 'SEM_NATUREZA')[:40] }} - {{ r.site or 'SEM_SITE' }}.pdf"
                        class="btn btn-dark btn-sm" title="Baixar PDF">PDF</a>
                   </div>
                 </td>

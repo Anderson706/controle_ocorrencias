@@ -200,6 +200,7 @@
         <div class="actions">
           {% if tem_pdf %}
             <a href="{{ url_for('download_analise', analise_id=registro.id) }}"
+               data-filename="A.I - {{ registro.id_relatorio or registro.codigo or registro.id }} - {{ registro.site or 'SEM_SITE' }}.docx"
                class="btn btn-pdf">
               ⬇ Baixar DOCX
             </a>

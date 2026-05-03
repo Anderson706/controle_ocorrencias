@@ -312,6 +312,7 @@
                     data-conclusao="{{ r.conclusao or '' }}"
                     data-criado_por="{{ r.criado_por or '-' }}"
                     data-tem_docx="{{ '1' if r.docx_arquivo else '0' }}"
+                    data-id_relatorio="{{ r.id_relatorio or r.codigo or r.id }}"
                     data-url_download="{{ url_for('download_analise', analise_id=r.id) }}"
                     data-url_excluir="{{ url_for('excluir_analise', analise_id=r.id) }}"
                   >Detalhes</button>
@@ -417,6 +418,7 @@
     const sem = document.getElementById('m-sem-docx');
     if (d.tem_docx === '1') {
       dl.href = d.url_download;
+      dl.setAttribute('data-filename', 'A.I - ' + d.id_relatorio + ' - ' + d.site + '.docx');
       dl.style.display = '';
       sem.style.display = 'none';
     } else {

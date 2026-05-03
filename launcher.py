@@ -32,7 +32,6 @@ class Api:
         }
         filetypes = tipos.get(ext, [("Todos os arquivos", "*.*")])
 
-        # Diálogo nativo de salvar
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
@@ -47,7 +46,6 @@ class Api:
         if not save_path:
             return {"ok": False}
 
-        # Faz a requisição ao Flask com o cookie de sessão
         req = urllib.request.Request(f"{URL}{url}")
         if cookies:
             req.add_header("Cookie", cookies)
@@ -80,16 +78,18 @@ _DOWNLOAD_JS = r"""
       e.preventDefault();
       e.stopPropagation();
 
-      // Determina o nome sugerido pelo tipo de URL
-      var nome;
-      if (href.indexOf('excel') !== -1 || href.indexOf('xlsx') !== -1)
-        nome = 'exportacao.xlsx';
-      else if (href.indexOf('pdf') !== -1)
-        nome = 'relatorio.pdf';
-      else if (href.indexOf('download') !== -1)
-        nome = 'analise.docx';
-      else
-        nome = 'arquivo';
+      // Usa data-filename se disponível, senão fallback pelo tipo de URL
+      var nome = el.getAttribute('data-filename') || '';
+      if (!nome) {
+        if (href.indexOf('excel') !== -1 || href.indexOf('xlsx') !== -1)
+          nome = 'exportacao.xlsx';
+        else if (href.indexOf('pdf') !== -1)
+          nome = 'relatorio.pdf';
+        else if (href.indexOf('download') !== -1)
+          nome = 'analise.docx';
+        else
+          nome = 'arquivo';
+      }
 
       window.pywebview.api.download(href, nome, document.cookie);
     }, true);
@@ -124,6 +124,13 @@ def main():
     threading.Thread(target=_run_flask, daemon=True).start()
     _aguardar_flask()
 
+    # Fecha o splash nativo do PyInstaller
+    try:
+        import pyi_splash
+        pyi_splash.close()
+    except Exception:
+        pass
+
     api = Api()
 
     window = webview.create_window(
@@ -138,7 +145,6 @@ def main():
         js_api=api,
     )
 
-    # Reinjecta o interceptor em cada navegação de página
     def on_loaded():
         window.evaluate_js(_DOWNLOAD_JS)
 

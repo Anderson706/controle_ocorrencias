@@ -20,6 +20,7 @@ from flask import (
 )
 
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import defer
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from docx import Document
@@ -61,6 +62,13 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+app.config["SESSION_COOKIE_HTTPONLY"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_size": 5,
+    "pool_recycle": 1800,
+    "pool_pre_ping": True,
+    "pool_timeout": 30,
+}
 
 db = SQLAlchemy(app)
 
@@ -202,7 +210,7 @@ class AnaliseInvestigativa(db.Model):
 
     criado_por = db.Column(db.String(120), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
-    docx_arquivo = db.Column(db.Text, nullable=True)
+    docx_arquivo = db.Column(db.LargeBinary, nullable=True)
 
     imagens = db.relationship(
         "ImagemAnaliseInvestigativa",
@@ -316,6 +324,17 @@ def gerar_numero_anc(site):
     return f"ANC-{clean}-{ano}-{seq:04d}", seq
 
 
+def _b64_decode(s: str) -> bytes:
+    """Decodifica base64 de forma robusta.
+    Remove prefixo data URI (data:mime;base64,) e whitespace que o Oracle
+    pode inserir em CLOBs longos antes de decodificar."""
+    s = (s or "").strip()
+    if "," in s:
+        s = s.split(",", 1)[1]
+    s = "".join(s.split())   # remove \n, \r, espaços
+    return base64.b64decode(s)
+
+
 def fmt_data_br(data_str):
     """Converte YYYY-MM-DD para DD/MM/YYYY."""
     if data_str and len(data_str) >= 10:
@@ -380,8 +399,7 @@ def gerar_pdf_anc_bytes(anc):
     def _fit_img(source, max_w, max_h):
         """Retorna RLImage escalada proporcionalmente para caber em max_w × max_h."""
         if isinstance(source, str):
-            raw = source.split(",", 1)[1] if "," in source else source
-            bio = BytesIO(base64.b64decode(raw))
+            bio = BytesIO(_b64_decode(source))
         else:
             bio = source
         bio.seek(0)
@@ -624,7 +642,7 @@ def gerar_docx_de_registro(registro):
         add_section_title(doc, "Evidências")
         for idx, img_obj in enumerate(registro.imagens, start=1):
             try:
-                bio = BytesIO(base64.b64decode(img_obj.arquivo))
+                bio = BytesIO(_b64_decode(img_obj.arquivo))
                 bio.seek(0)
                 tbl = doc.add_table(rows=1, cols=2)
                 tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -965,25 +983,23 @@ def index():
 @app.route("/analise-investigativa", methods=["GET"])
 @login_required
 def analise_investigativa():
-    usuario = Usuario.query.get(session.get("user_id"))
-    site_atual = None
-    if usuario and usuario.site:
-        site_atual = SiteCompleto.query.filter_by(nome_do_site=usuario.site).first()
-    proximo_numero = AnaliseInvestigativa.query.filter_by(site=usuario.site if usuario else None).count() + 1
+    site_usuario = session.get("user_site") or ""
+    site_atual = SiteCompleto.query.filter_by(nome_do_site=site_usuario).first() if site_usuario else None
+    proximo_numero = AnaliseInvestigativa.query.filter_by(site=site_usuario or None).count() + 1
     return render_template("analise_investigativa.html", site_atual=site_atual, proximo_numero=proximo_numero)
 
 
 @app.route("/analises")
 @login_required
 def analises():
-    usuario = Usuario.query.get(session.get("user_id"))
-    is_admin = usuario and (usuario.perfil or "").upper() == "ADMIN"
-    site_usuario = usuario.site if usuario else None
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    site_usuario = session.get("user_site") or None
 
+    _sem_blob = defer(AnaliseInvestigativa.docx_arquivo)
     if is_admin:
-        registros = AnaliseInvestigativa.query.order_by(AnaliseInvestigativa.id.desc()).all()
+        registros = AnaliseInvestigativa.query.options(_sem_blob).order_by(AnaliseInvestigativa.id.desc()).all()
     else:
-        registros = AnaliseInvestigativa.query.filter_by(site=site_usuario).order_by(AnaliseInvestigativa.id.desc()).all()
+        registros = AnaliseInvestigativa.query.options(_sem_blob).filter_by(site=site_usuario).order_by(AnaliseInvestigativa.id.desc()).all()
 
     resumo = {
         "total": len(registros),
@@ -1062,7 +1078,11 @@ def add_grid_table(doc, data, col_widths_cm=None, header_bold_cols=None):
 
 def set_cell_bg(cell, color):
     tcPr = cell._tc.get_or_add_tcPr()
+    for existing in tcPr.findall(qn("w:shd")):
+        tcPr.remove(existing)
     shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
     shd.set(qn("w:fill"), color)
     tcPr.append(shd)
 
@@ -1070,6 +1090,8 @@ def set_cell_bg(cell, color):
 def set_cell_border(cell, color="D9D9D9", size="8"):
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
+    for existing in tcPr.findall(qn("w:tcBorders")):
+        tcPr.remove(existing)
     borders = OxmlElement("w:tcBorders")
 
     for border_name in ["top", "left", "bottom", "right"]:
@@ -1084,12 +1106,10 @@ def set_cell_border(cell, color="D9D9D9", size="8"):
 
 
 def format_cell(cell, bold=False, bg=None, align="left"):
-    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-
+    set_cell_border(cell)
     if bg:
         set_cell_bg(cell, bg)
-
-    set_cell_border(cell)
+    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
 
     for p in cell.paragraphs:
         p.paragraph_format.space_before = Pt(3)
@@ -1230,12 +1250,18 @@ def gerar_analise_investigativa():
     # ==========================================================
     def set_cell_bg(cell, color):
         tcPr = cell._tc.get_or_add_tcPr()
+        for existing in tcPr.findall(qn("w:shd")):
+            tcPr.remove(existing)
         shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
         shd.set(qn("w:fill"), color)
         tcPr.append(shd)
 
     def set_cell_border(cell, color="D9D9D9", size="8"):
         tcPr = cell._tc.get_or_add_tcPr()
+        for existing in tcPr.findall(qn("w:tcBorders")):
+            tcPr.remove(existing)
         tcBorders = OxmlElement("w:tcBorders")
 
         for border_name in ["top", "left", "bottom", "right"]:
@@ -1249,9 +1275,9 @@ def gerar_analise_investigativa():
         tcPr.append(tcBorders)
 
     def format_cell(cell, bold=False, bg="FFFFFF", align="left"):
-        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-        set_cell_bg(cell, bg)
         set_cell_border(cell)
+        set_cell_bg(cell, bg)
+        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
 
         for p in cell.paragraphs:
             p.paragraph_format.space_before = Pt(4)
@@ -1532,7 +1558,7 @@ def gerar_analise_investigativa():
     # ==========================================================
     # GERA PDF E CACHEIA PARA DOWNLOAD
     # ==========================================================
-    nova_analise.docx_arquivo = base64.b64encode(docx_buf.getvalue()).decode("utf-8")
+    nova_analise.docx_arquivo = docx_buf.getvalue()
     db.session.commit()
 
     flash("Análise salva com sucesso!", "success")
@@ -1557,8 +1583,8 @@ def download_analise(analise_id):
         flash("Arquivo não disponível para esta análise.", "warning")
         return redirect(url_for("analises"))
 
-    filename  = f"Analise_Investigativa_{registro.codigo or registro.id}.docx"
-    buf = BytesIO(base64.b64decode(registro.docx_arquivo))
+    filename = f"A.I - {registro.id_relatorio or registro.codigo or registro.id} - {registro.site or 'SEM_SITE'}.docx"
+    buf = BytesIO(registro.docx_arquivo)
     buf.seek(0)
     return send_file(buf, as_attachment=True, download_name=filename,
                      mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
@@ -1570,9 +1596,8 @@ def download_analise(analise_id):
 @app.route("/anc", methods=["GET", "POST"])
 @login_required
 def anc():
-    usuario = Usuario.query.get(session.get("user_id"))
-    is_admin = usuario and (usuario.perfil or "").upper() == "ADMIN"
-    site_usuario = usuario.site if usuario else None
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    site_usuario = session.get("user_site") or None
 
     registro_edicao = None
     modo_edicao = False
@@ -1664,10 +1689,11 @@ def anc():
         flash("ANC registrado com sucesso.", "success")
         return redirect(url_for("anc"))
 
+    _sem_imgs = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3)]
     if is_admin:
-        query = ANC.query.order_by(ANC.id.desc())
+        query = ANC.query.options(*_sem_imgs).order_by(ANC.id.desc())
     else:
-        query = ANC.query.filter_by(site=site_usuario).order_by(ANC.id.desc())
+        query = ANC.query.options(*_sem_imgs).filter_by(site=site_usuario).order_by(ANC.id.desc())
 
     registros, filtros = aplicar_filtros_anc(query)
 
@@ -1707,8 +1733,7 @@ def anc_status(anc_id):
 @login_required
 def fechar_anc(anc_id):
     reg = ANC.query.get_or_404(anc_id)
-    usuario = Usuario.query.get(session.get("user_id"))
-    is_admin = usuario and (usuario.perfil or "").upper() == "ADMIN"
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
     if not is_admin and reg.criado_por != session.get("user_nome", ""):
         flash("Você não tem permissão para fechar esta ANC.", "danger")
         return redirect(url_for("anc"))
@@ -1732,9 +1757,8 @@ def excluir_anc(anc_id):
 @app.route("/exportar/anc/excel")
 @login_required
 def exportar_anc_excel():
-    usuario = Usuario.query.get(session.get("user_id"))
-    is_admin = usuario and (usuario.perfil or "").upper() == "ADMIN"
-    site_usuario = usuario.site if usuario else None
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    site_usuario = session.get("user_site") or None
 
     query = ANC.query.order_by(ANC.id.desc()) if is_admin \
         else ANC.query.filter_by(site=site_usuario).order_by(ANC.id.desc())
@@ -1771,7 +1795,7 @@ def exportar_anc_pdf(anc_id):
     reg = ANC.query.get_or_404(anc_id)
     buf = gerar_pdf_anc_bytes(reg)
     return send_file(buf, as_attachment=True,
-                     download_name=f"ANC_{reg.numero_anc or anc_id}.pdf",
+                     download_name=f"ANC {reg.numero_anc or anc_id} - {reg.natureza or 'SEM_NATUREZA'} - {reg.site or 'SEM_SITE'}.pdf",
                      mimetype="application/pdf")
 
 
@@ -1830,8 +1854,7 @@ def ocorrencias():
         registro_edicao = Ocorrencia.query.get_or_404(editar_id)
         modo_edicao = True
 
-    usuario = Usuario.query.get(session.get("user_id"))
-    site_usuario = usuario.site if usuario else None
+    site_usuario = session.get("user_site") or None
 
     if request.method == "POST":
         ocorrencia_id = request.form.get("ocorrencia_id", type=int)
@@ -1911,7 +1934,7 @@ def ocorrencias():
         flash("Ocorrência cadastrada com sucesso.", "success")
         return redirect(url_for("ocorrencias"))
 
-    is_admin = usuario and (usuario.perfil or "").upper() == "ADMIN"
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
     if is_admin:
         query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
     else:
