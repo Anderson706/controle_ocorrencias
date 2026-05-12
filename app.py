@@ -2,6 +2,7 @@ import os
 import sys
 import re
 import base64
+import textwrap
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -202,7 +203,9 @@ class AnaliseInvestigativa(db.Model):
 
     objetivo = db.Column(db.Text, nullable=True)
     responsavel = db.Column(db.String(150), nullable=True)
-    nome_funcao_data = db.Column(db.String(255), nullable=True)
+    nome_funcao_data = db.Column(db.String(255), nullable=True)   # legado — mantido para registros antigos
+    funcao_levantamento = db.Column(db.String(255), nullable=True)
+    data_levantamento = db.Column(db.String(100), nullable=True)
 
     descricao_registro = db.Column(db.Text, nullable=True)
     conclusao = db.Column(db.Text, nullable=True)
@@ -211,6 +214,14 @@ class AnaliseInvestigativa(db.Model):
     criado_por = db.Column(db.String(120), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
     docx_arquivo = db.Column(db.LargeBinary, nullable=True)
+
+    # ── Fechamento ──────────────────────────────────────────────
+    status_analise = db.Column(db.String(30), nullable=True, default="EM ANDAMENTO")
+    texto_fechamento = db.Column(db.Text, nullable=True)
+    fechado_por = db.Column(db.String(120), nullable=True)
+    fechado_em = db.Column(db.DateTime, nullable=True)
+    anexo_fechamento_nome = db.Column(db.String(255), nullable=True)
+    anexo_fechamento = db.Column(db.LargeBinary, nullable=True)
 
     imagens = db.relationship(
         "ImagemAnaliseInvestigativa",
@@ -226,10 +237,16 @@ class ImagemAnaliseInvestigativa(db.Model):
     id = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
     analise_id = db.Column(db.Integer, db.ForeignKey("analises_investigativas.id"), nullable=False)
 
-    arquivo = db.Column(db.String(255), nullable=False)
-    descricao = db.Column(db.Text, nullable=False)
+    arquivo = db.Column(db.String(255), nullable=True)       # legado (não usado em novos registros)
+    arquivo_b64 = db.Column(db.Text, nullable=True)          # base64 completo da imagem (CLOB)
+    descricao = db.Column(db.Text, nullable=True)
 
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def b64(self):
+        """Retorna o base64 da imagem, priorizando arquivo_b64 (novo) ou arquivo (legado)."""
+        return self.arquivo_b64 or self.arquivo or ""
 
 
 class ANC(db.Model):
@@ -249,6 +266,7 @@ class ANC(db.Model):
     local = db.Column(db.String(120), nullable=True)
     envolvido = db.Column(db.String(255), nullable=True)
     tipo = db.Column(db.String(80), nullable=True)
+    cargo = db.Column(db.String(120), nullable=True)
     turno = db.Column(db.String(20), nullable=True)
     status = db.Column(db.String(30), nullable=False, default="EM ANDAMENTO")
     descricao = db.Column(db.Text, nullable=True)
@@ -264,6 +282,13 @@ class ANC(db.Model):
     criado_por = db.Column(db.String(80), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # ── Fechamento / Plano de Ação ────────────────────────────────
+    plano_acao_texto      = db.Column(db.Text, nullable=True)
+    fechado_por           = db.Column(db.String(120), nullable=True)
+    fechado_em            = db.Column(db.DateTime, nullable=True)
+    anexo_fechamento_nome = db.Column(db.String(255), nullable=True)
+    anexo_fechamento      = db.Column(db.LargeBinary, nullable=True)
 
 
 class Ocorrencia(db.Model):
@@ -376,6 +401,42 @@ def aplicar_filtros_anc(query):
     return filtrados, filtros
 
 
+_LGPD_TEXT = (
+    "Este documento e seus anexos podem conter dados pessoais protegidos pela Lei Geral de Proteção de Dados "
+    "(LGPD - Lei nº 13.709/2018). A base legal para o tratamento de dados pessoais aqui realizada é a execução "
+    "das políticas internas, conforme previsto no artigo 7º da LGPD. As informações são para uso exclusivo do(s) "
+    "destinatário(s) original(is), e qualquer uso não autorizado pode violar a LGPD. Se você recebeu este "
+    "documento por engano, por favor, informe o remetente e destrua-o imediatamente."
+)
+
+def _adicionar_lgpd_excel(ws, num_cols):
+    """Adiciona aviso LGPD como última linha mesclada na planilha."""
+    from openpyxl.styles import Font as _Font, Alignment as _Align, PatternFill as _PFill
+    from openpyxl.utils import get_column_letter
+    ws.append([""] * num_cols)                      # linha em branco
+    ws.append([_LGPD_TEXT] + [""] * (num_cols - 1))
+    lgpd_row = ws.max_row
+    last_col  = get_column_letter(num_cols)
+    ws.merge_cells(f"A{lgpd_row}:{last_col}{lgpd_row}")
+    cell = ws.cell(row=lgpd_row, column=1)
+    cell.font      = _Font(size=7, color="888888", italic=True)
+    cell.alignment = _Align(wrap_text=True, horizontal="left", vertical="top")
+    cell.fill      = _PFill("solid", fgColor="F9FAFB")
+    ws.row_dimensions[lgpd_row].height = 72
+
+
+def _desenhar_lgpd(canvas, x_ini, y_ini, font_size=5.5, leading=7.5):
+    """Desenha o aviso LGPD em múltiplas linhas a partir de (x_ini, y_ini) para baixo."""
+    from reportlab.lib import colors as _colors
+    canvas.setFont("Helvetica", font_size)
+    canvas.setFillColor(_colors.HexColor("#9ca3af"))
+    linhas = textwrap.wrap(_LGPD_TEXT, width=170)
+    y = y_ini
+    for linha in linhas:
+        canvas.drawString(x_ini, y, linha)
+        y -= leading
+
+
 def gerar_pdf_anc_bytes(anc):
     """Gera PDF do ANC no formato oficial DHL Security."""
     buffer  = BytesIO()
@@ -386,7 +447,7 @@ def gerar_pdf_anc_bytes(anc):
     doc_pdf = SimpleDocTemplate(
         buffer, pagesize=A4,
         leftMargin=1.5*rcm, rightMargin=1.5*rcm,
-        topMargin=1.5*rcm, bottomMargin=1.5*rcm,
+        topMargin=1.5*rcm, bottomMargin=2.5*rcm,
     )
 
     s_normal = ParagraphStyle("an", fontName="Helvetica",      fontSize=9,  textColor=BLACK)
@@ -447,7 +508,7 @@ def gerar_pdf_anc_bytes(anc):
 
     # ── 2. TABELA DE IDENTIFICAÇÃO ────────────────────────────────
     id_heads = ["DATA", "HORA DA\nOCORRÊNCIA", "NATUREZA", "LOCAL",
-                "PESSOAS\nENVOLVIDAS", "STATUS", "Nº ANC"]
+                "PESSOAS\nENVOLVIDAS", "PLANO DE AÇÃO", "Nº ANC"]
     id_vals  = [fmt_data_br(anc.data_nc), anc.hora_nc or "—", anc.natureza or "—",
                 anc.local or "—", anc.envolvido or "—",
                 anc.status or "—", str(anc.numero_site or anc.id)]
@@ -479,9 +540,9 @@ def gerar_pdf_anc_bytes(anc):
     ]))
     story += [desc_tbl, Spacer(1, 0.5*rcm)]
 
-    # ── 4. GRAVIDADE / RESPONSÁVEL / STATUS ───────────────────────
+    # ── 4. GRAVIDADE / RESPONSÁVEL / PLANO DE AÇÃO ───────────────
     grav_tbl = Table(
-        [[Paragraph(h, s_th) for h in ["GRAVIDADE", "RESPONSÁVEL", "STATUS"]],
+        [[Paragraph(h, s_th) for h in ["GRAVIDADE", "RESPONSÁVEL", "PLANO DE AÇÃO"]],
          [Paragraph(v, s_td) for v in [anc.gravidade or "—",
                                         anc.responsavel or "—",
                                         anc.status or "—"]]],
@@ -541,11 +602,48 @@ def gerar_pdf_anc_bytes(anc):
     ))
     story.append(Spacer(1, 0.2*rcm))
     story.append(Paragraph(
-        f"<b>CARGO:</b> {anc.tipo or 'Segurança Patrimonial'}",
+        f"<b>CARGO:</b> {anc.cargo or 'Segurança Patrimonial'}",
         s_foot,
     ))
 
-    doc_pdf.build(story)
+    # ── 7. PLANO DE AÇÃO / FECHAMENTO (se houver) ─────────────────
+    if anc.plano_acao_texto:
+        story.append(Spacer(1, 0.5*rcm))
+        story.append(yellow_bar("Plano de Ação / Fechamento:"))
+        pla_tbl = Table([[Paragraph(anc.plano_acao_texto or "—", s_normal)]], colWidths=[pw])
+        pla_tbl.setStyle(TableStyle([
+            ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
+            ("TOPPADDING",    (0,0),(-1,-1), 10),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 20),
+            ("LEFTPADDING",   (0,0),(-1,-1), 10),
+            ("RIGHTPADDING",  (0,0),(-1,-1), 10),
+        ]))
+        story.append(pla_tbl)
+        if anc.fechado_por or anc.fechado_em:
+            fechado_em_fmt = (
+                anc.fechado_em.strftime("%d/%m/%Y %H:%M") if anc.fechado_em else "—"
+            )
+            story.append(Spacer(1, 0.2*rcm))
+            story.append(Paragraph(
+                f"<b>FECHADO POR:</b> {anc.fechado_por or '—'}   "
+                f"<b>EM:</b> {fechado_em_fmt}",
+                s_foot,
+            ))
+
+    def _footer_anc(canvas, doc):
+        canvas.saveState()
+        x0, x1 = 1.5*rcm, A4[0] - 1.5*rcm
+        canvas.setStrokeColor(BLACK)
+        canvas.setLineWidth(0.5)
+        canvas.line(x0, 1.9*rcm, x1, 1.9*rcm)
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(colors.HexColor("#6b7280"))
+        canvas.drawString(x0, 1.5*rcm, "DHL Security — Aviso de Não Conformidade")
+        canvas.drawRightString(x1, 1.5*rcm, f"Página {doc.page}")
+        _desenhar_lgpd(canvas, x0, 1.05*rcm)
+        canvas.restoreState()
+
+    doc_pdf.build(story, onFirstPage=_footer_anc, onLaterPages=_footer_anc)
     buffer.seek(0)
     return buffer
 
@@ -591,6 +689,33 @@ def gerar_docx_de_registro(registro):
         r2.font.name = "Arial"; r2.font.size = Pt(8)
         r2.font.color.rgb = RGBColor(90, 90, 90)
 
+        # ── Rodapé LGPD ──
+        footer = sec.footer
+        for fp in footer.paragraphs:
+            fp.text = ""
+        fp_lgpd = footer.paragraphs[0]
+        fp_lgpd.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        fp_lgpd.paragraph_format.space_before = Pt(2)
+        pf = fp_lgpd.paragraph_format
+        pf.left_indent  = Cm(0)
+        pf.right_indent = Cm(0)
+        # linha separadora via borda superior
+        from docx.oxml.ns import qn as _qn
+        from docx.oxml import OxmlElement as _OE
+        _pPr = fp_lgpd._p.get_or_add_pPr()
+        _pBdr = _OE("w:pBdr")
+        _top  = _OE("w:top")
+        _top.set(_qn("w:val"), "single")
+        _top.set(_qn("w:sz"), "6")
+        _top.set(_qn("w:space"), "1")
+        _top.set(_qn("w:color"), "D40511")
+        _pBdr.append(_top)
+        _pPr.append(_pBdr)
+        rLgpd = fp_lgpd.add_run(_LGPD_TEXT)
+        rLgpd.font.name = "Arial"
+        rLgpd.font.size = Pt(6)
+        rLgpd.font.color.rgb = RGBColor(120, 120, 120)
+
     doc.add_paragraph()
 
     p = doc.add_paragraph()
@@ -630,9 +755,10 @@ def gerar_docx_de_registro(registro):
 
     add_section_title(doc, "Dados do Levantamento")
     add_professional_table(doc, [
-        ["Objetivo:",                    registro.objetivo         or ""],
-        ["Responsável pelo Levantamento:", registro.responsavel    or ""],
-        ["Nome / Função / Data:",         registro.nome_funcao_data or ""],
+        ["Objetivo:",                      registro.objetivo             or ""],
+        ["Responsável pelo Levantamento:", registro.responsavel          or ""],
+        ["Função:",                        registro.funcao_levantamento  or ""],
+        ["Data:",                          registro.data_levantamento    or ""],
     ], col_widths=[6.0, 13.5])
 
     add_section_title(doc, "Descrição do Registro")
@@ -642,7 +768,7 @@ def gerar_docx_de_registro(registro):
         add_section_title(doc, "Evidências")
         for idx, img_obj in enumerate(registro.imagens, start=1):
             try:
-                bio = BytesIO(_b64_decode(img_obj.arquivo))
+                bio = BytesIO(_b64_decode(img_obj.b64))
                 bio.seek(0)
                 tbl = doc.add_table(rows=1, cols=2)
                 tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -672,7 +798,7 @@ def gerar_docx_de_registro(registro):
     add_section_title(doc, "Conclusão")
     add_text_box(doc, registro.conclusao or "")
 
-    add_section_title(doc, "Sugestão")
+    add_section_title(doc, "Recomendação")
     add_text_box(doc, registro.sugestao or "")
 
     doc.add_paragraph()
@@ -707,7 +833,7 @@ def gerar_pdf_analise_bytes(form_data, evidencias_bytes):
     doc_pdf = SimpleDocTemplate(
         buffer, pagesize=A4,
         leftMargin=1.7*rcm, rightMargin=1.7*rcm,
-        topMargin=2.5*rcm, bottomMargin=2.2*rcm,
+        topMargin=2.5*rcm, bottomMargin=2.8*rcm,
     )
 
     s_title   = ParagraphStyle("s_title",   fontName="Helvetica-Bold", fontSize=17,
@@ -805,9 +931,10 @@ def gerar_pdf_analise_bytes(form_data, evidencias_bytes):
     # ── dados do levantamento ──
     story.append(Paragraph("DADOS DO LEVANTAMENTO", s_section))
     story.append(info_table([
-        ("Objetivo:",             form_data.get("objetivo", "")),
-        ("Responsável:",          form_data.get("responsavel", "")),
-        ("Nome / Função / Data:", form_data.get("nome_funcao_data", "")),
+        ("Objetivo:",    form_data.get("objetivo", "")),
+        ("Responsável:", form_data.get("responsavel", "")),
+        ("Função:",      form_data.get("funcao_levantamento", "")),
+        ("Data:",        form_data.get("data_levantamento", "")),
     ]))
     story.append(Spacer(1, 0.3*rcm))
 
@@ -857,8 +984,8 @@ def gerar_pdf_analise_bytes(form_data, evidencias_bytes):
     story.append(text_box(form_data.get("conclusao", "")))
     story.append(Spacer(1, 0.3*rcm))
 
-    # ── sugestão ──
-    story.append(Paragraph("SUGESTÃO", s_section))
+    # ── recomendação ──
+    story.append(Paragraph("RECOMENDAÇÃO", s_section))
     story.append(text_box(form_data.get("sugestao", "")))
 
     # ── rodapé ──
@@ -866,14 +993,16 @@ def gerar_pdf_analise_bytes(form_data, evidencias_bytes):
 
     def footer(canvas, doc):
         canvas.saveState()
+        x0, x1 = 1.7*rcm, A4[0] - 1.7*rcm
         canvas.setStrokeColor(DHL_RED)
         canvas.setLineWidth(0.8)
-        canvas.line(1.7*rcm, 1.4*rcm, A4[0] - 1.7*rcm, 1.4*rcm)
+        canvas.line(x0, 1.9*rcm, x1, 1.9*rcm)
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(DHL_MUTED)
-        canvas.drawString(1.7*rcm, 1.0*rcm,
+        canvas.drawString(x0, 1.5*rcm,
                           f"DHL Security — Análise Investigativa{' | ID: ' + id_rel if id_rel else ''}")
-        canvas.drawRightString(A4[0] - 1.7*rcm, 1.0*rcm, f"Página {doc.page}")
+        canvas.drawRightString(x1, 1.5*rcm, f"Página {doc.page}")
+        _desenhar_lgpd(canvas, x0, 1.05*rcm)
         canvas.restoreState()
 
     doc_pdf.build(story, onFirstPage=footer, onLaterPages=footer)
@@ -995,11 +1124,14 @@ def analises():
     is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
     site_usuario = session.get("user_site") or None
 
-    _sem_blob = defer(AnaliseInvestigativa.docx_arquivo)
+    _sem_blob = [
+        defer(AnaliseInvestigativa.docx_arquivo),
+        defer(AnaliseInvestigativa.anexo_fechamento),
+    ]
     if is_admin:
-        registros = AnaliseInvestigativa.query.options(_sem_blob).order_by(AnaliseInvestigativa.id.desc()).all()
+        registros = AnaliseInvestigativa.query.options(*_sem_blob).order_by(AnaliseInvestigativa.id.desc()).all()
     else:
-        registros = AnaliseInvestigativa.query.options(_sem_blob).filter_by(site=site_usuario).order_by(AnaliseInvestigativa.id.desc()).all()
+        registros = AnaliseInvestigativa.query.options(*_sem_blob).filter_by(site=site_usuario).order_by(AnaliseInvestigativa.id.desc()).all()
 
     resumo = {
         "total": len(registros),
@@ -1017,6 +1149,100 @@ def excluir_analise(analise_id):
     db.session.commit()
     flash("Análise excluída com sucesso.", "success")
     return redirect(url_for("analises"))
+
+
+@app.route("/analises/<int:analise_id>/fechar", methods=["POST"])
+@login_required
+def fechar_analise(analise_id):
+    registro = AnaliseInvestigativa.query.get_or_404(analise_id)
+    texto = (request.form.get("texto_fechamento") or "").strip()
+    if not texto:
+        flash("Informe o texto de fechamento.", "warning")
+        return redirect(url_for("analises"))
+
+    registro.status_analise = "FECHADA"
+    registro.texto_fechamento = texto
+    registro.fechado_por = session.get("user_nome")
+    registro.fechado_em = datetime.utcnow()
+
+    anexo = request.files.get("anexo_fechamento")
+    if anexo and anexo.filename:
+        ext = anexo.filename.rsplit(".", 1)[-1].lower()
+        if ext in {"pdf", "doc", "docx", "xlsx", "png", "jpg", "jpeg"}:
+            registro.anexo_fechamento_nome = anexo.filename
+            registro.anexo_fechamento = anexo.read()
+
+    db.session.commit()
+    flash("Análise fechada com sucesso.", "success")
+    return redirect(url_for("analises"))
+
+
+@app.route("/analises/<int:analise_id>/anexo")
+@login_required
+def download_anexo_analise(analise_id):
+    registro = AnaliseInvestigativa.query.get_or_404(analise_id)
+    if not registro.anexo_fechamento:
+        flash("Anexo não encontrado.", "warning")
+        return redirect(url_for("analises"))
+    return send_file(
+        BytesIO(registro.anexo_fechamento),
+        as_attachment=True,
+        download_name=registro.anexo_fechamento_nome or "anexo",
+    )
+
+
+@app.route("/analises/<int:analise_id>/editar", methods=["GET", "POST"])
+@login_required
+@perfil_required("ADMIN")
+def editar_analise(analise_id):
+    registro = AnaliseInvestigativa.query.get_or_404(analise_id)
+
+    if request.method == "POST":
+        f = request.form
+        registro.empresa            = (f.get("empresa") or "").strip()
+        registro.unidade            = (f.get("unidade") or "").strip()
+        registro.endereco           = (f.get("endereco") or "").strip()
+        registro.classificacao      = (f.get("classificacao") or "").strip()
+        registro.produtos_segmento  = (f.get("produtos_segmento") or "").strip()
+        registro.clientes           = (f.get("clientes") or "").strip()
+        registro.objetivo           = (f.get("objetivo") or "").strip()
+        registro.responsavel        = (f.get("responsavel") or "").strip()
+        registro.funcao_levantamento= (f.get("funcao_levantamento") or "").strip()
+        registro.data_levantamento  = (f.get("data_levantamento") or "").strip()
+        registro.descricao_registro = (f.get("descricao_registro") or "").strip()
+        registro.conclusao          = (f.get("conclusao") or "").strip()
+        registro.sugestao           = (f.get("sugestao") or "").strip()
+
+        # Novas imagens enviadas no edit
+        novos_files = request.files.getlist("imagens[]")
+        novas_descricoes = request.form.getlist("descricoes[]")
+        if len(novas_descricoes) < len(novos_files):
+            novas_descricoes += [""] * (len(novos_files) - len(novas_descricoes))
+        for img_file, desc in zip(novos_files, novas_descricoes):
+            if img_file and img_file.filename and allowed_file(img_file.filename):
+                img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
+                nova_img = ImagemAnaliseInvestigativa(
+                    analise_id=registro.id,
+                    arquivo_b64=img_b64,
+                    descricao=desc,
+                )
+                db.session.add(nova_img)
+
+        # Imagens a remover (checkboxes marcados pelo usuário)
+        remover_ids = request.form.getlist("remover_imagem[]")
+        for img_id in remover_ids:
+            img_obj = ImagemAnaliseInvestigativa.query.get(int(img_id))
+            if img_obj and img_obj.analise_id == registro.id:
+                db.session.delete(img_obj)
+
+        # Regenera o DOCX salvo
+        registro.docx_arquivo = None   # força regeneração no próximo download
+        db.session.commit()
+        flash("Análise atualizada com sucesso.", "success")
+        return redirect(url_for("analises"))
+
+    sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
+    return render_template("editar_analise.html", registro=registro, sites=sites)
 
 
 def classify_line(valor):
@@ -1087,7 +1313,7 @@ def set_cell_bg(cell, color):
     tcPr.append(shd)
 
 
-def set_cell_border(cell, color="D9D9D9", size="8"):
+def set_cell_border(cell, color="000000", size="8"):
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
     for existing in tcPr.findall(qn("w:tcBorders")):
@@ -1103,6 +1329,26 @@ def set_cell_border(cell, color="D9D9D9", size="8"):
         borders.append(border)
 
     tcPr.append(borders)
+
+
+def set_table_borders(table, color="000000", size="8"):
+    """Define bordas no nível da tabela — garante que insideH/insideV apareçam."""
+    tbl = table._tbl
+    tblPr = tbl.find(qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.insert(0, tblPr)
+    for existing in tblPr.findall(qn("w:tblBorders")):
+        tblPr.remove(existing)
+    tblBorders = OxmlElement("w:tblBorders")
+    for lado in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        border = OxmlElement(f"w:{lado}")
+        border.set(qn("w:val"), "single")
+        border.set(qn("w:sz"), size)
+        border.set(qn("w:space"), "0")
+        border.set(qn("w:color"), color)
+        tblBorders.append(border)
+    tblPr.append(tblBorders)
 
 
 def format_cell(cell, bold=False, bg=None, align="left"):
@@ -1145,6 +1391,7 @@ def add_professional_table(doc, rows, col_widths):
     table = doc.add_table(rows=0, cols=len(col_widths))
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.autofit = False
+    set_table_borders(table)
 
     for row_data in rows:
         row = table.add_row()
@@ -1168,6 +1415,7 @@ def add_professional_table(doc, rows, col_widths):
 def add_text_box(doc, text="\n\n\n"):
     table = doc.add_table(rows=1, cols=1)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    set_table_borders(table)
     cell = table.rows[0].cells[0]
     cell.text = text or "\n\n\n"
     format_cell(cell, bold=False, bg="FFFFFF")
@@ -1194,7 +1442,9 @@ def gerar_analise_investigativa():
         clientes=(f.get("clientes") or "").strip(),
         objetivo=(f.get("objetivo") or "").strip(),
         responsavel=(f.get("responsavel") or "").strip(),
-        nome_funcao_data=(f.get("nome_funcao_data") or "").strip(),
+        nome_funcao_data=(f.get("nome_funcao_data") or "").strip(),   # legado
+        funcao_levantamento=(f.get("funcao_levantamento") or "").strip(),
+        data_levantamento=(f.get("data_levantamento") or "").strip(),
         descricao_registro=(f.get("descricao_registro") or "").strip(),
         conclusao=(f.get("conclusao") or "").strip(),
         sugestao=(f.get("sugestao") or "").strip(),
@@ -1203,366 +1453,26 @@ def gerar_analise_investigativa():
     db.session.add(nova_analise)
     db.session.commit()
 
-    # ===== Coleta do form =====
-    id_relatorio = (f.get("id_relatorio", "") or "").strip()
-
-    dados_operacao = {
-        "Empresa": f.get("empresa", ""),
-        "Unidade": f.get("unidade", ""),
-        "Endereço": f.get("endereco", ""),
-        "Classificação do Site": classify_line(f.get("classificacao", "")),
-        "Produtos Segmento (Setor)": f.get("produtos_segmento", ""),
-        "Cliente(s)": f.get("clientes", ""),
-    }
-
-    dados_levantamento = {
-        "Objetivo": f.get("objetivo", ""),
-        "Responsável pelo Levantamento": f.get("responsavel", ""),
-        "Nome / Função / Data": f.get("nome_funcao_data", ""),
-    }
-
-    descricao_registro = f.get("descricao_registro", "")
-    conclusao = f.get("conclusao", "")
-    sugestao = f.get("sugestao", "")
-
+    # ===== Salvar imagens como base64 no banco =====
     files = request.files.getlist("imagens[]")
     descricoes = request.form.getlist("descricoes[]")
     if len(descricoes) < len(files):
         descricoes += [""] * (len(files) - len(descricoes))
-    # lê os bytes agora — streams só podem ser lidos uma vez
-    evidencias_bytes = [
-        (fimg.read(), desc)
-        for fimg, desc in zip(files, descricoes) if fimg and fimg.filename
-    ]
-    evidencias = evidencias_bytes  # alias usado pelo bloco DOCX
 
-    doc = Document()
+    for fimg, desc in zip(files, descricoes):
+        if fimg and fimg.filename and allowed_file(fimg.filename):
+            img_b64 = base64.b64encode(fimg.read()).decode("utf-8")
+            nova_img = ImagemAnaliseInvestigativa(
+                analise_id=nova_analise.id,
+                arquivo_b64=img_b64,
+                descricao=desc,
+            )
+            db.session.add(nova_img)
 
-    # ===== Margens =====
-    for section in doc.sections:
-        section.left_margin = Cm(1.7)
-        section.right_margin = Cm(1.7)
-        section.top_margin = Cm(1.5)
-        section.bottom_margin = Cm(1.5)
-
-    # ==========================================================
-    # FUNÇÕES DE FORMATAÇÃO
-    # ==========================================================
-    def set_cell_bg(cell, color):
-        tcPr = cell._tc.get_or_add_tcPr()
-        for existing in tcPr.findall(qn("w:shd")):
-            tcPr.remove(existing)
-        shd = OxmlElement("w:shd")
-        shd.set(qn("w:val"), "clear")
-        shd.set(qn("w:color"), "auto")
-        shd.set(qn("w:fill"), color)
-        tcPr.append(shd)
-
-    def set_cell_border(cell, color="D9D9D9", size="8"):
-        tcPr = cell._tc.get_or_add_tcPr()
-        for existing in tcPr.findall(qn("w:tcBorders")):
-            tcPr.remove(existing)
-        tcBorders = OxmlElement("w:tcBorders")
-
-        for border_name in ["top", "left", "bottom", "right"]:
-            border = OxmlElement(f"w:{border_name}")
-            border.set(qn("w:val"), "single")
-            border.set(qn("w:sz"), size)
-            border.set(qn("w:space"), "0")
-            border.set(qn("w:color"), color)
-            tcBorders.append(border)
-
-        tcPr.append(tcBorders)
-
-    def format_cell(cell, bold=False, bg="FFFFFF", align="left"):
-        set_cell_border(cell)
-        set_cell_bg(cell, bg)
-        cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-
-        for p in cell.paragraphs:
-            p.paragraph_format.space_before = Pt(4)
-            p.paragraph_format.space_after = Pt(4)
-
-            if align == "center":
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            else:
-                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-
-            for run in p.runs:
-                run.font.name = "Arial"
-                run.font.size = Pt(9)
-                run.bold = bold
-                run.font.color.rgb = RGBColor(31, 41, 55)
-
-    def add_section_title(doc, title):
-        p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(14)
-        p.paragraph_format.space_after = Pt(6)
-
-        run = p.add_run(title.upper())
-        run.bold = True
-        run.font.name = "Arial"
-        run.font.size = Pt(11)
-        run.font.color.rgb = RGBColor(212, 5, 17)
-
-    def add_professional_table(doc, rows, col_widths):
-        table = doc.add_table(rows=0, cols=len(col_widths))
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.autofit = False
-
-        for row_data in rows:
-            row = table.add_row()
-
-            for i, value in enumerate(row_data):
-                cell = row.cells[i]
-                cell.width = Cm(col_widths[i])
-                cell.text = str(value or "")
-
-                is_label = i % 2 == 0
-
-                format_cell(
-                    cell,
-                    bold=is_label,
-                    bg="FFF2CC" if is_label else "FFFFFF",
-                    align="left"
-                )
-
-        doc.add_paragraph().paragraph_format.space_after = Pt(2)
-        return table
-
-
-    # ==========================================================
-    # CABEÇALHO COM LOGO
-    # ==========================================================
-    logo_path = os.path.join(app.root_path, "static", "logo.png")
-
-    for section in doc.sections:
-        header = section.header
-
-        for p in header.paragraphs:
-            p.text = ""
-
-        available_width = section.page_width - section.left_margin - section.right_margin
-
-        header_table = header.add_table(rows=1, cols=2, width=available_width)
-        header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        header_table.autofit = False
-
-        header_table.columns[0].width = Cm(4.5)
-        header_table.columns[1].width = Cm(13.1)
-
-        cell_logo = header_table.rows[0].cells[0]
-        cell_info = header_table.rows[0].cells[1]
-
-        for cell in [cell_logo, cell_info]:
-            set_cell_border(cell, color="FFFFFF")
-            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-
-        p_logo = cell_logo.paragraphs[0]
-        p_logo.alignment = WD_ALIGN_PARAGRAPH.LEFT
-
-        if os.path.exists(logo_path):
-            run_logo = p_logo.add_run()
-            run_logo.add_picture(logo_path, width=Cm(3.8))
-        else:
-            run_logo = p_logo.add_run("DHL")
-            run_logo.bold = True
-            run_logo.font.name = "Arial"
-            run_logo.font.size = Pt(16)
-            run_logo.font.color.rgb = RGBColor(212, 5, 17)
-
-        p_info = cell_info.paragraphs[0]
-        p_info.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-        r1 = p_info.add_run("DHL SECURITY\n")
-        r1.bold = True
-        r1.font.name = "Arial"
-        r1.font.size = Pt(10)
-        r1.font.color.rgb = RGBColor(212, 5, 17)
-
-        r2 = p_info.add_run("Relatório de Análise Investigativa")
-        r2.font.name = "Arial"
-        r2.font.size = Pt(8)
-        r2.font.color.rgb = RGBColor(90, 90, 90)
-
-    doc.add_paragraph()
-
-    # ==========================================================
-    # TÍTULO PRINCIPAL
-    # ==========================================================
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_before = Pt(8)
-    p.paragraph_format.space_after = Pt(10)
-
-    run = p.add_run("ANÁLISE INVESTIGATIVA")
-    run.bold = True
-    run.font.name = "Arial"
-    run.font.size = Pt(17)
-    run.font.color.rgb = RGBColor(31, 41, 55)
-
-    # ==========================================================
-    # FAIXA DHL SECURITY
-    # ==========================================================
-    faixa = doc.add_table(rows=1, cols=1)
-    faixa.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    cell = faixa.rows[0].cells[0]
-    cell.text = "DHL SECURITY"
-    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-
-    set_cell_bg(cell, "FFCC00")
-    set_cell_border(cell, color="D40511", size="12")
-
-    p = cell.paragraphs[0]
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p.paragraph_format.space_before = Pt(6)
-    p.paragraph_format.space_after = Pt(6)
-
-    for run in p.runs:
-        run.bold = True
-        run.font.name = "Arial"
-        run.font.size = Pt(10)
-        run.font.color.rgb = RGBColor(120, 0, 0)
-
-    doc.add_paragraph()
-
-    # ==========================================================
-    # DADOS DA OPERAÇÃO
-    # ==========================================================
-    add_section_title(doc, "Dados da Operação")
-
-    add_professional_table(
-        doc,
-        [
-            ["Nº do Relatório (ID):", id_relatorio],
-            ["Empresa:", dados_operacao["Empresa"]],
-            ["Unidade:", dados_operacao["Unidade"]],
-            ["Endereço:", dados_operacao["Endereço"]],
-            ["Classificação do Site:", dados_operacao["Classificação do Site"]],
-            ["Produtos Segmento (Setor):", dados_operacao["Produtos Segmento (Setor)"]],
-            ["Cliente(s):", dados_operacao["Cliente(s)"]],
-        ],
-        col_widths=[6.0, 13.5]
-    )
-
-    # ==========================================================
-    # DADOS DO LEVANTAMENTO
-    # ==========================================================
-    add_section_title(doc, "Dados do Levantamento")
-
-    add_professional_table(
-        doc,
-        [
-            ["Objetivo:", dados_levantamento["Objetivo"]],
-            ["Responsável pelo Levantamento:", dados_levantamento["Responsável pelo Levantamento"]],
-            ["Nome / Função / Data:", dados_levantamento["Nome / Função / Data"]],
-        ],
-        col_widths=[6.0, 13.5]
-    )
-
-    # ==========================================================
-    # DESCRIÇÃO DO REGISTRO
-    # ==========================================================
-    add_section_title(doc, "Descrição do Registro")
-    add_text_box(doc, descricao_registro or "\n\n\n\n")
-
-    # ==========================================================
-    # EVIDÊNCIAS  (imagem esquerda | descrição direita)
-    # ==========================================================
-    if evidencias:
-        add_section_title(doc, "Evidências")
-
-        for idx, (img_bytes, desc) in enumerate(evidencias, start=1):
-            bio = BytesIO(img_bytes)
-            bio.seek(0)
-
-            tbl = doc.add_table(rows=1, cols=2)
-            tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-            tbl.autofit = False
-
-            img_cell  = tbl.rows[0].cells[0]
-            desc_cell = tbl.rows[0].cells[1]
-
-            img_cell.width  = Cm(7.0)
-            desc_cell.width = Cm(10.5)
-
-            # célula esquerda — imagem
-            p_img = img_cell.paragraphs[0]
-            p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p_img.add_run().add_picture(bio, width=Cm(6.5))
-
-            p_num = img_cell.add_paragraph(f"Imagem {idx}")
-            p_num.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            for rn in p_num.runs:
-                rn.font.name = "Arial"
-                rn.font.size = Pt(8)
-                rn.italic = True
-                rn.font.color.rgb = RGBColor(100, 100, 100)
-
-            format_cell(img_cell, bg="F5F5F5", align="center")
-
-            # célula direita — descrição
-            desc_cell.text = desc or "Sem descrição"
-            format_cell(desc_cell, bg="FFFFFF", align="left")
-
-            p = doc.add_paragraph()
-            p.paragraph_format.space_after = Pt(6)
-
-            # quebra de página a cada 5 imagens
-            if idx % 5 == 0 and idx < len(evidencias):
-                doc.add_page_break()
-
-    # ==========================================================
-    # CONCLUSÃO
-    # ==========================================================
-    add_section_title(doc, "Conclusão")
-    add_text_box(doc, conclusao or "\n\n\n\n")
-
-    # ==========================================================
-    # SUGESTÃO
-    # ==========================================================
-    add_section_title(doc, "Sugestão")
-    add_text_box(doc, sugestao or "\n\n\n\n")
-
-    # ==========================================================
-    # RODAPÉ TEXTUAL
-    # ==========================================================
-    doc.add_paragraph()
-
-    code_para = doc.add_paragraph()
-    code_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    texto_rodape = (
-        f"Nº do Relatório (ID): {id_relatorio}"
-        if id_relatorio
-        else "Relatório gerado pelo sistema DHL Security"
-    )
-
-    run_id = code_para.add_run(texto_rodape)
-    run_id.font.name = "Arial"
-    run_id.font.size = Pt(8)
-    run_id.font.color.rgb = RGBColor(100, 100, 100)
-
-    # ==========================================================
-    # NOME DO ARQUIVO
-    # ==========================================================
-    base_name = f"Analise_Investigativa_{nova_analise.codigo or nova_analise.id}"
-
-    # ==========================================================
-    # GERA DOCX (reservado para OneDrive)
-    # ==========================================================
-    docx_buf = BytesIO()
-    doc.save(docx_buf)
-
-    # ==========================================================
-    # GERA PDF E CACHEIA PARA DOWNLOAD
-    # ==========================================================
-    nova_analise.docx_arquivo = docx_buf.getvalue()
     db.session.commit()
 
-    flash("Análise salva com sucesso!", "success")
-    return redirect(url_for("confirmar_analise", analise_id=nova_analise.id))
+    flash("Análise salva com sucesso! Clique em Detalhes para baixar o documento.", "success")
+    return redirect(url_for("analises"))
 
 
 
@@ -1570,22 +1480,24 @@ def gerar_analise_investigativa():
 @app.route("/analises/confirmar/<int:analise_id>")
 @login_required
 def confirmar_analise(analise_id):
-    registro = AnaliseInvestigativa.query.get_or_404(analise_id)
-    tem_arquivo = bool(registro.docx_arquivo)
-    return render_template("confirmar_analise.html", registro=registro, tem_pdf=tem_arquivo)
+    # Rota mantida para retrocompatibilidade com links antigos
+    return redirect(url_for("analises"))
 
 
 @app.route("/analises/download/<int:analise_id>")
 @login_required
 def download_analise(analise_id):
     registro = AnaliseInvestigativa.query.get_or_404(analise_id)
-    if not registro.docx_arquivo:
-        flash("Arquivo não disponível para esta análise.", "warning")
-        return redirect(url_for("analises"))
-
     filename = f"A.I - {registro.id_relatorio or registro.codigo or registro.id} - {registro.site or 'SEM_SITE'}.docx"
-    buf = BytesIO(registro.docx_arquivo)
-    buf.seek(0)
+
+    if registro.docx_arquivo:
+        # Registro antigo — retorna o BLOB armazenado
+        buf = BytesIO(registro.docx_arquivo)
+        buf.seek(0)
+    else:
+        # Registro novo — gera o DOCX na hora a partir dos dados salvos
+        buf = gerar_docx_de_registro(registro)
+
     return send_file(buf, as_attachment=True, download_name=filename,
                      mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
@@ -1619,6 +1531,7 @@ def anc():
         natureza          = (f.get("natureza")          or "").strip()
         responsavel       = (f.get("responsavel")       or "").strip()
         gestor_responsavel= (f.get("gestor_responsavel")or "").strip()
+        cargo             = (f.get("cargo")             or "").strip()
         local_val         = (f.get("local")             or "").strip()
         envolvido         = (f.get("envolvido")         or "").strip()
         tipo              = (f.get("tipo")              or "").strip()
@@ -1630,7 +1543,7 @@ def anc():
 
         if not data_nc or not hora_nc or not setor or not tipo_ocorrencia or not gravidade \
                 or not natureza or not responsavel or not gestor_responsavel \
-                or not local_val or not tipo or not turno or not descricao:
+                or not local_val or not turno or not descricao:
             flash("Preencha todos os campos obrigatórios.", "warning")
             return redirect(url_for("anc", editar=anc_id) if anc_id else url_for("anc"))
 
@@ -1652,6 +1565,7 @@ def anc():
             reg.setor = setor; reg.tipo_ocorrencia = tipo_ocorrencia
             reg.gravidade = gravidade; reg.natureza = natureza
             reg.responsavel = responsavel; reg.gestor_responsavel = gestor_responsavel
+            reg.cargo = cargo
             reg.local = local_val; reg.envolvido = envolvido
             reg.tipo = tipo; reg.turno = turno; reg.status = status
             reg.descricao = descricao
@@ -1674,6 +1588,7 @@ def anc():
             setor=setor, tipo_ocorrencia=tipo_ocorrencia,
             gravidade=gravidade, natureza=natureza,
             responsavel=responsavel, gestor_responsavel=gestor_responsavel,
+            cargo=cargo,
             local=local_val, envolvido=envolvido,
             tipo=tipo, turno=turno, status=status,
             descricao=descricao,
@@ -1689,7 +1604,8 @@ def anc():
         flash("ANC registrado com sucesso.", "success")
         return redirect(url_for("anc"))
 
-    _sem_imgs = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3)]
+    _sem_imgs = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3),
+                 defer(ANC.anexo_fechamento)]
     if is_admin:
         query = ANC.query.options(*_sem_imgs).order_by(ANC.id.desc())
     else:
@@ -1737,10 +1653,37 @@ def fechar_anc(anc_id):
     if not is_admin and reg.criado_por != session.get("user_nome", ""):
         flash("Você não tem permissão para fechar esta ANC.", "danger")
         return redirect(url_for("anc"))
+    texto = (request.form.get("texto_fechamento") or "").strip()
+    if not texto:
+        flash("Informe o plano de ação / texto de fechamento.", "warning")
+        return redirect(url_for("anc"))
     reg.status = "CONCLUÍDO"
+    reg.plano_acao_texto = texto
+    reg.fechado_por = session.get("user_nome")
+    reg.fechado_em  = datetime.utcnow()
+    anexo = request.files.get("anexo_fechamento")
+    if anexo and anexo.filename:
+        ext = anexo.filename.rsplit(".", 1)[-1].lower()
+        if ext in {"pdf", "doc", "docx", "xlsx", "png", "jpg", "jpeg"}:
+            reg.anexo_fechamento_nome = anexo.filename
+            reg.anexo_fechamento      = anexo.read()
     db.session.commit()
     flash("ANC fechada com sucesso.", "success")
     return redirect(url_for("anc"))
+
+
+@app.route("/anc/<int:anc_id>/anexo")
+@login_required
+def download_anexo_anc(anc_id):
+    reg = ANC.query.get_or_404(anc_id)
+    if not reg.anexo_fechamento:
+        flash("Anexo não encontrado.", "warning")
+        return redirect(url_for("anc"))
+    return send_file(
+        BytesIO(reg.anexo_fechamento),
+        as_attachment=True,
+        download_name=reg.anexo_fechamento_nome or "anexo",
+    )
 
 
 @app.route("/anc/<int:anc_id>/excluir", methods=["POST"])
@@ -1768,8 +1711,8 @@ def exportar_anc_excel():
     ws = wb.active
     ws.title = "ANCs"
     headers = ["Nº ANC","Data","Hora","Site","Setor","Tipo Ocorrência","Gravidade",
-               "Natureza","Responsável","Gestor","Local","Envolvido","Tipo","Turno",
-               "Status","Descrição","Criado por"]
+               "Natureza","Gestor Responsável","Responsável pelo Levantamento","Cargo","Local","Envolvido","Turno",
+               "Plano de Ação","Descrição","Plano de Ação Texto","Fechado Por","Fechado Em","Criado por"]
     ws.append(headers)
     fill = PatternFill("solid", fgColor="FFCC00")
     font_bold = Font(bold=True)
@@ -1777,11 +1720,14 @@ def exportar_anc_excel():
         ws.cell(row=1, column=col).fill = fill
         ws.cell(row=1, column=col).font = font_bold
     for r in registros:
+        fechado_em_str = r.fechado_em.strftime("%d/%m/%Y %H:%M") if r.fechado_em else ""
         ws.append([r.numero_anc, r.data_nc, r.hora_nc, r.site, r.setor,
                    r.tipo_ocorrencia, r.gravidade, r.natureza, r.responsavel,
-                   r.gestor_responsavel, r.local, r.envolvido, r.tipo, r.turno,
-                   r.status, r.descricao, r.criado_por])
+                   r.gestor_responsavel, r.cargo or "", r.local, r.envolvido, r.turno,
+                   r.status, r.descricao, r.plano_acao_texto or "",
+                   r.fechado_por or "", fechado_em_str, r.criado_por])
 
+    _adicionar_lgpd_excel(ws, len(headers))
     output = BytesIO()
     wb.save(output)
     output.seek(0)
@@ -1794,8 +1740,11 @@ def exportar_anc_excel():
 def exportar_anc_pdf(anc_id):
     reg = ANC.query.get_or_404(anc_id)
     buf = gerar_pdf_anc_bytes(reg)
+    ano = reg.criado_em.year if reg.criado_em else datetime.now().year
+    num = f"{reg.numero_site:04d}" if reg.numero_site else str(reg.id)
+    download_name = f"ANC-{ano}-{num} - {reg.natureza or 'SEM_NATUREZA'} - {reg.site or 'SEM_SITE'}.pdf"
     return send_file(buf, as_attachment=True,
-                     download_name=f"ANC {reg.numero_anc or anc_id} - {reg.natureza or 'SEM_NATUREZA'} - {reg.site or 'SEM_SITE'}.pdf",
+                     download_name=download_name,
                      mimetype="application/pdf")
 
 
@@ -2112,6 +2061,7 @@ def exportar_excel():
             r.criado_por
         ])
 
+    _adicionar_lgpd_excel(ws, len(headers))
     output = BytesIO()
     wb.save(output)
     output.seek(0)
@@ -2134,10 +2084,8 @@ def exportar_pdf():
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        leftMargin=25,
-        rightMargin=25,
-        topMargin=25,
-        bottomMargin=25
+        leftMargin=1.5*rcm, rightMargin=1.5*rcm,
+        topMargin=1.5*rcm,  bottomMargin=2.5*rcm,
     )
     styles = getSampleStyleSheet()
     elements = []
@@ -2166,8 +2114,21 @@ def exportar_pdf():
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.lightgrey]),
     ]))
 
+    def _footer_oc(canvas, doc):
+        canvas.saveState()
+        x0, x1 = 1.5*rcm, A4[0] - 1.5*rcm
+        canvas.setStrokeColor(colors.HexColor("#ffcc00"))
+        canvas.setLineWidth(0.8)
+        canvas.line(x0, 1.9*rcm, x1, 1.9*rcm)
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(colors.HexColor("#6b7280"))
+        canvas.drawString(x0, 1.5*rcm, "DHL Security — Controle de Ocorrências")
+        canvas.drawRightString(x1, 1.5*rcm, f"Página {doc.page}")
+        _desenhar_lgpd(canvas, x0, 1.05*rcm)
+        canvas.restoreState()
+
     elements.append(tabela)
-    doc.build(elements)
+    doc.build(elements, onFirstPage=_footer_oc, onLaterPages=_footer_oc)
     buffer.seek(0)
 
     return send_file(

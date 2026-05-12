@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+{% block title %}Editar Análise #{{ registro.id }} | CCTV Control Panel{% endblock %}
+
+{% block body %}
+<style>
+  :root{
+    --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b3030e;
+    --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
+    --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+    --shadow:0 12px 28px rgba(15,23,42,.08); --radius:20px;
+    --sidebar:#161a1d; --sidebar-2:#20262b;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+  a{ text-decoration:none; }
+  .app-shell{ display:flex; min-height:100vh; width:100%; }
+  #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+  #loading-overlay.show{ display:flex; }
+  .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+  .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
+  .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+  .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+  .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+  .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+  .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+  .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+  .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+  .nav-icon{ font-size:15px; flex-shrink:0; }
+  .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+  .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+  .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+  .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  .sub-link.cur{ color:#ffcc00; font-weight:800; }
+  .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid rgba(255,255,255,.08); }
+  .nav-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:12px; color:rgba(255,255,255,.52); font-size:13px; font-weight:700; transition:.18s; text-decoration:none; }
+  .nav-logout:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+  .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
+  .topbar{ height:76px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+  .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+  .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+  .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+  .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+  .top-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; font-size:12px; font-weight:800; border:1px solid #efd56f; background:#fff8d8; color:#7a5a00; white-space:nowrap; }
+  .topbar-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .content{ padding:24px; }
+  .flash-wrap{ margin-bottom:16px; }
+  .flash{ margin-bottom:12px; padding:12px 14px; border-radius:12px; font-weight:700; border:1px solid transparent; }
+  .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+  .flash.danger { background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+  .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+  .hero{ position:relative; overflow:hidden; background:linear-gradient(135deg,#1e3a5f,#0f2742); color:#fff; border-radius:24px; padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px; }
+  .hero h2{ margin:0 0 8px; font-size:28px; font-weight:900; }
+  .hero p{ margin:0; line-height:1.55; font-size:14px; opacity:.96; max-width:850px; }
+  .section{ margin-bottom:22px; }
+  .section-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+  .section-head h3{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+  .section-chip{ background:#fff8db; color:#7a5a00; border:1px solid #f5d66f; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); min-width:0; }
+  .form-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; }
+  .form-grid-3{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; }
+  .field-full{ grid-column:1 / -1; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-size:12px; color:#374151; font-weight:900; text-transform:uppercase; letter-spacing:.35px; }
+  .field input,.field select,.field textarea{ width:100%; border:1px solid #d6dae1; background:#fff; border-radius:14px; padding:13px 14px; font-size:14px; color:#111827; outline:none; font-family:Arial,Helvetica,sans-serif; transition:border-color .18s ease,box-shadow .18s ease; }
+  .field textarea{ resize:vertical; min-height:88px; }
+  .field input:focus,.field select:focus,.field textarea:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 4px rgba(212,5,17,.08); }
+  /* Imagens existentes */
+  .img-existente{ border:1px solid var(--line); border-radius:18px; padding:14px 16px; background:#f8fafc; display:flex; align-items:flex-start; gap:14px; margin-bottom:10px; }
+  .img-existente img{ width:100px; height:80px; object-fit:cover; border-radius:10px; border:1px solid var(--line); flex-shrink:0; }
+  .img-existente-info{ flex:1; min-width:0; }
+  .img-existente-desc{ font-size:13px; color:#374151; font-weight:600; margin-bottom:8px; white-space:pre-wrap; }
+  .img-existente-remove{ display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#b91c1c; cursor:pointer; }
+  .img-existente-remove input[type=checkbox]{ accent-color:#d40511; width:15px; height:15px; }
+  /* Novas imagens */
+  .imagem-bloco{ margin-top:14px; border:1px dashed #cbd5e1; border-radius:18px; padding:16px; background:linear-gradient(180deg,#fff,#f8fafc); }
+  .file-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .file-row input[type="file"]{ flex:1; min-width:260px; }
+  .img-preview{ width:100%; max-height:280px; object-fit:contain; margin-top:12px; border-radius:16px; border:1px solid var(--line); background:#fff; display:none; }
+  .btn{ border:none; cursor:pointer; border-radius:999px; font-weight:900; transition:.2s ease; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; }
+  .btn:hover{ transform:translateY(-1px); filter:brightness(.97); }
+  .btn-primary{ background:linear-gradient(135deg,#1e3a5f,#0f2742); color:#fff; padding:13px 24px; box-shadow:0 14px 24px rgba(30,58,95,.25); }
+  .btn-yellow{ background:var(--dhl-yellow); color:#111; padding:11px 18px; box-shadow:0 10px 18px rgba(255,204,0,.25); }
+  .btn-dark{ background:#1f2937; color:#fff; padding:13px 22px; }
+  .btn-danger{ background:#7f1d1d; color:#fff; padding:10px 14px; font-size:12px; }
+  .buttons-row{ display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:26px; padding-top:22px; border-top:1px solid var(--line); }
+  @media(max-width:1100px){ .sidebar{ position:relative; width:100%; height:auto; inset:auto; } .main{ margin-left:0; width:100%; } .app-shell{ flex-direction:column; } }
+  @media(max-width:850px){ .topbar{ height:auto; padding:14px 16px; flex-direction:column; align-items:flex-start; } .form-grid,.form-grid-3{ grid-template-columns:1fr; } }
+</style>
+
+<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+    <nav class="main-nav">
+      {%- set sec_an = true -%}
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section">
+        <span class="nav-icon">📋</span><span>Ocorrências</span>
+      </a>
+      <a href="{{ url_for('analises') }}" class="nav-section active">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span><span class="nav-chevron">▾</span>
+      </a>
+      <div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link cur">Controle de Análises</a>
+      </div>
+      <a href="{{ url_for('anc') }}" class="nav-section">
+        <span class="nav-icon">⚠️</span><span>ANC</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="{{ url_for('logout') }}" class="nav-logout">⏻ &nbsp;Sair</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="DHL" class="logo-topbar">
+        <div>
+          <h1>Editar Análise #{{ registro.numero_site or registro.id }}</h1>
+          <p>CCTV Control Panel — Edição (ADM)</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <span class="top-chip">{{ session.get('user_nome','') }} | {{ session.get('user_perfil','') }}</span>
+        <a href="{{ url_for('analises') }}" class="btn btn-dark" style="padding:11px 16px; border-radius:12px;">← Voltar</a>
+      </div>
+    </header>
+
+    <div class="content">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-wrap">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <div class="hero">
+        <h2>✏ Editando Análise {{ registro.codigo or ('#' + registro.id|string) }}</h2>
+        <p>Altere os campos necessários. As imagens marcadas para remoção serão excluídas ao salvar. Você pode adicionar novas imagens abaixo das existentes. O DOCX será regenerado no próximo download.</p>
+      </div>
+
+      <form id="form-editar" method="POST" action="{{ url_for('editar_analise', analise_id=registro.id) }}" enctype="multipart/form-data">
+
+        <!-- DADOS DA OPERAÇÃO -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Dados da Operação</h3>
+            <span class="section-chip">Identificação</span>
+          </div>
+          <div class="card">
+            <div class="form-grid-3">
+              <div class="field">
+                <label>Empresa</label>
+                <input type="text" name="empresa" value="{{ registro.empresa or '' }}" required>
+              </div>
+              <div class="field">
+                <label>Cliente(s)</label>
+                <input type="text" name="clientes" value="{{ registro.clientes or '' }}" required>
+              </div>
+              <div class="field">
+                <label>Unidade</label>
+                <input type="text" name="unidade" value="{{ registro.unidade or '' }}" required>
+              </div>
+              <div class="field field-full">
+                <label>Endereço</label>
+                <input type="text" name="endereco" value="{{ registro.endereco or '' }}">
+              </div>
+              <div class="field">
+                <label>Classificação do Site</label>
+                <select name="classificacao" required>
+                  {% for opt in ['Warehouse ( X )', 'Inhouse ( X )'] %}
+                  <option value="{{ opt }}" {{ 'selected' if registro.classificacao == opt else '' }}>{{ opt.split(' (')[0] }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="field">
+                <label>Produtos Segmento (Setor)</label>
+                <input type="text" name="produtos_segmento" value="{{ registro.produtos_segmento or '' }}">
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DADOS DO LEVANTAMENTO -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Dados do Levantamento</h3>
+            <span class="section-chip">Responsabilidade</span>
+          </div>
+          <div class="card">
+            <div class="form-grid">
+              <div class="field field-full">
+                <label>Objetivo</label>
+                <textarea name="objetivo" rows="2" required>{{ registro.objetivo or '' }}</textarea>
+              </div>
+              <div class="field">
+                <label>Responsável pelo Levantamento</label>
+                <input type="text" name="responsavel" value="{{ registro.responsavel or '' }}" required>
+              </div>
+              <div class="field">
+                <label>Função</label>
+                <input type="text" name="funcao_levantamento" value="{{ registro.funcao_levantamento or '' }}">
+              </div>
+              <div class="field">
+                <label>Data</label>
+                <input type="date" name="data_levantamento" value="{{ registro.data_levantamento or '' }}">
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DESCRIÇÃO DO REGISTRO -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Descrição do Registro</h3>
+            <span class="section-chip">Narrativa</span>
+          </div>
+          <div class="card">
+            <div class="field">
+              <label>Descrição</label>
+              <textarea name="descricao_registro" rows="4" required>{{ registro.descricao_registro or '' }}</textarea>
+            </div>
+          </div>
+        </section>
+
+        <!-- CONCLUSÃO & RECOMENDAÇÃO -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Conclusão &amp; Recomendação</h3>
+            <span class="section-chip">Resultado</span>
+          </div>
+          <div class="card">
+            <div class="form-grid">
+              <div class="field field-full">
+                <label>Conclusão</label>
+                <textarea name="conclusao" rows="3" required>{{ registro.conclusao or '' }}</textarea>
+              </div>
+              <div class="field field-full">
+                <label>Recomendação</label>
+                <textarea name="sugestao" rows="3">{{ registro.sugestao or '' }}</textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- IMAGENS EXISTENTES -->
+        {% if registro.imagens %}
+        <section class="section">
+          <div class="section-head">
+            <h3>Imagens Existentes</h3>
+            <span class="section-chip">Marque para remover</span>
+          </div>
+          <div class="card">
+            {% for img in registro.imagens %}
+            <div class="img-existente">
+              <img src="data:image/jpeg;base64,{{ img.arquivo }}" alt="Imagem {{ loop.index }}">
+              <div class="img-existente-info">
+                <div class="img-existente-desc">{{ img.descricao or '(sem descrição)' }}</div>
+                <label class="img-existente-remove">
+                  <input type="checkbox" name="remover_imagem[]" value="{{ img.id }}">
+                  Remover esta imagem ao salvar
+                </label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+        {% endif %}
+
+        <!-- NOVAS IMAGENS -->
+        <section class="section">
+          <div class="section-head">
+            <h3>Adicionar Novas Imagens</h3>
+            <span class="section-chip">Opcional</span>
+          </div>
+          <div class="card">
+            <div id="imagens-container"></div>
+            <button type="button" class="btn btn-yellow" style="margin-top:14px;" onclick="adicionarImagem()">
+              + Adicionar Imagem
+            </button>
+          </div>
+        </section>
+
+        <!-- AÇÕES -->
+        <div class="buttons-row">
+          <button type="submit" class="btn btn-primary">💾 Salvar Alterações</button>
+          <a href="{{ url_for('analises') }}" class="btn btn-dark">← Cancelar</a>
+        </div>
+
+      </form>
+    </div>
+    <footer class="app-footer">
+      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+    </footer>
+  </main>
+</div>
+
+<script>
+  function adicionarImagem() {
+    const container = document.getElementById('imagens-container');
+    const bloco = document.createElement('div');
+    bloco.classList.add('imagem-bloco');
+    bloco.innerHTML = `
+      <div class="field">
+        <label>Imagem</label>
+        <div class="file-row">
+          <input type="file" name="imagens[]" accept="image/*" class="file-input">
+          <button type="button" class="btn btn-danger" onclick="this.closest('.imagem-bloco').remove()">Excluir</button>
+        </div>
+        <img class="img-preview" alt="Pré-visualização">
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <label>Descrição da imagem</label>
+        <textarea name="descricoes[]" rows="2"></textarea>
+      </div>
+    `;
+    container.appendChild(bloco);
+    bloco.querySelector('.file-input').addEventListener('change', function(){
+      const img = this.closest('.imagem-bloco').querySelector('.img-preview');
+      if (this.files && this.files[0]) {
+        img.src = URL.createObjectURL(this.files[0]);
+        img.style.display = 'block';
+      } else {
+        img.src = ''; img.style.display = 'none';
+      }
+    });
+  }
+</script>
+<script>
+(function(){
+  var ov = document.getElementById('loading-overlay');
+  document.querySelectorAll('form').forEach(function(f){
+    f.addEventListener('submit', function(){ ov.classList.add('show'); });
+  });
+})();
+</script>
+{% endblock %}
