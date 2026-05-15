@@ -1,15 +1,15 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
-  <title>Ocorrências | CCTV Control Panel</title>
+  <title>Gestão de Investigações | CCTV Control Panel</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <style>
     :root{
       --dhl-yellow:#ffcc00;
       --dhl-red:#d40511;
-      --dhl-red-dark:#b3030e;
+      --dhl-red-dark:#b1030d;
       --dhl-black:#1f1f1f;
       --bg:#f3f5f7;
       --card:#ffffff;
@@ -86,12 +86,23 @@
       transition:.15s; text-decoration:none; }
     .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
     .sub-link.cur{ color:#ffcc00; font-weight:800; }
-    .sidebar-footer{ margin-top:auto; padding-top:14px;
-      border-top:1px solid rgba(255,255,255,.08); }
-    .nav-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px;
-      border-radius:12px; color:rgba(255,255,255,.52); font-size:13px; font-weight:700;
-      transition:.18s; text-decoration:none; }
-    .nav-logout:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    /* ── Profile widget ── */
+    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
+    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
+    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
+    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
+    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .sp-info{ flex:1; min-width:0; }
+    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
+    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
+    .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
+    .sp-menu.open{ display:block; animation:spIn .15s ease; }
+    @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
+    .sp-item:hover{ background:#f3f4f6; }
+    .sp-item-red{ color:#d40511; }
+    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
     /* ── Footer ── */
     .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
 
@@ -215,7 +226,7 @@
     }
 
     .grid{ display:grid; gap:16px; }
-    .grid-4{ grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+    .grid-4{ grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
 
     .card{
       background:var(--card);
@@ -227,7 +238,7 @@
     }
 
     .kpi{
-      min-height:128px;
+      min-height:110px;
       display:flex;
       flex-direction:column;
       justify-content:center;
@@ -249,6 +260,116 @@
       font-weight:900;
       color:var(--dhl-red);
       line-height:1;
+    }
+
+    /* ── Filtro ── */
+    .filter-bar{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:16px 20px;
+      box-shadow:var(--shadow);
+      margin-bottom:20px;
+    }
+    .filter-bar-title{
+      font-size:13px;
+      font-weight:900;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      margin-bottom:14px;
+    }
+    .filter-row{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:flex-end;
+    }
+    .filter-field{
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      flex:1;
+      min-width:160px;
+    }
+    .filter-field label{
+      font-size:12px;
+      font-weight:800;
+      color:var(--muted);
+    }
+    .filter-field input,
+    .filter-field select{
+      border:1px solid #d6dae1;
+      border-radius:10px;
+      padding:9px 12px;
+      font-size:13px;
+      font-family:Arial,Helvetica,sans-serif;
+      background:#fff;
+      outline:none;
+      transition:border-color .18s;
+    }
+    .filter-field input:focus,
+    .filter-field select:focus{
+      border-color:#d40511;
+      box-shadow:0 0 0 3px rgba(212,5,17,.08);
+    }
+    .filter-actions{
+      display:flex;
+      gap:8px;
+      align-items:flex-end;
+      flex-shrink:0;
+    }
+
+    /* ── Coluna Chart ── */
+    .chart-wrap{
+      overflow-x:auto;
+      padding-bottom:4px;
+    }
+    .chart-columns{
+      display:flex;
+      align-items:flex-end;
+      gap:10px;
+      height:160px;
+      padding:0 4px 0;
+      min-width:max-content;
+    }
+    .chart-col{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:4px;
+      min-width:50px;
+      max-width:80px;
+      flex:1;
+    }
+    .chart-count{
+      font-size:11px;
+      font-weight:900;
+      color:var(--dhl-red);
+    }
+    .chart-bar{
+      width:100%;
+      background:linear-gradient(180deg,#d40511,#93000a);
+      border-radius:6px 6px 0 0;
+      min-height:4px;
+      transition:opacity .2s;
+    }
+    .chart-bar:hover{ opacity:.75; }
+    .chart-col-label{
+      font-size:10px;
+      font-weight:800;
+      color:var(--muted);
+      text-align:center;
+      word-break:break-word;
+      line-height:1.2;
+      max-width:70px;
+    }
+    .chart-empty{
+      font-size:13px;
+      color:var(--muted);
+      padding:20px 0;
+      text-align:center;
+      width:100%;
     }
 
     .row{
@@ -345,6 +466,11 @@
       color:#6d5400;
       border:1px solid #f0d66a;
     }
+    .btn-ghost{
+      background:#f1f5f9;
+      color:#475569;
+      border:1px solid #e2e8f0;
+    }
 
     .badge{
       display:inline-flex;
@@ -370,7 +496,7 @@
     table{
       width:100%;
       border-collapse:collapse;
-      min-width:1450px;
+      min-width:640px;
       background:#fff;
     }
     th, td{
@@ -405,6 +531,35 @@
       background:#fff;
     }
 
+    /* ── Modal ── */
+    .modal-overlay{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:2000; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open{ display:flex; }
+    .modal-box{ background:#fff; border-radius:24px; width:100%; max-width:660px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.22); overflow:hidden; animation:slideUp .22s ease; }
+    @keyframes slideUp{ from{ transform:translateY(24px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+    .modal-head{ background:linear-gradient(135deg,#d40511,#93000a); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+    .modal-head h3{ margin:0; font-size:18px; font-weight:900; }
+    .modal-head .modal-sub{ font-size:13px; opacity:.85; margin-top:3px; }
+    .modal-close{ background:rgba(255,255,255,.18); border:none; color:#fff; width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; transition:.15s; flex-shrink:0; }
+    .modal-close:hover{ background:rgba(255,255,255,.32); }
+    .modal-body{ padding:22px 24px; overflow-y:auto; flex:1; }
+    .modal-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+    .modal-item{ background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px 13px; }
+    .modal-item.full{ grid-column:1/-1; }
+    .modal-lbl{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
+    .modal-val{ font-size:13px; font-weight:700; color:var(--dhl-black); line-height:1.4; }
+    .modal-val.red{ color:var(--dhl-red); }
+    .modal-foot{ padding:14px 24px; border-top:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fafafa; flex-shrink:0; }
+    .info-fechamento{ background:#e8f7ee; border:1px solid #a7f3d0; border-radius:12px; padding:12px 14px; font-size:13px; color:#065f46; margin-bottom:12px; }
+    .fechar-field{ margin-bottom:12px; }
+    .fechar-field label{ display:block; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px; }
+    .fechar-field textarea,.fechar-field select,.fechar-field input[type=text]{ width:100%; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; background:#f8fafc; color:var(--text); outline:none; transition:.15s; resize:vertical; }
+    .fechar-field textarea:focus,.fechar-field select:focus,.fechar-field input:focus{ border-color:#d40511; background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+    .btn-green{ background:linear-gradient(180deg,#16a34a,#15803d); color:#fff; box-shadow:0 6px 14px rgba(22,163,74,.22); }
+    .btn-danger{ background:linear-gradient(180deg,#b91c1c,#7f1d1d); color:#fff; }
+    .btn-sm{ padding:8px 14px; font-size:12px; border-radius:10px; }
+    .btn-clear{ background:#f3f4f6; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 14px; cursor:pointer; font-size:12px; font-weight:800; transition:.15s; font-family:inherit; }
+    .btn-clear:hover{ background:#e5e7eb; }
+
     @media (max-width:1100px){
       .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
       .main{ margin-left:0; width:100%; }
@@ -412,14 +567,10 @@
     }
     @media (max-width:700px){
       .content{ padding:16px; }
-      .topbar{
-        padding:14px 16px;
-        height:auto;
-        align-items:flex-start;
-        flex-direction:column;
-      }
+      .topbar{ padding:14px 16px; height:auto; align-items:flex-start; flex-direction:column; }
       .topbar-left{ align-items:flex-start; }
       .hero h2{ font-size:24px; }
+      .modal-grid{ grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -434,22 +585,21 @@
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-badge">DHL SECURITY</span>
       <div class="brand-title">CCTV<br>CONTROL PANEL</div>
     </div>
 
     <nav class="main-nav">
       {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
-      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise'] -%}
-      {%- set sec_anc = request.endpoint in ['anc'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
 
       <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
-        <span class="nav-icon">📋</span><span>Ocorrências</span>
+        <span class="nav-icon">📋</span><span>Investigações</span>
         {% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
       {% if sec_oc %}
       <div class="sub-nav">
-        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle de Ocorrências</a>
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
         <a href="{{ url_for('dashboard') }}"   class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
       </div>
       {% endif %}
@@ -462,6 +612,7 @@
       <div class="sub-nav">
         <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
         <a href="{{ url_for('analises') }}"              class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
       </div>
       {% endif %}
 
@@ -473,27 +624,58 @@
       <div class="sub-nav">
         <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
         <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
       </div>
+      {% endif %}
+      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] else '' }}">
+        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<div class="sub-nav">
+        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
+        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      {% if session.get('user_perfil','') == 'ADMIN' %}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes'] -%}
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
+        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_adm %}<div class="sub-nav">
+        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+      </div>{% endif %}
       {% endif %}
     </nav>
 
-    <div class="sidebar-footer">
-      <a href="{{ url_for('logout') }}" class="nav-logout">⏻ &nbsp;Sair</a>
+    <div class="sp-wrap" id="spWrap">
+      <div class="sp-trigger" onclick="spToggle(event)">
+        <div class="sp-avatar">
+          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
+        </div>
+        <div class="sp-info">
+          <span class="sp-name">{{ session.get('user_nome','') }}</span>
+          <span class="sp-role">{{ session.get('user_site','') }}</span>
+        </div>
+        <span class="sp-dots">⋮</span>
+      </div>
+      <div class="sp-menu" id="spMenu">
+        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
+        <hr class="sp-sep">
+        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
+      </div>
     </div>
   </aside>
 
   <main class="main">
     <header class="topbar">
       <div class="topbar-left">
-        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-topbar">
+        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
         <div>
-          <h1>Controle de Ocorrência</h1>
-          <p>Cadastro, consulta e atualização de registros operacionais</p>
+          <h1>Gestão de Investigações</h1>
+          <p>Cadastro, consulta e gestão de investigações operacionais</p>
         </div>
       </div>
 
       <div>
-        <span class="top-chip">{{ session.get('user_nome', 'Usuário') }} | {{ session.get('user_perfil', '-') }}</span>
       </div>
     </header>
 
@@ -511,7 +693,7 @@
 
       <section class="hero">
         <h2>
-          Cadastro de Ocorrência
+          Gestão de Investigações
           {% if modo_edicao and registro_edicao %}
             <span style="
               display:inline-flex;
@@ -523,16 +705,17 @@
               font-size:14px;
               font-weight:800;
             ">
-              ID #{{ registro_edicao.id }}
+              Nº {{ registro_edicao.numero_site or registro_edicao.id }}
             </span>
           {% endif %}
         </h2>
 
         <p>
-          Utilize este formulário para registrar ocorrências com data, hora, natureza, local, envolvidos, prioridade, status e evidências fotográficas.
+          Utilize este formulário para registrar investigações com data, hora, natureza, local, envolvidos, prioridade, status e evidências fotográficas.
         </p>
       </section>
 
+      <!-- KPIs -->
       <section class="section">
         <div class="grid grid-4">
           <div class="card kpi">
@@ -554,15 +737,16 @@
         </div>
       </section>
 
+      <!-- Formulário -->
       <section class="section" id="nova-ocorrencia">
         <div class="card">
           <div class="section-title">
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <h3>{% if modo_edicao %}Editar ocorrência{% else %}Nova ocorrência{% endif %}</h3>
+              <h3>{% if modo_edicao %}Editar investigação{% else %}Nova investigação{% endif %}</h3>
 
               {% if modo_edicao and registro_edicao %}
                 <span class="badge badge-neutral" style="font-size:13px; padding:7px 12px;">
-                  ID #{{ registro_edicao.id }}
+                  Nº {{ registro_edicao.numero_site or registro_edicao.id }}
                 </span>
               {% endif %}
             </div>
@@ -598,9 +782,9 @@
 
             <div class="row">
               <div class="field">
-                <label>ID</label>
+                <label>Nº</label>
                 <input type="text"
-                       value="{% if modo_edicao %}{{ registro_edicao.id }}{% else %}Gerado automaticamente{% endif %}"
+                       value="{% if modo_edicao %}{{ registro_edicao.numero_site or registro_edicao.id }}{% else %}Gerado automaticamente{% endif %}"
                        readonly
                        class="readonly-field"
                        style="font-weight:900; font-size:16px; color:#d40511;">
@@ -656,7 +840,7 @@
 
             <div class="field">
               <label>Descrição</label>
-              <textarea name="descricao" required placeholder="Descreva a ocorrência...">{% if modo_edicao %}{{ registro_edicao.descricao }}{% endif %}</textarea>
+              <textarea name="descricao" required placeholder="Descreva a investigação...">{% if modo_edicao %}{{ registro_edicao.descricao }}{% endif %}</textarea>
             </div>
 
             <div style="height:12px"></div>
@@ -664,7 +848,23 @@
             <div class="row">
               <div class="field">
                 <label>Operador</label>
-                <input type="text" name="operador" value="{% if modo_edicao %}{{ registro_edicao.operador }}{% endif %}" required>
+                {% if usuarios_site %}
+                <select name="operador" required>
+                  <option value="">Selecione o operador…</option>
+                  {% for u in usuarios_site %}
+                  <option value="{{ u.nome }}"
+                    {% if modo_edicao and registro_edicao.operador == u.nome %}selected{% endif %}>
+                    {{ u.nome }}
+                  </option>
+                  {% endfor %}
+                  {# Se o valor salvo não estiver na lista (ex: usuário removido), mantém a opção #}
+                  {% if modo_edicao and registro_edicao.operador and registro_edicao.operador not in usuarios_site|map(attribute='nome')|list %}
+                  <option value="{{ registro_edicao.operador }}" selected>{{ registro_edicao.operador }}</option>
+                  {% endif %}
+                </select>
+                {% else %}
+                <input type="text" name="operador" value="{% if modo_edicao %}{{ registro_edicao.operador }}{% endif %}" placeholder="Nome do operador" required>
+                {% endif %}
               </div>
 
               <div class="field">
@@ -723,7 +923,7 @@
 
             <div class="actions">
               <button type="submit" class="btn btn-red">
-                {% if modo_edicao %}Salvar alterações{% else %}Salvar ocorrência{% endif %}
+                {% if modo_edicao %}Salvar alterações{% else %}Salvar investigação{% endif %}
               </button>
 
               {% if modo_edicao %}
@@ -734,131 +934,423 @@
         </div>
       </section>
 
-      <section class="section" id="historico">
-        <div class="card">
-          <div class="section-title">
-            <h3>Histórico de ocorrências</h3>
-            <span class="section-chip">Registros</span>
-          </div>
+      <!-- Filtros -->
+      <div class="filter-bar">
+        <div class="filter-bar-title">🔎 Filtrar Investigações</div>
+        <form method="GET" action="{{ url_for('ocorrencias') }}">
+          <div class="filter-row">
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nº</th>
-                  <th>Site</th>
-                  <th>Data / Hora</th>
-                  <th>Hora ocorrência</th>
-                  <th>Natureza</th>
-                  <th>Descrição</th>
-                  <th>Local</th>
-                  <th>Operador</th>
-                  <th>Sub-Package Number</th>
-                  <th>Envolvido</th>
-                  <th>Prioridade</th>
-                  <th>Status</th>
-                  <th>Foto</th>
-                  <th>Criado por</th>
-                  <th>Pós-investigação</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {% for r in registros %}
-                <tr>
-                  <td><strong style="color:#d40511;">{{ r.numero_site or r.id }}</strong></td>
-                  <td style="white-space:nowrap;">{{ r.site or '-' }}</td>
-                  <td>{{ r.data_hora }}</td>
-                  <td>{{ r.hora_ocorrencia }}</td>
-                  <td>{{ r.natureza }}</td>
-                  <td style="max-width:320px;">{{ r.descricao }}</td>
-                  <td>{{ r.local }}</td>
-                  <td>{{ r.operador }}</td>
-                  <td>{{ r.gc }}</td>
-                  <td>{{ r.envolvido or '-' }}</td>
-                  <td>
-                    {% if r.prioridade == 'ALTA' %}
-                      <span class="badge badge-danger">{{ r.prioridade }}</span>
-                    {% elif r.prioridade == 'MEDIA' %}
-                      <span class="badge badge-warning">{{ r.prioridade }}</span>
-                    {% else %}
-                      <span class="badge badge-neutral">{{ r.prioridade }}</span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if r.status == 'CONCLUIDO' %}
-                      <span class="badge badge-success">{{ r.status }}</span>
-                    {% elif r.status == 'EM ANDAMENTO' %}
-                      <span class="badge badge-warning">{{ r.status }}</span>
-                    {% else %}
-                      <span class="badge badge-danger">{{ r.status }}</span>
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if r.foto %}
-                      <div class="thumbs">
-                        <a href="{{ r.foto }}" target="_blank">
-                          <img src="{{ r.foto }}" alt="Foto">
-                        </a>
-                      </div>
-                    {% else %}
-                      -
-                    {% endif %}
-                  </td>
-                  <td>{{ r.criado_por or '-' }}</td>
-                  <td>
-                    <a href="{{ url_for('post_ocorrencia', ocorrencia_id=r.id) }}" class="btn btn-soft" style="padding:8px 12px;">Post</a>
-                  </td>
-                  <td>
-                    <div class="actions" style="margin-top:0;">
-                      <a href="{{ url_for('ocorrencias', editar=r.id) }}" class="btn btn-dark" style="padding:8px 12px;">Editar</a>
-
-                      {% if session.get('user_perfil') in ['ADMIN', 'USUARIO'] %}
-                      <form method="POST" action="{{ url_for('excluir_ocorrencia', ocorrencia_id=r.id) }}" onsubmit="return confirm('Deseja realmente excluir este registro?');">
-                        <button type="submit" class="btn btn-red" style="padding:8px 12px;">Excluir</button>
-                      </form>
-                      {% endif %}
-                    </div>
-                  </td>
-                </tr>
-                {% else %}
-                <tr>
-                  <td colspan="15">Nenhuma ocorrência encontrada.</td>
-                </tr>
+            <div class="filter-field">
+              <label>Operador</label>
+              <select name="operador">
+                <option value="">Todos os operadores</option>
+                {% for op in todos_operadores %}
+                  <option value="{{ op }}" {% if filtros.operador == op %}selected{% endif %}>{{ op }}</option>
                 {% endfor %}
-              </tbody>
-            </table>
-          </div>
+              </select>
+            </div>
 
+            {% if is_admin %}
+            <div class="filter-field">
+              <label>Site</label>
+              <select name="site_filtro">
+                <option value="">Todos os sites</option>
+                {% for s in todos_sites %}
+                  <option value="{{ s }}" {% if filtros.site_filtro == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            {% endif %}
+
+            <div class="filter-field">
+              <label>Data inicial</label>
+              <input type="date" name="data_inicial" value="{{ filtros.data_inicial or '' }}">
+            </div>
+
+            <div class="filter-field">
+              <label>Data final</label>
+              <input type="date" name="data_final" value="{{ filtros.data_final or '' }}">
+            </div>
+
+            <div class="filter-field">
+              <label>Status</label>
+              <select name="status">
+                <option value="">Todos</option>
+                <option value="PENDENTE"     {% if filtros.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+                <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>Em Andamento</option>
+                <option value="CONCLUIDO"    {% if filtros.status == 'CONCLUIDO' %}selected{% endif %}>Concluído</option>
+              </select>
+            </div>
+
+            <div class="filter-actions">
+              <button type="submit" class="btn btn-red" style="padding:9px 18px;">Filtrar</button>
+              <a href="{{ url_for('ocorrencias') }}" class="btn btn-ghost" style="padding:9px 14px;">Limpar</a>
+            </div>
+
+          </div>
+        </form>
+      </div>
+
+      <!-- Histórico -->
+      <section class="section" id="historico">
+        <div class="section-title">
+          <h3>Histórico de investigações</h3>
+          <span class="section-chip">{{ resumo.total }} registro{{ 's' if resumo.total != 1 else '' }}</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Data / Hora</th>
+                <th>Natureza</th>
+                <th>Operador</th>
+                <th>Prioridade</th>
+                <th>Status</th>
+                <th style="text-align:center;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in registros %}
+              <tr>
+                <td><strong style="color:#d40511; white-space:nowrap;">{{ r.codigo or r.id }}</strong></td>
+                <td style="white-space:nowrap;">{{ r.data_hora }}</td>
+                <td>{{ r.natureza }}</td>
+                <td>{{ r.operador }}</td>
+                <td>
+                  {% if r.prioridade == 'ALTA' %}
+                    <span class="badge badge-danger">{{ r.prioridade }}</span>
+                  {% elif r.prioridade == 'MEDIA' %}
+                    <span class="badge badge-warning">{{ r.prioridade }}</span>
+                  {% else %}
+                    <span class="badge badge-neutral">{{ r.prioridade }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if r.status in ['CONCLUIDO','INCONCLUSIVA'] %}
+                    <span class="badge badge-success">✔ {{ r.status }}</span>
+                  {% elif r.status == 'EM ANDAMENTO' %}
+                    <span class="badge badge-warning">⏳ {{ r.status }}</span>
+                  {% else %}
+                    <span class="badge badge-danger">{{ r.status or 'PENDENTE' }}</span>
+                  {% endif %}
+                </td>
+                <td style="text-align:center;">
+                  <button class="btn btn-dark btn-sm" onclick="abrirModal(this)"
+                    data-id="{{ r.id }}"
+                    data-codigo="{{ r.codigo or ('OC-' ~ r.id) }}"
+                    data-numero="{{ r.numero_site or r.id }}"
+                    data-site="{{ r.site or '-' }}"
+                    data-data="{{ r.data_hora or '-' }}"
+                    data-hora="{{ r.hora_ocorrencia or '-' }}"
+                    data-natureza="{{ r.natureza or '-' }}"
+                    data-local="{{ r.local or '-' }}"
+                    data-operador="{{ r.operador or '-' }}"
+                    data-gc="{{ r.gc or '-' }}"
+                    data-envolvido="{{ r.envolvido or '-' }}"
+                    data-prioridade="{{ r.prioridade or '-' }}"
+                    data-status="{{ r.status or 'PENDENTE' }}"
+                    data-criado_por="{{ r.criado_por or '-' }}"
+                    data-descricao="{{ (r.descricao or '')[:400] }}"
+                    data-resp_fechamento="{{ r.responsavel_fechamento or '' }}"
+                    data-tem_anexo1="{{ '1' if r.anexo_post else '0' }}"
+                    data-anexo1_nome="{{ r.anexo_post_nome or '' }}"
+                    data-tem_anexo2="{{ '1' if r.anexo_post_2 else '0' }}"
+                    data-anexo2_nome="{{ r.anexo_post_nome_2 or '' }}"
+                    data-tem_anexo3="{{ '1' if r.anexo_post_3 else '0' }}"
+                    data-anexo3_nome="{{ r.anexo_post_nome_3 or '' }}"
+                    data-url_post="{{ url_for('post_ocorrencia', ocorrencia_id=r.id) }}"
+                    data-url_editar="{{ url_for('ocorrencias', editar=r.id) }}"
+                    data-url_excluir="{{ url_for('excluir_ocorrencia', ocorrencia_id=r.id) }}"
+                    data-url_fechar="{{ url_for('post_ocorrencia', ocorrencia_id=r.id) }}"
+                    data-url_pdf="{{ url_for('exportar_ocorrencia_pdf', ocorrencia_id=r.id) }}"
+                    data-url_anexo1="{{ url_for('download_anexo_ocorrencia', ocorrencia_id=r.id, slot=1) }}"
+                    data-url_anexo2="{{ url_for('download_anexo_ocorrencia', ocorrencia_id=r.id, slot=2) }}"
+                    data-url_anexo3="{{ url_for('download_anexo_ocorrencia', ocorrencia_id=r.id, slot=3) }}"
+                  >Detalhes</button>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="7" style="text-align:center; padding:28px; color:var(--muted); font-weight:700;">
+                  Nenhuma investigação encontrada.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       </section>
 
-    </div>
+    </div><!-- fim content -->
+
     <footer class="app-footer">
       <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
       <span>DHL SUPPLY CHAIN — USO INTERNO</span>
     </footer>
   </main>
 </div>
+
+<!-- ═══════════════════════════════ MODAL ═══════════════════════════════ -->
+<div class="modal-overlay" id="modal" onclick="fecharModalFora(event)">
+  <div class="modal-box">
+
+    <div class="modal-head">
+      <div>
+        <h3>Detalhes da Investigação</h3>
+        <div class="modal-sub" id="m-sub"></div>
+      </div>
+      <button class="modal-close" onclick="fecharModal()">×</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Grade de informações -->
+      <div class="modal-grid">
+        <div class="modal-item">
+          <div class="modal-lbl">Nº</div>
+          <div class="modal-val red" id="m-numero"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Data / Hora</div>
+          <div class="modal-val" id="m-data"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Hora ocorrência</div>
+          <div class="modal-val" id="m-hora"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Site</div>
+          <div class="modal-val" id="m-site"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Natureza</div>
+          <div class="modal-val" id="m-natureza"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Local</div>
+          <div class="modal-val" id="m-local"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Operador</div>
+          <div class="modal-val" id="m-operador"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Sub-Package Nº</div>
+          <div class="modal-val" id="m-gc"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Envolvido</div>
+          <div class="modal-val" id="m-envolvido"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Prioridade</div>
+          <div class="modal-val" id="m-prioridade"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Status</div>
+          <div class="modal-val" id="m-status"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Criado por</div>
+          <div class="modal-val" id="m-criado_por"></div>
+        </div>
+        <div class="modal-item full">
+          <div class="modal-lbl">Descrição</div>
+          <div class="modal-val" id="m-descricao" style="font-weight:500; color:#374151; white-space:pre-wrap;"></div>
+        </div>
+      </div>
+
+      <!-- Info de encerramento (já encerrada) -->
+      <div id="m-info-encerramento" class="info-fechamento" style="display:none;">
+        <strong>✔ Investigação encerrada</strong><br>
+        <small id="m-encerrado-por" style="opacity:.75;"></small>
+        <div id="m-anexos-wrap" style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+      </div>
+
+      <!-- Formulário de encerramento (ainda aberta) -->
+      <div id="m-form-fechar-wrap" style="display:none;">
+        <div style="font-size:13px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:10px; border-top:1px solid var(--line); padding-top:14px;">
+          🔒 Encerrar investigação
+        </div>
+        <form id="m-form-fechar" method="POST" action="" enctype="multipart/form-data">
+          <div class="fechar-field">
+            <label>Conclusão *</label>
+            <select name="status_post" required>
+              <option value="">Selecione</option>
+              <option value="ANALISE INVESTIGATIVA">Análise investigativa</option>
+              <option value="ANC">ANC</option>
+              <option value="LEVANTAMENTO DE IMAGENS">Levantamento de imagens</option>
+              <option value="INCONCLUSIVA">Inconclusivo</option>
+            </select>
+          </div>
+          <div class="fechar-field">
+            <label>Responsável pelo encerramento *</label>
+            <input type="text" name="responsavel_fechamento" id="m-resp-input" placeholder="Nome do responsável" required>
+          </div>
+          <!-- 3 slots de anexo -->
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:12px;">
+            <div style="border:1px dashed #d6dae1; border-radius:10px; padding:10px; background:#fafafa;">
+              <div style="font-size:11px; font-weight:800; color:var(--muted); margin-bottom:6px;">Anexo 1</div>
+              <input type="file" name="anexo_post" style="width:100%; font-size:12px;">
+            </div>
+            <div style="border:1px dashed #d6dae1; border-radius:10px; padding:10px; background:#fafafa;">
+              <div style="font-size:11px; font-weight:800; color:var(--muted); margin-bottom:6px;">Anexo 2</div>
+              <input type="file" name="anexo_post_2" style="width:100%; font-size:12px;">
+            </div>
+            <div style="border:1px dashed #d6dae1; border-radius:10px; padding:10px; background:#fafafa;">
+              <div style="font-size:11px; font-weight:800; color:var(--muted); margin-bottom:6px;">Anexo 3</div>
+              <input type="file" name="anexo_post_3" style="width:100%; font-size:12px;">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-green" style="width:100%; border-radius:12px; padding:12px; font-size:14px;">✔ Confirmar encerramento</button>
+        </form>
+      </div>
+
+    </div><!-- fim modal-body -->
+
+    <div class="modal-foot">
+      <a id="m-btn-post" href="#" class="btn btn-dark btn-sm">📋 Ir para Post</a>
+      <a id="m-btn-pdf" href="#" class="btn btn-sm" style="background:#fff4db; color:#7a5a00; border:1px solid #f0d66a;" title="Baixar PDF da ocorrência">📄 Exportar PDF</a>
+      {% if is_admin %}
+      <a id="m-btn-editar" href="#" class="btn btn-sm" style="background:#eef1f4; color:#374151; border:1px solid #d1d5db;">✏ Editar</a>
+      <form id="m-form-excluir" method="POST" action="" onsubmit="return confirm('Deseja realmente excluir esta investigação? Esta ação não pode ser desfeita.');" style="margin:0;">
+        <button type="submit" class="btn btn-danger btn-sm">🗑 Excluir</button>
+      </form>
+      {% endif %}
+    </div>
+
+  </div><!-- fim modal-box -->
+</div><!-- fim modal-overlay -->
+
+<script>
+function abrirModal(btn) {
+  const d = btn.dataset;
+
+  // Cabeçalho
+  document.getElementById('m-sub').textContent = d.site + ' — ' + d.data;
+
+  // Grade info
+  document.getElementById('m-numero').textContent    = d.numero;
+  document.getElementById('m-data').textContent      = d.data;
+  document.getElementById('m-hora').textContent      = d.hora;
+  document.getElementById('m-site').textContent      = d.site;
+  document.getElementById('m-natureza').textContent  = d.natureza;
+  document.getElementById('m-local').textContent     = d.local;
+  document.getElementById('m-operador').textContent  = d.operador;
+  document.getElementById('m-gc').textContent        = d.gc;
+  document.getElementById('m-envolvido').textContent = d.envolvido;
+  document.getElementById('m-prioridade').textContent= d.prioridade;
+  document.getElementById('m-status').textContent    = d.status;
+  document.getElementById('m-criado_por').textContent= d.criado_por;
+  document.getElementById('m-descricao').textContent = d.descricao || '—';
+
+  // Botões do footer
+  document.getElementById('m-btn-post').href = d.url_post;
+  var btnPdf = document.getElementById('m-btn-pdf');
+  btnPdf.href = d.url_pdf;
+  var _site     = (d.site     || 'DHL').replace(/[\/\\:*?"<>|]/g, '');
+  var _natureza = (d.natureza || 'Ocorrencia').replace(/[\/\\:*?"<>|]/g, '');
+  var _codigo   = (d.codigo   || ('OC-' + d.id)).replace(/[\/\\:*?"<>|]/g, '');
+  btnPdf.setAttribute('data-filename', _codigo + ' - ' + _natureza + ' - ' + _site + '.pdf');
+  const btnEditar = document.getElementById('m-btn-editar');
+  if (btnEditar) btnEditar.href = d.url_editar;
+  const formExcluir = document.getElementById('m-form-excluir');
+  if (formExcluir) formExcluir.action = d.url_excluir;
+
+  // Encerramento
+  const statusFechado = ['CONCLUIDO','INCONCLUSIVA'].includes(d.status.trim().toUpperCase());
+  const infoEnc  = document.getElementById('m-info-encerramento');
+  const formWrap = document.getElementById('m-form-fechar-wrap');
+  const formFech = document.getElementById('m-form-fechar');
+
+  if (statusFechado) {
+    infoEnc.style.display  = '';
+    formWrap.style.display = 'none';
+    document.getElementById('m-encerrado-por').textContent =
+      'Responsável: ' + (d.resp_fechamento || '—');
+
+    // Links de anexo
+    const anexosWrap = document.getElementById('m-anexos-wrap');
+    anexosWrap.innerHTML = '';
+    [
+      {tem: d.tem_anexo1, nome: d.anexo1_nome || 'Anexo 1', url: d.url_anexo1},
+      {tem: d.tem_anexo2, nome: d.anexo2_nome || 'Anexo 2', url: d.url_anexo2},
+      {tem: d.tem_anexo3, nome: d.anexo3_nome || 'Anexo 3', url: d.url_anexo3},
+    ].forEach(function(a) {
+      if (a.tem === '1') {
+        const link = document.createElement('a');
+        link.href = a.url;
+        link.textContent = '📎 ' + a.nome;
+        link.className = 'btn btn-dark btn-sm';
+        link.style.fontSize = '11px';
+        anexosWrap.appendChild(link);
+      }
+    });
+  } else {
+    infoEnc.style.display  = 'none';
+    formWrap.style.display = '';
+    if (formFech) formFech.action = d.url_fechar;
+    const respInput = document.getElementById('m-resp-input');
+    if (respInput) respInput.value = d.resp_fechamento || '';
+  }
+
+  document.getElementById('modal').classList.add('open');
+}
+
+function fecharModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+function fecharModalFora(e) {
+  if (e.target === document.getElementById('modal')) fecharModal();
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') fecharModal();
+});
+</script>
+
 <script>
 (function(){
-  var ov=document.getElementById('loading-overlay');
-  function show(){ov.classList.add('show');}
+  var ov = document.getElementById('loading-overlay');
+  function show(){ ov.classList.add('show'); }
   document.querySelectorAll('form').forEach(function(f){
-    f.addEventListener('submit',function(){show();});
+    f.addEventListener('submit', function(){ show(); });
   });
   document.querySelectorAll('a[href]').forEach(function(a){
-    var h=a.getAttribute('href')||'';
-    if(h.startsWith('#')||h.startsWith('javascript:')) return;
-    if(a.target==='_blank') return;
-    if(h.indexOf('exportar')!==-1||h.indexOf('download')!==-1) return;
-    a.addEventListener('click',function(e){
-      if(e.ctrlKey||e.metaKey||e.shiftKey) return;
+    var h = a.getAttribute('href') || '';
+    if (h.startsWith('#') || h.startsWith('javascript:')) return;
+    if (a.target === '_blank') return;
+    if (h.indexOf('exportar') !== -1 || h.indexOf('download') !== -1 || h.indexOf('anexo') !== -1) return;
+    a.addEventListener('click', function(e){
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
       show();
     });
   });
 })();
 </script>
+<script>
+function spToggle(e){ e.stopPropagation(); document.getElementById('spMenu').classList.toggle('open'); }
+document.addEventListener('click', function(){ var m=document.getElementById('spMenu'); if(m) m.classList.remove('open'); });
+</script>
+
+<script>
+(function(){
+  var _ov = document.getElementById('loading-overlay');
+  if(!_ov) return;
+  document.addEventListener('click', function(e){
+    var el = e.target;
+    while(el && el.tagName !== 'A') el = el.parentElement;
+    if(!el) return;
+    var href = el.getAttribute('href') || '';
+    if(!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+    if(href.indexOf('exportar') !== -1 || href.indexOf('download') !== -1 || href.indexOf('anexo') !== -1) return;
+    _ov.classList.add('show');
+  }, true);
+})();
+</script>
+{% include "_translate.html" %}
 </body>
 </html>

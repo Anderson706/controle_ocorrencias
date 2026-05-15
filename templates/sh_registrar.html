@@ -1,0 +1,791 @@
+﻿<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Shift Handover | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
+      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
+      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+      --sidebar:#161a1d; --sidebar-2:#20262b;
+      --shadow:0 10px 30px rgba(15,23,42,.08); --radius:18px;
+      --ok-bg:#e8f7ee; --ok-text:#146c43;
+      --warn-bg:#fff4db; --warn-text:#9a6700;
+      --danger-bg:#fde8ea; --danger-text:#b42318;
+      --neutral-bg:#eef1f4; --neutral-text:#425466;
+      --close-green:#15803d;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+    a{ text-decoration:none; }
+
+    /* ── Loading ── */
+    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+    #loading-overlay.show{ display:flex; }
+    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; }
+
+    /* ── Sidebar ── */
+    .app-shell{ display:flex; min-height:100vh; width:100%; }
+    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+    .nav-icon{ font-size:15px; flex-shrink:0; }
+    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .sub-link.cur{ color:#ffcc00; font-weight:800; }
+    /* Profile widget */
+    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
+    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
+    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
+    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
+    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .sp-info{ flex:1; min-width:0; }
+    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
+    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
+    .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
+    .sp-menu.open{ display:block; animation:spIn .15s ease; }
+    @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
+    .sp-item:hover{ background:#f3f4f6; }
+    .sp-item-red{ color:#d40511; }
+    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
+
+    /* ── Main ── */
+    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
+    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+    .topbar{ height:74px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+    .topbar-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .top-chip{ display:inline-flex; align-items:center; padding:7px 13px; border-radius:999px; font-size:12px; font-weight:800; border:1px solid #efd56f; background:#fff8d8; color:#7a5a00; white-space:nowrap; }
+
+    /* ── Content ── */
+    .content{ padding:24px; }
+    .flash-wrap{ margin-bottom:16px; }
+    .flash{ margin-bottom:10px; padding:12px 14px; border-radius:12px; font-weight:700; border:1px solid transparent; }
+    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+    /* ── Cards / Grid ── */
+    .grid{ display:grid; gap:16px; }
+    .grid-4{ grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+    .grid-2{ grid-template-columns:repeat(auto-fit,minmax(480px,1fr)); }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); min-width:0; }
+    .kpi{ min-height:110px; display:flex; flex-direction:column; justify-content:center; gap:6px; border-left:6px solid var(--dhl-yellow); position:relative; overflow:hidden; }
+    .kpi::after{ content:""; position:absolute; right:-18px; top:-18px; width:80px; height:80px; border-radius:50%; background:rgba(255,204,0,.15); }
+    .kpi .label{ color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.6px; font-weight:800; position:relative; z-index:1; }
+    .kpi .value{ font-size:32px; font-weight:900; color:var(--dhl-red); line-height:1; position:relative; z-index:1; }
+    .section{ margin-bottom:22px; }
+    .section-title{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+    .section-title h3{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black); }
+    .section-chip{ background:#fff8db; color:#7a5a00; border:1px solid #f5d66f; border-radius:999px; padding:6px 12px; font-size:11px; font-weight:800; text-transform:uppercase; }
+
+    /* ── Form ── */
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+    .field{ display:flex; flex-direction:column; gap:6px; flex:1; min-width:200px; }
+    .field label{ font-size:13px; color:var(--muted); font-weight:800; }
+    .field input,.field select,.field textarea{ width:100%; border:1px solid #d6dae1; background:#fff; border-radius:12px; padding:12px 14px; font-size:14px; outline:none; font-family:Arial,Helvetica,sans-serif; transition:border-color .18s; }
+    .field input:focus,.field select:focus,.field textarea:focus{ border-color:#d40511; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+    .field textarea{ min-height:100px; resize:vertical; }
+    .readonly-field{ background:#f3f4f6 !important; color:#6b7280; font-weight:700; }
+    .small{ font-size:12px; color:var(--muted); line-height:1.45; }
+    .spacer{ height:12px; }
+
+    /* ── Buttons ── */
+    .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+    .btn{ border:none; border-radius:12px; padding:11px 16px; cursor:pointer; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:.18s; font-size:13px; }
+    .btn:hover{ transform:translateY(-1px); }
+    .btn-sm{ padding:6px 12px; font-size:12px; border-radius:8px; }
+    .btn-primary{ background:linear-gradient(180deg,#ffcc00,#f1be00); color:#2b2b2b; }
+    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; box-shadow:0 6px 16px rgba(212,5,17,.2); }
+    .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
+    .btn-soft{ background:#fff6cf; color:#6d5400; border:1px solid #f0d66a; }
+    .btn-green{ background:linear-gradient(180deg,#15803d,#166534); color:#fff; }
+    .btn-orange{ background:linear-gradient(180deg,#f59e0b,#d97706); color:#fff; }
+
+    /* ── Signature ── */
+    .signature-grid{ display:grid; grid-template-columns:1fr; gap:16px; }
+    .signature-card{ border:1px solid #ead37a; background:linear-gradient(180deg,#fffdf5,#fff8db); border-radius:16px; padding:14px; }
+    .signature-card h4{ margin:0 0 10px; font-size:14px; color:#5f4800; font-weight:900; }
+    .signature-pad{ width:100%; max-width:100%; height:160px; background:#fff; border:2px dashed #d6b64c; border-radius:12px; display:block; cursor:crosshair; touch-action:none; }
+    .signature-toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+    .signature-preview{ margin-top:10px; padding:10px; border:1px solid #e5e7eb; border-radius:12px; background:#fff; }
+    .signature-preview img{ max-width:100%; max-height:110px; display:block; margin:0 auto; }
+    .assinatura-line{ margin-top:14px; height:1px; background:#5f6368; }
+    .assinatura-label{ margin-top:6px; font-size:12px; color:#6b7280; font-weight:700; }
+
+    /* ── Upload ── */
+    .upload-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .upload-item{ border:1px solid #e5e7eb; border-radius:12px; padding:10px; background:#fff; }
+    .upload-item label{ display:block; margin-bottom:6px; font-size:12px; color:#6b7280; font-weight:800; }
+    .upload-item input[type="file"]{ width:100%; border:1px solid #d6dae1; border-radius:10px; padding:8px; background:#fff; }
+
+    /* ── Table ── */
+    .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:16px; background:#fff; }
+    table{ width:100%; border-collapse:collapse; min-width:900px; background:#fff; }
+    th,td{ padding:10px 12px; border-bottom:1px solid #edf0f4; text-align:left; vertical-align:middle; font-size:13px; }
+    thead th{ background:linear-gradient(180deg,#fff8db,#ffefab); color:#4b3c00; font-weight:800; white-space:nowrap; position:sticky; top:0; z-index:2; }
+    tbody tr:hover{ background:#fffdf5; }
+    .row-finalizado{ background:#f5fbf7; }
+    .badge{ display:inline-block; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; border:1px solid transparent; }
+    .ok{ background:var(--ok-bg); color:var(--ok-text); border-color:#b7e1c6; }
+    .warnb{ background:var(--warn-bg); color:var(--warn-text); border-color:#f4d58d; }
+    .dangerb{ background:var(--danger-bg); color:var(--danger-text); border-color:#f3c2c8; }
+    .mutedb{ background:var(--neutral-bg); color:var(--neutral-text); border-color:#d8dde6; }
+    .table-actions{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; justify-content:flex-end; }
+    .td-texto{ white-space:pre-wrap; word-wrap:break-word; }
+    .inline-form{ display:inline; }
+
+    /* ── Info grid ── */
+    .info-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 16px; margin-top:10px; }
+    .info-box{ background:#fff; border:1px solid #eceff3; border-radius:10px; padding:10px 12px; }
+    .info-box strong{ display:block; margin-bottom:4px; font-size:12px; color:var(--muted); }
+    .id-chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:#fff; border:1px solid #f3d56c; border-radius:999px; font-size:12px; font-weight:800; color:#8a6200; }
+    .result-panel{ border:1px solid #f3d56c; background:linear-gradient(180deg,#fffdf5,#fff8db); }
+    .preview-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px; }
+    .preview-item{ border:1px solid #e5e7eb; border-radius:10px; background:#fff; padding:8px; }
+    .preview-item img{ width:100%; height:130px; object-fit:cover; border-radius:8px; display:block; }
+    .assinatura-box{ margin-top:14px; padding-top:14px; border-top:1px dashed #d6b64c; }
+
+    /* ── Modal ── */
+    .custom-modal-overlay{ position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.6); z-index:999999; display:none; align-items:center; justify-content:center; padding:20px; }
+    .custom-modal-overlay.active{ display:flex; }
+    .custom-modal-box{ background:var(--bg); width:100%; max-width:860px; max-height:90vh; border-radius:var(--radius); display:flex; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.3); }
+    .custom-modal-header{ background:#fff; padding:16px 24px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+    .custom-modal-body{ padding:24px; overflow-y:auto; flex:1; }
+    .custom-modal-footer{ background:#fff; padding:16px 24px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; }
+  </style>
+</head>
+<body>
+<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise','editar_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
+      {%- set sec_sh  = request.endpoint in ['sh_index','sh_dashboard','sh_assinar','sh_editar'] -%}
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}<div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
+        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}<div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise','editar_analise'] else '' }}">Controle de Análises</a>
+        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}<div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if sec_sh else '' }}">
+        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if sec_sh %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_sh %}<div class="sub-nav">
+        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
+        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      {% if session.get('user_perfil','') == 'ADMIN' %}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes'] -%}
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
+        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_adm %}<div class="sub-nav">
+        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+      </div>{% endif %}
+      {% endif %}
+    </nav>
+    <div class="sp-wrap" id="spWrap">
+      <div class="sp-trigger" onclick="spToggle(event)">
+        <div class="sp-avatar">
+          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
+        </div>
+        <div class="sp-info">
+          <span class="sp-name">{{ session.get('user_nome','') }}</span>
+          <span class="sp-role">{{ session.get('user_site','') }}</span>
+        </div>
+        <span class="sp-dots">⋮</span>
+      </div>
+      <div class="sp-menu" id="spMenu">
+        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
+        <hr class="sp-sep">
+        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
+        <div>
+          <h1>Shift Handover</h1>
+          <p>Registro e controle de passagem de turno operacional</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+      </div>
+    </header>
+
+    <div class="content">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}<div class="flash-wrap">
+          {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+        </div>{% endif %}
+      {% endwith %}
+
+      <!-- KPIs -->
+      <section class="section">
+        <div class="grid grid-4">
+          <div class="card kpi"><div class="label">Ocorrências hoje</div><div class="value">{{ resumo.ocorrencias_dia }}</div></div>
+          <div class="card kpi"><div class="label">Pendências em aberto</div><div class="value">{{ resumo.pendencias_abertas }}</div></div>
+          <div class="card kpi"><div class="label">Turnos registrados hoje</div><div class="value">{{ resumo.turnos_registrados }}</div></div>
+          <div class="card kpi"><div class="label">Ocorrências críticas</div><div class="value">{{ resumo.ocorrencias_criticas }}</div></div>
+        </div>
+      </section>
+
+      <!-- Form + Última ocorrência -->
+      <section class="section">
+        <div class="grid grid-2">
+
+          <!-- FORM -->
+          <div class="card">
+            <div class="section-title">
+              <h3>Nova passagem de turno</h3>
+              <span class="section-chip">Registro</span>
+            </div>
+            <form method="POST" action="{{ url_for('sh_salvar') }}" enctype="multipart/form-data">
+              <div class="row">
+                <div class="field">
+                  <label>ID previsto</label>
+                  <input type="text" value="#{{ proximo_id_previsto }}" readonly class="readonly-field">
+                </div>
+              </div><div class="spacer"></div>
+              <div class="row">
+                <div class="field">
+                  <label>Data</label>
+                  <input type="date" name="data_ocorrencia" value="{{ hoje }}" required>
+                </div>
+                <div class="field">
+                  <label>Data/Hora</label>
+                  <input type="datetime-local" name="data_hora_registro" required>
+                </div>
+                {% if session.get('user_perfil') in ('ADMIN','Admin','admin') %}
+                <div class="field">
+                  <label>Site</label>
+                  <select name="site" required>
+                    <option value="">Selecione</option>
+                    {% for s in sites %}<option value="{{ s.nome_site }}">{{ s.nome_site }}</option>{% endfor %}
+                  </select>
+                </div>
+                {% else %}
+                <div class="field">
+                  <label>Site</label>
+                  <input type="text" value="{{ session.get('user_site','') }}" readonly class="readonly-field">
+                  <input type="hidden" name="site" value="{{ session.get('user_site','') }}">
+                </div>
+                {% endif %}
+              </div><div class="spacer"></div>
+              <div class="row">
+                <div class="field">
+                  <label>Turno</label>
+                  <select name="turno" required>
+                    <option value="">Selecione</option>
+                    <option value="TURNO A">1° Turno</option>
+                    <option value="TURNO B">2° Turno</option>
+                    <option value="TURNO C">3° Turno</option>
+                    <option value="ADM">ADM</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Setor / Área</label>
+                  <input type="text" name="setor" placeholder="Ex.: PORTARIA" required>
+                </div>
+                <div class="field">
+                  <label>Tipo</label>
+                  <select name="tipo_ocorrencia" required>
+                    <option value="">Selecione</option>
+                    <option value="ROTINA">ROTINA</option>
+                    <option value="DESVIO DE PROCESSO">DESVIO DE PROCESSO</option>
+                    <option value="EXTRAVIO">EXTRAVIO</option>
+                    <option value="INCIDENTE">INCIDENTE</option>
+                    <option value="MANUTENCAO">MANUTENÇÃO</option>
+                    <option value="PENDENCIA">PENDÊNCIA</option>
+                    <option value="INFORMATIVO">INFORMATIVO</option>
+                  </select>
+                </div>
+              </div><div class="spacer"></div>
+              <div class="row">
+                <div class="field">
+                  <label>Prioridade</label>
+                  <select name="prioridade" required>
+                    <option value="">Selecione</option>
+                    <option value="BAIXA">BAIXA</option>
+                    <option value="MEDIA">MÉDIA</option>
+                    <option value="ALTA">ALTA</option>
+                    <option value="CRITICA">CRÍTICA</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Status</label>
+                  <select name="status" required>
+                    <option value="">Selecione</option>
+                    <option value="EM ABERTO">EM ABERTO</option>
+                    <option value="EM ACOMPANHAMENTO">EM ACOMPANHAMENTO</option>
+                    <option value="FINALIZADO">FINALIZADO</option>
+                  </select>
+                </div>
+              </div><div class="spacer"></div>
+              <div class="field">
+                <label>Responsável que está saindo (você)</label>
+                <input type="text" value="{{ session.get('user_nome','') }}" readonly class="readonly-field">
+              </div><div class="spacer"></div>
+              <div class="field">
+                <label>Responsável que está assumindo</label>
+                <select name="responsavel_entrada" required>
+                  <option value="">Selecione quem vai receber o turno...</option>
+                  {% for u in usuarios_mesmo_site %}
+                  <option value="{{ u.nome }}">{{ u.nome }}</option>
+                  {% endfor %}
+                </select>
+                <div class="small">Usuários ativos do seu site. Eles assinarão após o login deles.</div>
+              </div><div class="spacer"></div>
+              <div class="field">
+                <label>Efetivo</label>
+                <textarea name="efetivo" required></textarea>
+              </div><div class="spacer"></div>
+              <div class="field">
+                <label>Descrição</label>
+                <textarea name="descricao" required></textarea>
+              </div><div class="spacer"></div>
+              <div class="field">
+                <label>Ações tomadas</label>
+                <textarea name="acoes_tomadas"></textarea>
+              </div><div class="spacer"></div>
+              <div class="field">
+                <label>Pendências</label>
+                <textarea name="pendencias"></textarea>
+              </div><div class="spacer"></div>
+              <div class="field">
+                <label>Sua assinatura (obrigatória)</label>
+                <div class="signature-card">
+                  <h4>Assinatura — Responsável saída</h4>
+                  <canvas id="sig-pad" class="signature-pad"></canvas>
+                  <input type="hidden" name="assinatura_saida" id="assinatura_saida" required>
+                  <div class="signature-toolbar">
+                    <button type="button" class="btn btn-dark btn-sm" onclick="limparSig()">Limpar</button>
+                  </div>
+                  <div class="small">Assine com o mouse ou toque na tela.</div>
+                </div>
+              </div><div class="spacer"></div>
+              <div class="field">
+                <label>Evidências (até 4 imagens)</label>
+                <div class="upload-grid">
+                  <div class="upload-item"><label>Imagem 1</label><input type="file" name="imagem_1" accept="image/*"></div>
+                  <div class="upload-item"><label>Imagem 2</label><input type="file" name="imagem_2" accept="image/*"></div>
+                  <div class="upload-item"><label>Imagem 3</label><input type="file" name="imagem_3" accept="image/*"></div>
+                  <div class="upload-item"><label>Imagem 4</label><input type="file" name="imagem_4" accept="image/*"></div>
+                </div>
+              </div>
+              <div class="actions">
+                <button type="submit" class="btn btn-red" onclick="return validarSig()">Salvar passagem</button>
+                <a href="{{ url_for('sh_excel') }}" class="btn btn-dark">Exportar Excel</a>
+              </div>
+            </form>
+          </div>
+
+          <!-- ÚLTIMA OCORRÊNCIA -->
+          <div class="card">
+            <div class="section-title">
+              <h3>Última passagem registrada</h3>
+              <span class="section-chip">Resumo</span>
+            </div>
+            {% if ultima_ocorrencia %}
+            <div class="card result-panel" style="padding:14px;">
+              <div style="margin-bottom:8px;"><span class="id-chip">ID #{{ ultima_ocorrencia.id }}</span></div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                <a href="{{ url_for('sh_pdf', oc_id=ultima_ocorrencia.id) }}" class="btn btn-dark btn-sm" data-filename="passagem-{{ ultima_ocorrencia.id }}.pdf">PDF</a>
+                {% if not ultima_ocorrencia.assinatura_entrada and ultima_ocorrencia.responsavel_entrada == session.get('user_nome') %}
+                  <a href="{{ url_for('sh_assinar', oc_id=ultima_ocorrencia.id) }}" class="btn btn-primary btn-sm">Assinar Recebimento</a>
+                {% endif %}
+                {% if not ultima_ocorrencia.assinatura_entrada and ultima_ocorrencia.criado_por == session.get('user_nome') %}
+                  <a href="{{ url_for('sh_editar', oc_id=ultima_ocorrencia.id) }}" class="btn btn-orange btn-sm">Editar</a>
+                {% endif %}
+                {% if ultima_ocorrencia.status != 'FINALIZADO' and ultima_ocorrencia.assinatura_entrada and ultima_ocorrencia.responsavel_entrada == session.get('user_nome') %}
+                  <form method="POST" action="{{ url_for('sh_fechar', oc_id=ultima_ocorrencia.id) }}" class="inline-form" onsubmit="return confirm('Finalizar esta ocorrência?');">
+                    <button type="submit" class="btn btn-green btn-sm">Finalizar</button>
+                  </form>
+                {% endif %}
+              </div>
+              <div class="info-grid">
+                <div class="info-box"><strong>Data/Hora</strong>{{ ultima_ocorrencia.data_hora_registro }}</div>
+                <div class="info-box"><strong>Site</strong>{{ ultima_ocorrencia.site }}</div>
+                <div class="info-box"><strong>Turno</strong>{{ ultima_ocorrencia.turno }}</div>
+                <div class="info-box"><strong>Setor</strong>{{ ultima_ocorrencia.setor }}</div>
+                <div class="info-box"><strong>Tipo</strong>{{ ultima_ocorrencia.tipo_ocorrencia }}</div>
+                <div class="info-box"><strong>Prioridade</strong>{{ ultima_ocorrencia.prioridade }}</div>
+                <div class="info-box"><strong>Status</strong>{{ ultima_ocorrencia.status }}</div>
+                <div class="info-box"><strong>Resp. saída</strong>{{ ultima_ocorrencia.responsavel_saida }}</div>
+                <div class="info-box"><strong>Resp. entrada</strong>{{ ultima_ocorrencia.responsavel_entrada }}</div>
+              </div>
+              <div style="margin-top:12px;"><strong>Efetivo:</strong></div>
+              <div class="td-texto">{{ ultima_ocorrencia.efetivo or '-' }}</div>
+              <div style="margin-top:10px;"><strong>Descrição:</strong></div>
+              <div class="td-texto">{{ ultima_ocorrencia.descricao }}</div>
+              <div style="margin-top:10px;"><strong>Ações tomadas:</strong></div>
+              <div class="td-texto">{{ ultima_ocorrencia.acoes_tomadas or '-' }}</div>
+              <div style="margin-top:10px;"><strong>Pendências:</strong></div>
+              <div class="td-texto">{{ ultima_ocorrencia.pendencias or '-' }}</div>
+
+              <!-- Assinaturas -->
+              <div class="assinatura-box">
+                <div style="margin-bottom:10px;"><strong>Assinaturas:</strong></div>
+                <div class="signature-grid" style="grid-template-columns:repeat(2,1fr);">
+                  <div class="signature-card">
+                    <h4>Responsável saída</h4>
+                    {% if ultima_ocorrencia.assinatura_saida %}
+                      <div class="signature-preview"><img src="{{ ultima_ocorrencia.assinatura_saida }}" alt=""></div>
+                    {% else %}<div>-</div>{% endif %}
+                    <div class="assinatura-line"></div>
+                    <div class="assinatura-label">{{ ultima_ocorrencia.responsavel_saida }}</div>
+                  </div>
+                  <div class="signature-card">
+                    <h4>Responsável entrada</h4>
+                    {% if ultima_ocorrencia.assinatura_entrada %}
+                      <div class="signature-preview"><img src="{{ ultima_ocorrencia.assinatura_entrada }}" alt=""></div>
+                    {% else %}
+                      <div style="color:var(--dhl-red);font-weight:bold;margin:16px 0;text-align:center;">Aguardando assinatura...</div>
+                    {% endif %}
+                    <div class="assinatura-line"></div>
+                    <div class="assinatura-label">{{ ultima_ocorrencia.responsavel_entrada }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Imagens -->
+              {% if ultima_ocorrencia.imagem_1 or ultima_ocorrencia.imagem_2 or ultima_ocorrencia.imagem_3 or ultima_ocorrencia.imagem_4 %}
+              <div class="assinatura-box">
+                <div style="margin-bottom:8px;"><strong>Imagens:</strong></div>
+                <div class="preview-grid">
+                  {% if ultima_ocorrencia.imagem_1 %}<div class="preview-item"><img src="{{ ultima_ocorrencia.imagem_1 }}"></div>{% endif %}
+                  {% if ultima_ocorrencia.imagem_2 %}<div class="preview-item"><img src="{{ ultima_ocorrencia.imagem_2 }}"></div>{% endif %}
+                  {% if ultima_ocorrencia.imagem_3 %}<div class="preview-item"><img src="{{ ultima_ocorrencia.imagem_3 }}"></div>{% endif %}
+                  {% if ultima_ocorrencia.imagem_4 %}<div class="preview-item"><img src="{{ ultima_ocorrencia.imagem_4 }}"></div>{% endif %}
+                </div>
+              </div>
+              {% endif %}
+            </div>
+            {% else %}
+            <div class="small">Nenhuma passagem cadastrada ainda.</div>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      <!-- Filtros -->
+      <section class="section">
+        <div class="card">
+          <div class="section-title"><h3>Filtros</h3><span class="section-chip">Consulta</span></div>
+          <form method="GET" action="{{ url_for('sh_index') }}">
+            <div class="row">
+              <div class="field"><label>Data inicial</label><input type="date" name="data_inicial" value="{{ filtros['data_inicial'] }}"></div>
+              <div class="field"><label>Data final</label><input type="date" name="data_final" value="{{ filtros['data_final'] }}"></div>
+              <div class="field">
+                <label>Turno</label>
+                <select name="turno">
+                  <option value="">Todos</option>
+                  <option value="TURNO A" {% if filtros['turno']=='TURNO A' %}selected{% endif %}>TURNO A</option>
+                  <option value="TURNO B" {% if filtros['turno']=='TURNO B' %}selected{% endif %}>TURNO B</option>
+                  <option value="TURNO C" {% if filtros['turno']=='TURNO C' %}selected{% endif %}>TURNO C</option>
+                  <option value="ADM" {% if filtros['turno']=='ADM' %}selected{% endif %}>ADM</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Status</label>
+                <select name="status">
+                  <option value="">Todos</option>
+                  <option value="EM ABERTO" {% if filtros['status']=='EM ABERTO' %}selected{% endif %}>EM ABERTO</option>
+                  <option value="EM ACOMPANHAMENTO" {% if filtros['status']=='EM ACOMPANHAMENTO' %}selected{% endif %}>EM ACOMPANHAMENTO</option>
+                  <option value="FINALIZADO" {% if filtros['status']=='FINALIZADO' %}selected{% endif %}>FINALIZADO</option>
+                </select>
+              </div>
+            </div>
+            <div class="actions">
+              <button type="submit" class="btn btn-primary">Aplicar filtros</button>
+              <a href="{{ url_for('sh_index') }}" class="btn btn-dark">Limpar</a>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Histórico -->
+      <section class="section">
+        <div class="card">
+          <div class="section-title">
+            <h3>Histórico de passagens</h3>
+            <span class="section-chip">{{ ocorrencias|length }} registros</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th><th>Data</th><th>Site</th><th>Turno</th>
+                  <th>Prioridade</th><th>Status</th><th>Resp. Saída</th><th>Resp. Entrada</th>
+                  <th style="text-align:right;">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in ocorrencias %}
+                <tr class="{% if r.status=='FINALIZADO' %}row-finalizado{% endif %}">
+                  <td style="font-weight:bold;color:var(--dhl-red);">#{{ r.id }}</td>
+                  <td>{{ r.data_ocorrencia }}</td>
+                  <td>{{ r.site }}</td>
+                  <td><span class="badge mutedb">{{ r.turno }}</span></td>
+                  <td>
+                    {% if r.prioridade=='CRITICA' %}<span class="badge dangerb">{{ r.prioridade }}</span>
+                    {% elif r.prioridade=='ALTA' %}<span class="badge warnb">{{ r.prioridade }}</span>
+                    {% else %}<span class="badge mutedb">{{ r.prioridade }}</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if r.status=='FINALIZADO' %}<span class="badge ok">{{ r.status }}</span>
+                    {% elif r.status=='EM ACOMPANHAMENTO' %}<span class="badge warnb">{{ r.status }}</span>
+                    {% else %}<span class="badge dangerb">{{ r.status }}</span>{% endif %}
+                  </td>
+                  <td>{{ r.responsavel_saida }}</td>
+                  <td>{{ r.responsavel_entrada }}</td>
+                  <td style="text-align:right;">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="abrirModalOc('{{ r.id }}')">Detalhes</button>
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" style="text-align:center;padding:20px;">Nenhum registro encontrado.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+      <footer class="app-footer">
+        <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+        <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+      </footer>
+  </main>
+</div>
+
+<!-- Modal único — carregado via AJAX -->
+<div class="custom-modal-overlay" id="modal-detalhe">
+  <div class="custom-modal-box">
+    <div class="custom-modal-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <h3 id="m-titulo" style="margin:0;color:var(--dhl-red);font-size:18px;">Passagem</h3>
+        <span id="m-status-badge" class="badge mutedb"></span>
+      </div>
+      <button type="button" onclick="fecharModalOc()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);">&times;</button>
+    </div>
+    <div class="custom-modal-body" id="m-body">
+      <div style="text-align:center;padding:40px;">
+        <div class="spinner" style="margin:0 auto 12px;"></div>
+        <div style="font-size:13px;color:var(--muted);">Carregando...</div>
+      </div>
+    </div>
+    <div class="custom-modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div id="m-actions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      <button type="button" class="btn btn-dark btn-sm" onclick="fecharModalOc()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* Assinatura */
+  function iniciarSigPad(canvasId, inputId) {
+    const cv = document.getElementById(canvasId);
+    const inp = document.getElementById(inputId);
+    if (!cv || !inp) return null;
+    const ctx = cv.getContext("2d");
+    let draw = false;
+    function setup() { ctx.lineWidth=2; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.strokeStyle="#111"; }
+    function resize() {
+      const r=Math.max(window.devicePixelRatio||1,1), rc=cv.getBoundingClientRect();
+      cv.width=rc.width*r; cv.height=rc.height*r;
+      ctx.setTransform(1,0,0,1,0,0); ctx.scale(r,r); setup(); save();
+    }
+    function pos(e) {
+      const rc=cv.getBoundingClientRect(), t=e.touches?e.touches[0]:null;
+      return {x:(t?t.clientX:e.clientX)-rc.left, y:(t?t.clientY:e.clientY)-rc.top};
+    }
+    function start(e){ draw=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
+    function move(e){ if(!draw)return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
+    function end(e){ if(!draw)return; draw=false; save(); if(e)e.preventDefault(); }
+    function save(){ inp.value=cv.toDataURL("image/png"); }
+    function clear() {
+      const r=Math.max(window.devicePixelRatio||1,1);
+      ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height); ctx.scale(r,r); setup(); inp.value="";
+    }
+    cv.addEventListener("mousedown",start); cv.addEventListener("mousemove",move);
+    cv.addEventListener("mouseup",end); cv.addEventListener("mouseleave",end);
+    cv.addEventListener("touchstart",start,{passive:false}); cv.addEventListener("touchmove",move,{passive:false});
+    cv.addEventListener("touchend",end,{passive:false});
+    window.addEventListener("resize",resize); resize();
+    return {clear};
+  }
+  const _sigPad = iniciarSigPad("sig-pad","assinatura_saida");
+  function limparSig(){ if(_sigPad) _sigPad.clear(); }
+  function validarSig(){
+    if(!document.getElementById("assinatura_saida").value){
+      alert("Por favor, faça sua assinatura antes de salvar.");
+      return false;
+    }
+    return true;
+  }
+  /* ── Modal AJAX ── */
+  const _USER_NOME  = {{ session.get('user_nome','')|tojson }};
+  const _USER_PERF  = {{ session.get('user_perfil','')|tojson }};
+  const _IS_ADMIN   = ['ADMIN','Admin','admin'].includes(_USER_PERF);
+
+  function _badge(status){
+    const m = {FINALIZADO:'ok','EM ABERTO':'dangerb','EM ACOMPANHAMENTO':'warnb'};
+    return m[status]||'mutedb';
+  }
+  function _sig(src, nome, label){
+    return `<div class="signature-card"><h4>${label}</h4>`
+      +(src?`<div class="signature-preview"><img src="${src}" style="max-height:90px;"></div>`
+           :`<div style="color:var(--dhl-red);font-weight:bold;text-align:center;margin:14px 0;">Pendente</div>`)
+      +`<div class="assinatura-line"></div><div class="assinatura-label">${nome}</div></div>`;
+  }
+  function _imgs(d){
+    const imgs=[d.imagem_1,d.imagem_2,d.imagem_3,d.imagem_4].filter(Boolean);
+    if(!imgs.length) return '';
+    return `<div class="assinatura-box"><strong>Imagens:</strong><div class="preview-grid">`
+      +imgs.map(s=>`<div class="preview-item"><img src="${s}"></div>`).join('')
+      +`</div></div>`;
+  }
+
+  function abrirModalOc(id){
+    const mo = document.getElementById('modal-detalhe');
+    mo.classList.add('active');
+    document.getElementById('m-titulo').textContent  = 'Passagem #'+id;
+    document.getElementById('m-status-badge').className = 'badge mutedb';
+    document.getElementById('m-status-badge').textContent = '';
+    document.getElementById('m-actions').innerHTML = '';
+    document.getElementById('m-body').innerHTML =
+      '<div style="text-align:center;padding:40px;"><div class="spinner" style="margin:0 auto 12px;"></div>'
+      +'<div style="font-size:13px;color:var(--muted);">Carregando...</div></div>';
+
+    fetch('/shift-handover/'+id+'/detalhe')
+      .then(r=>r.json())
+      .then(d=>{
+        document.getElementById('m-titulo').textContent = 'Passagem #'+d.id;
+        const badge = document.getElementById('m-status-badge');
+        badge.className = 'badge '+_badge(d.status);
+        badge.textContent = d.status;
+
+        document.getElementById('m-body').innerHTML =
+          `<div class="info-grid" style="margin-top:0;">
+            <div class="info-box"><strong>Data/Hora</strong>${d.data_hora_registro||'-'}</div>
+            <div class="info-box"><strong>Site</strong>${d.site||'-'}</div>
+            <div class="info-box"><strong>Turno</strong>${d.turno||'-'}</div>
+            <div class="info-box"><strong>Setor</strong>${d.setor||'-'}</div>
+            <div class="info-box"><strong>Tipo</strong>${d.tipo_ocorrencia||'-'}</div>
+            <div class="info-box"><strong>Prioridade</strong>${d.prioridade||'-'}</div>
+            <div class="info-box"><strong>Criado por</strong>${d.criado_por} (${d.criado_em})</div>
+            <div class="info-box"><strong>Atualizado em</strong>${d.atualizado_em||'-'}</div>
+           </div>
+           <div style="margin-top:14px;"><strong>Efetivo:</strong></div><div class="td-texto">${d.efetivo||'-'}</div>
+           <div style="margin-top:10px;"><strong>Descrição:</strong></div><div class="td-texto">${d.descricao||'-'}</div>
+           <div style="margin-top:10px;"><strong>Ações tomadas:</strong></div><div class="td-texto">${d.acoes_tomadas||'-'}</div>
+           <div style="margin-top:10px;"><strong>Pendências:</strong></div><div class="td-texto">${d.pendencias||'-'}</div>
+           ${d.ressalva?`<div style="margin-top:12px;background:#fff8f0;border:1px solid #f4d090;border-radius:10px;padding:12px;">
+             <strong style="color:#92400e;">⚠️ Ressalva registrada:</strong>
+             <div class="td-texto" style="color:#78350f;margin-top:6px;">${d.ressalva}</div>
+           </div>`:''}
+           <div class="assinatura-box" style="margin-top:14px;">
+             <strong>Assinaturas:</strong>
+             <div class="signature-grid" style="grid-template-columns:repeat(2,1fr);margin-top:10px;">
+               ${_sig(d.assinatura_saida,  d.responsavel_saida,  'Saída')}
+               ${_sig(d.assinatura_entrada, d.responsavel_entrada,'Entrada')}
+             </div>
+           </div>
+           ${_imgs(d)}`;
+
+        // Botões de ação
+        let btns = `<a href="/shift-handover/${d.id}/exportar-pdf" class="btn btn-dark btn-sm" data-filename="passagem-${d.id}.pdf">📄 PDF</a>`;
+        if(!d.assinatura_entrada && d.responsavel_entrada===_USER_NOME)
+          btns+=`<a href="/shift-handover/${d.id}/assinar" class="btn btn-soft btn-sm">✍️ Assinar Recebimento</a>`;
+        if(!d.assinatura_entrada && d.criado_por===_USER_NOME)
+          btns+=`<a href="/shift-handover/${d.id}/editar" class="btn btn-orange btn-sm">✏️ Editar</a>`;
+        if(d.status!=='FINALIZADO' && d.assinatura_entrada && d.responsavel_entrada===_USER_NOME)
+          btns+=`<form method="POST" action="/shift-handover/${d.id}/fechar" class="inline-form" onsubmit="return confirm('Finalizar esta passagem?');"><button type="submit" class="btn btn-green btn-sm">✔ Finalizar</button></form>`;
+        if(_IS_ADMIN)
+          btns+=`<form method="POST" action="/shift-handover/${d.id}/excluir" class="inline-form" onsubmit="return confirm('Excluir permanentemente a passagem #${d.id}?');"><button type="submit" class="btn btn-sm" style="background:linear-gradient(180deg,#dc2626,#b91c1c);color:#fff;">🗑 Excluir</button></form>`;
+        document.getElementById('m-actions').innerHTML = btns;
+      })
+      .catch(()=>{
+        document.getElementById('m-body').innerHTML='<div style="padding:20px;color:var(--dhl-red);">Erro ao carregar detalhes.</div>';
+      });
+  }
+  function fecharModalOc(){ document.getElementById('modal-detalhe').classList.remove('active'); }
+  /* Loading */
+  document.addEventListener('DOMContentLoaded', function(){
+    const ov=document.getElementById('loading-overlay');
+    document.querySelectorAll('form').forEach(f=>f.addEventListener('submit',function(){ ov.classList.add('show'); }));
+  });
+  /* Profile dropdown */
+  function spToggle(e){
+    e.stopPropagation();
+    document.getElementById('spMenu').classList.toggle('open');
+  }
+  document.addEventListener('click', function(){ document.getElementById('spMenu').classList.remove('open'); });
+</script>
+
+<script>
+(function(){
+  var _ov = document.getElementById('loading-overlay');
+  if(!_ov) return;
+  document.addEventListener('click', function(e){
+    var el = e.target;
+    while(el && el.tagName !== 'A') el = el.parentElement;
+    if(!el) return;
+    var href = el.getAttribute('href') || '';
+    if(!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+    if(href.indexOf('exportar') !== -1 || href.indexOf('download') !== -1 || href.indexOf('anexo') !== -1) return;
+    _ov.classList.add('show');
+  }, true);
+})();
+</script>
+{% include "_translate.html" %}
+</body>
+</html>

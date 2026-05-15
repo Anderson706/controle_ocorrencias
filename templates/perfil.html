@@ -1,0 +1,387 @@
+﻿<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Meu Perfil | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
+      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
+      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+      --shadow:0 12px 28px rgba(15,23,42,.08); --radius:20px;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+    a{ text-decoration:none; }
+
+    .app-shell{ display:flex; min-height:100vh; }
+    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+    #loading-overlay.show{ display:flex; }
+    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; }
+
+    /* ── Sidebar ── */
+    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+    .nav-icon{ font-size:15px; flex-shrink:0; }
+    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .sub-link.cur{ color:#ffcc00; font-weight:800; }
+    /* ── Profile widget ── */
+    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
+    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
+    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
+    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
+    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .sp-info{ flex:1; min-width:0; }
+    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
+    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
+    .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
+    .sp-menu.open{ display:block; animation:spIn .15s ease; }
+    @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
+    .sp-item:hover{ background:#f3f4f6; }
+    .sp-item-red{ color:#d40511; }
+    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
+    /* ── Footer ── */
+    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+
+    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
+    .topbar{ height:74px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+    .topbar-left{ display:flex; align-items:center; gap:14px; }
+    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+    .top-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; font-size:12px; font-weight:800; border:1px solid #efd56f; background:#fff8d8; color:#7a5a00; white-space:nowrap; }
+
+    .content{ padding:28px; max-width:860px; margin:0 auto; width:100%; }
+
+    .flash-wrap{ margin-bottom:16px; }
+    .flash{ margin-bottom:10px; padding:12px 14px; border-radius:12px; font-weight:700; border:1px solid transparent; font-size:13px; }
+    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+    /* ── Avatar card ── */
+    .avatar-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:28px; box-shadow:var(--shadow); display:flex; align-items:center; gap:24px; margin-bottom:20px; }
+    .avatar-big{ width:96px; height:96px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-size:38px; font-weight:900; color:#111; flex-shrink:0; overflow:hidden; border:3px solid #e5e7eb; }
+    .avatar-big img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .avatar-info h2{ margin:0 0 4px; font-size:22px; font-weight:900; color:var(--dhl-black); }
+    .avatar-info p{ margin:0; font-size:13px; color:var(--muted); line-height:1.6; }
+    .avatar-info .role-chip{ display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:#fff4db; color:#9a6700; font-size:11px; font-weight:800; margin-top:6px; }
+
+    /* ── Form card ── */
+    .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:28px; box-shadow:var(--shadow); margin-bottom:20px; }
+    .form-card h3{ margin:0 0 20px; font-size:16px; font-weight:900; color:var(--dhl-black); display:flex; align-items:center; gap:8px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+    .field{ margin-bottom:18px; }
+    .field label{ display:block; margin-bottom:6px; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+    .field input[type=text],.field input[type=email],.field input[type=password]{ width:100%; padding:12px 14px; border:1px solid #d6dae1; border-radius:12px; font-size:14px; font-family:inherit; outline:none; transition:.18s; background:#f8fafc; }
+    .field input:focus{ border-color:var(--dhl-red); background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+    .field input[disabled]{ background:#f3f4f6; color:var(--muted); cursor:not-allowed; }
+
+    /* Upload de foto */
+    .avatar-upload{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    .upload-preview{ width:72px; height:72px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:900; color:#111; overflow:hidden; border:2px solid #e5e7eb; flex-shrink:0; }
+    .upload-preview img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .upload-area{ flex:1; min-width:200px; }
+    .upload-btn{ display:inline-flex; align-items:center; gap:8px; padding:10px 18px; background:#fff; border:2px dashed #d1d5db; border-radius:12px; cursor:pointer; font-size:13px; font-weight:700; color:var(--muted); transition:.15s; }
+    .upload-btn:hover{ border-color:var(--dhl-red); color:var(--dhl-red); background:#fff5f5; }
+    .upload-hint{ font-size:11px; color:var(--muted); margin-top:6px; }
+    input[type=file]{ display:none; }
+
+    .strength-bar{ height:4px; border-radius:4px; background:#e5e7eb; margin-top:8px; overflow:hidden; }
+    .strength-fill{ height:100%; border-radius:4px; width:0; transition:width .3s, background .3s; }
+    .hint{ font-size:11px; color:var(--muted); margin-top:5px; }
+
+    .btn{ border:none; border-radius:12px; padding:12px 20px; cursor:pointer; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:8px; transition:.18s; font-size:13px; font-family:inherit; }
+    .btn:hover{ transform:translateY(-1px); }
+    .btn-primary{ background:linear-gradient(180deg,var(--dhl-yellow),#f1be00); color:#111; }
+    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#ffcc00; }
+    .btn-outline{ background:#fff; color:var(--dhl-black); border:1px solid #d1d5db; }
+
+    @media(max-width:1100px){ .sidebar{ position:relative; width:100%; height:auto; inset:auto; } .main{ margin-left:0; width:100%; } .app-shell{ flex-direction:column; } }
+    @media(max-width:700px){ .content{ padding:16px; } .avatar-card{ flex-direction:column; text-align:center; } }
+  </style>
+</head>
+<body>
+<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Salvando...</p></div></div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise','editar_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
+      {%- set sec_sh  = request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] -%}
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}<div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
+        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}<div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise','editar_analise'] else '' }}">Controle de Análises</a>
+        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}<div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if sec_sh else '' }}">
+        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if sec_sh %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_sh %}<div class="sub-nav">
+        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
+        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      {% if session.get('user_perfil','') == 'ADMIN' %}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes'] -%}
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
+        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_adm %}<div class="sub-nav">
+        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+      </div>{% endif %}
+      {% endif %}
+    </nav>
+    <div class="sp-wrap" id="spWrap">
+      <div class="sp-trigger" onclick="spToggle(event)">
+        <div class="sp-avatar">
+          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
+        </div>
+        <div class="sp-info">
+          <span class="sp-name">{{ session.get('user_nome','') }}</span>
+          <span class="sp-role">{{ session.get('user_site','') }}</span>
+        </div>
+        <span class="sp-dots">⋮</span>
+      </div>
+      <div class="sp-menu" id="spMenu">
+        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
+        <hr class="sp-sep">
+        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
+        <div>
+          <h1>Meu Perfil</h1>
+          <p>Gerencie suas informações e foto de perfil</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-wrap">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <!-- Avatar card -->
+      <div class="avatar-card">
+        <div class="avatar-big" id="avatarBig">
+          {% if user.foto_perfil %}
+            <img src="{{ url_for('avatar') }}" alt="Foto" id="avatarImg">
+          {% else %}
+            <span id="avatarInitial">{{ user.nome[0]|upper }}</span>
+          {% endif %}
+        </div>
+        <div class="avatar-info">
+          <h2>{{ user.nome }}</h2>
+          <p>{{ user.email }}<br>Site: {{ user.site or '—' }}</p>
+          <span class="role-chip">{{ user.perfil }}</span>
+        </div>
+      </div>
+
+      <!-- Formulário: foto de perfil -->
+      <div class="form-card">
+        <h3>📷 Foto de Perfil</h3>
+        <form method="POST" enctype="multipart/form-data" id="form-foto">
+          <div class="field">
+            <div class="avatar-upload">
+              <div class="upload-preview" id="uploadPreview">
+                {% if user.foto_perfil %}
+                  <img src="{{ url_for('avatar') }}" alt="" id="previewImg">
+                {% else %}
+                  <span id="previewInitial">{{ user.nome[0]|upper }}</span>
+                {% endif %}
+              </div>
+              <div class="upload-area">
+                <label class="upload-btn" for="foto_perfil">
+                  📁 Escolher imagem
+                </label>
+                <input type="file" id="foto_perfil" name="foto_perfil"
+                       accept="image/png,image/jpeg,image/webp">
+                <div class="upload-hint">PNG, JPG ou WEBP · Recomendado: 200×200px</div>
+                <div class="hint" id="foto-nome" style="margin-top:8px;"></div>
+              </div>
+            </div>
+          </div>
+          <!-- senha vazia para não alterar -->
+          <input type="hidden" name="nova_senha" value="">
+          <input type="hidden" name="confirma_senha" value="">
+          <button type="submit" class="btn btn-primary">💾 Salvar foto</button>
+        </form>
+      </div>
+
+      <!-- Formulário: alterar senha -->
+      <div class="form-card">
+        <h3>🔒 Alterar Senha</h3>
+        <form method="POST" id="form-senha">
+          <input type="hidden" name="foto_perfil_skip" value="1">
+          <div class="field">
+            <label>Nova Senha</label>
+            <input type="password" id="nova_senha" name="nova_senha"
+                   placeholder="Mínimo 6 caracteres" minlength="6">
+            <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+            <div class="hint" id="strength-text"></div>
+          </div>
+          <div class="field">
+            <label>Confirmar Nova Senha</label>
+            <input type="password" id="confirma_senha" name="confirma_senha"
+                   placeholder="Repita a senha">
+            <div class="hint" id="match-hint"></div>
+          </div>
+          <button type="submit" class="btn btn-red">🔑 Alterar senha</button>
+        </form>
+      </div>
+
+      <!-- Info da conta (somente leitura) -->
+      <div class="form-card">
+        <h3>ℹ️ Dados da Conta</h3>
+        <div class="field">
+          <label>Nome</label>
+          <input type="text" value="{{ user.nome }}" disabled>
+        </div>
+        <div class="field">
+          <label>E-mail</label>
+          <input type="email" value="{{ user.email }}" disabled>
+        </div>
+        <div class="field">
+          <label>Perfil</label>
+          <input type="text" value="{{ user.perfil }}" disabled>
+        </div>
+        <div class="field">
+          <label>Site</label>
+          <input type="text" value="{{ user.site or '—' }}" disabled>
+        </div>
+        <div class="field">
+          <label>Membro desde</label>
+          <input type="text" value="{{ user.created_at.strftime('%d/%m/%Y') if user.created_at else '—' }}" disabled>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+    <footer class="app-footer">
+      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+    </footer>
+  </main>
+</div>
+
+<script>
+// Preview da foto antes de enviar
+document.getElementById('foto_perfil').addEventListener('change', function(){
+  var file = this.files[0];
+  if(!file) return;
+  document.getElementById('foto-nome').textContent = file.name;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var prev = document.getElementById('uploadPreview');
+    prev.innerHTML = '<img src="' + e.target.result + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+  };
+  reader.readAsDataURL(file);
+});
+
+// Força da senha
+document.getElementById('nova_senha').addEventListener('input', function(){
+  var v = this.value, score = 0;
+  if(v.length>=6) score++;
+  if(v.length>=10) score++;
+  if(/[A-Z]/.test(v)) score++;
+  if(/[0-9]/.test(v)) score++;
+  if(/[^A-Za-z0-9]/.test(v)) score++;
+  var fill = document.getElementById('strength-fill');
+  var txt  = document.getElementById('strength-text');
+  var pct  = [0,20,40,65,85,100][score];
+  var cor  = ['#e5e7eb','#d40511','#f59e0b','#f59e0b','#16a34a','#16a34a'][score];
+  var msg  = ['','Muito fraca','Fraca','Média','Forte','Muito forte'][score];
+  fill.style.width = pct+'%'; fill.style.background = cor;
+  txt.textContent = msg ? 'Força: '+msg : ''; txt.style.color = cor;
+});
+
+// Confirmação de senha
+document.getElementById('confirma_senha').addEventListener('input', function(){
+  var hint = document.getElementById('match-hint');
+  if(!this.value){ hint.textContent=''; return; }
+  if(this.value === document.getElementById('nova_senha').value){
+    hint.textContent='✔ Senhas coincidem'; hint.style.color='#16a34a';
+  } else {
+    hint.textContent='✘ Senhas não coincidem'; hint.style.color='#d40511';
+  }
+});
+
+// Loading overlay
+document.querySelectorAll('form').forEach(function(f){
+  f.addEventListener('submit', function(){
+    document.getElementById('loading-overlay').classList.add('show');
+  });
+});
+
+// Profile dropdown
+function spToggle(e){ e.stopPropagation(); document.getElementById('spMenu').classList.toggle('open'); }
+document.addEventListener('click', function(){ var m=document.getElementById('spMenu'); if(m) m.classList.remove('open'); });
+</script>
+
+<script>
+(function(){
+  var _ov = document.getElementById('loading-overlay');
+  if(!_ov) return;
+  document.addEventListener('click', function(e){
+    var el = e.target;
+    while(el && el.tagName !== 'A') el = el.parentElement;
+    if(!el) return;
+    var href = el.getAttribute('href') || '';
+    if(!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+    if(href.indexOf('exportar') !== -1 || href.indexOf('download') !== -1 || href.indexOf('anexo') !== -1) return;
+    _ov.classList.add('show');
+  }, true);
+})();
+</script>
+{% include "_translate.html" %}
+</body>
+</html>

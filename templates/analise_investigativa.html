@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}Análise Investigativa | CCTV Control Panel{% endblock %}
 
 {% block body %}
@@ -6,7 +6,7 @@
   :root{
     --dhl-yellow:#ffcc00;
     --dhl-red:#d40511;
-    --dhl-red-dark:#b3030e;
+    --dhl-red-dark:#b1030d;
     --dhl-black:#1f1f1f;
     --bg:#f3f5f7;
     --card:#ffffff;
@@ -54,9 +54,23 @@
   .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
   .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
   .sub-link.cur{ color:#ffcc00; font-weight:800; }
-  .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid rgba(255,255,255,.08); }
-  .nav-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px; border-radius:12px; color:rgba(255,255,255,.52); font-size:13px; font-weight:700; transition:.18s; text-decoration:none; }
-  .nav-logout:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  /* ── Profile widget ── */
+  .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
+  .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
+  .sp-trigger:hover{ background:rgba(255,255,255,.06); }
+  .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
+  .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+  .sp-info{ flex:1; min-width:0; }
+  .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
+  .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
+  .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
+  .sp-menu.open{ display:block; animation:spIn .15s ease; }
+  @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+  .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
+  .sp-item:hover{ background:#f3f4f6; }
+  .sp-item-red{ color:#d40511; }
+  .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
   /* ── Footer ── */
   .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
 
@@ -243,18 +257,17 @@
 
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-badge">DHL SECURITY</span>
       <div class="brand-title">CCTV<br>CONTROL PANEL</div>
     </div>
     <nav class="main-nav">
       {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
-      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise'] -%}
-      {%- set sec_anc = request.endpoint in ['anc'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
       <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
-        <span class="nav-icon">📋</span><span>Ocorrências</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
       {% if sec_oc %}<div class="sub-nav">
-        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle de Ocorrências</a>
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
         <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
       </div>{% endif %}
       <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
@@ -263,6 +276,7 @@
       {% if sec_an %}<div class="sub-nav">
         <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
         <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
       </div>{% endif %}
       <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
         <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
@@ -270,10 +284,42 @@
       {% if sec_anc %}<div class="sub-nav">
         <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
         <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
       </div>{% endif %}
+      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] else '' }}">
+        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<div class="sub-nav">
+        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
+        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      {% if session.get('user_perfil','') == 'ADMIN' %}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes'] -%}
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
+        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_adm %}<div class="sub-nav">
+        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+      </div>{% endif %}
+      {% endif %}
     </nav>
-    <div class="sidebar-footer">
-      <a href="{{ url_for('logout') }}" class="nav-logout">⏻ &nbsp;Sair</a>
+    <div class="sp-wrap" id="spWrap">
+      <div class="sp-trigger" onclick="spToggle(event)">
+        <div class="sp-avatar">
+          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
+        </div>
+        <div class="sp-info">
+          <span class="sp-name">{{ session.get('user_nome','') }}</span>
+          <span class="sp-role">{{ session.get('user_site','') }}</span>
+        </div>
+        <span class="sp-dots">⋮</span>
+      </div>
+      <div class="sp-menu" id="spMenu">
+        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
+        <hr class="sp-sep">
+        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
+      </div>
     </div>
   </aside>
 
@@ -282,14 +328,13 @@
 
     <header class="topbar">
       <div class="topbar-left">
-        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-topbar">
+        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
         <div>
           <h1>Análise Investigativa</h1>
           <p>CCTV Control Panel — DHL Supply Chain</p>
         </div>
       </div>
       <div class="topbar-right">
-        <span class="top-chip">{{ session.get('user_nome','') }} | {{ session.get('user_perfil','') }}</span>
         <a href="{{ url_for('ocorrencias') }}" class="btn btn-dark" style="padding:11px 16px; border-radius:12px;">← Voltar</a>
       </div>
     </header>
@@ -396,11 +441,20 @@
               </div>
               <div class="field">
                 <label>Responsável pelo Levantamento</label>
-                <input type="text" name="responsavel" placeholder="Ex: Vanessa França" required>
+                <input type="text" name="responsavel" value="{{ user_nome }}" readonly
+                       style="background:#f3f4f6; color:#6b7280; cursor:not-allowed;" required>
               </div>
               <div class="field">
-                <label>Função</label>
-                <input type="text" name="funcao_levantamento" placeholder="Ex: Analista de Segurança">
+                <label>Cargo</label>
+                <select name="funcao_levantamento">
+                  <option value="">Selecione o cargo…</option>
+                  <option value="AUXILIAR DE SEGURANÇA PATRIMONIAL">AUXILIAR DE SEGURANÇA PATRIMONIAL</option>
+                  <option value="ASSISTENTE DE SEGURANÇA PATRIMONIAL">ASSISTENTE DE SEGURANÇA PATRIMONIAL</option>
+                  <option value="ANALISTA DE SEGURANÇA PATRIMONIAL">ANALISTA DE SEGURANÇA PATRIMONIAL</option>
+                  <option value="COORDENADOR DE SEGURANÇA PATRIMONIAL">COORDENADOR DE SEGURANÇA PATRIMONIAL</option>
+                  <option value="SUPERVISOR DE SEGURANÇA PATRIMONIAL">SUPERVISOR DE SEGURANÇA PATRIMONIAL</option>
+                  <option value="GERENTE DE SEGURANÇA PATRIMONIAL">GERENTE DE SEGURANÇA PATRIMONIAL</option>
+                </select>
               </div>
               <div class="field">
                 <label>Data</label>
@@ -546,5 +600,9 @@
     });
   });
 })();
+</script>
+<script>
+function spToggle(e){ e.stopPropagation(); document.getElementById('spMenu').classList.toggle('open'); }
+document.addEventListener('click', function(){ var m=document.getElementById('spMenu'); if(m) m.classList.remove('open'); });
 </script>
 {% endblock %}

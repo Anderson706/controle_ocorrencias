@@ -1,0 +1,8 @@
+flask
+flask-sqlalchemy
+werkzeug
+python-docx
+openpyxl
+reportlab
+python-oracledb
+sqlalchemy

@@ -4,6 +4,9 @@ import re
 import base64
 import textwrap
 import smtplib
+from collections import Counter
+import random
+import string
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from io import BytesIO
@@ -22,6 +25,8 @@ from flask import (
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import defer
+from sqlalchemy import func, case, text
+from datetime import date
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from docx import Document
@@ -32,7 +37,9 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
+from openpyxl.styles import Font, PatternFill, Alignment as XLAlignment
+from openpyxl.utils import get_column_letter as _xl_col_letter
+from PIL import Image as _PILImage
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -65,10 +72,11 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 app.config["SESSION_COOKIE_HTTPONLY"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 5,
-    "pool_recycle": 1800,
-    "pool_pre_ping": True,
-    "pool_timeout": 30,
+    "pool_size": 10,
+    "max_overflow": 20,
+    "pool_recycle": 900,
+    "pool_pre_ping": False,
+    "pool_timeout": 20,
 }
 
 db = SQLAlchemy(app)
@@ -98,7 +106,7 @@ def _erro_500(e):
 # =========================
 # CONTROLE DE VERSÃO
 # =========================
-APP_VERSION = "1.0"
+APP_VERSION = "2.0"
 
 SMTP_HOST     = "smtp.dhl.com"
 SMTP_PORT     = 25
@@ -162,12 +170,34 @@ class Usuario(db.Model):
     site = db.Column("SITE", db.String(80), nullable=True)
     is_active = db.Column("IS_ACTIVE", db.Boolean, nullable=False, default=True)
     created_at = db.Column("CREATED_AT", db.DateTime, nullable=False, default=datetime.utcnow)
+    foto_perfil  = db.Column("FOTO_PERFIL",  db.Text,       nullable=True)
+    lgpd_aceito  = db.Column("LGPD_ACEITO",  db.String(3),  nullable=True, default=None)
+    lgpd_aceito_em = db.Column("LGPD_ACEITO_EM", db.DateTime, nullable=True, default=None)
 
     def set_password(self, senha: str):
         self.password_hash = generate_password_hash(senha)
 
     def check_password(self, senha: str) -> bool:
         return check_password_hash(self.password_hash, senha)
+
+class ResetToken(db.Model):
+    __tablename__ = "RESET_TOKENS"
+    id        = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    user_id   = db.Column(db.Integer, nullable=False)
+    token     = db.Column(db.String(6), nullable=False)
+    expira_em = db.Column(db.DateTime, nullable=False)
+    usado     = db.Column(db.Integer, nullable=False, default=0)
+
+
+class SolicitacaoCadastro(db.Model):
+    __tablename__ = "SOLICITACOES_CADASTRO"
+    id         = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    nome       = db.Column(db.String(120), nullable=False)
+    email      = db.Column(db.String(120), nullable=False)
+    site       = db.Column(db.String(128), nullable=True)
+    status     = db.Column(db.String(20),  nullable=False, default="PENDENTE")
+    criado_em  = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+
 
 class SiteCompleto(db.Model):
     __tablename__ = "SITES_COMPLETO"
@@ -245,8 +275,12 @@ class ImagemAnaliseInvestigativa(db.Model):
 
     @property
     def b64(self):
-        """Retorna o base64 da imagem, priorizando arquivo_b64 (novo) ou arquivo (legado)."""
-        return self.arquivo_b64 or self.arquivo or ""
+        """Retorna o base64 da imagem como string.
+        O Oracle pode devolver CLOBs como objeto LOB (thin driver) — lê com .read() se necessário."""
+        raw = self.arquivo_b64 or self.arquivo or ""
+        if hasattr(raw, "read"):   # cx_Oracle / oracledb LOB object
+            raw = raw.read()
+        return raw or ""
 
 
 class ANC(db.Model):
@@ -320,6 +354,10 @@ class Ocorrencia(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     responsavel_fechamento = db.Column(db.String(120), nullable=True)
+    anexo_post_2      = db.Column(db.Text, nullable=True)
+    anexo_post_nome_2 = db.Column(db.String(255), nullable=True)
+    anexo_post_3      = db.Column(db.Text, nullable=True)
+    anexo_post_nome_3 = db.Column(db.String(255), nullable=True)
 
 
 # =========================
@@ -495,7 +533,7 @@ def gerar_pdf_anc_bytes(anc):
         colWidths=[pw * 0.25, pw * 0.75],
     )
     hdr.setStyle(TableStyle([
-        ("BACKGROUND",    (1,0),(1,0), YELLOW),
+        ("BACKGROUND",    (0,0),(-1,-1), YELLOW),
         ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
         ("INNERGRID",     (0,0),(-1,-1), 0.5, BLACK),
         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
@@ -508,15 +546,15 @@ def gerar_pdf_anc_bytes(anc):
 
     # ── 2. TABELA DE IDENTIFICAÇÃO ────────────────────────────────
     id_heads = ["DATA", "HORA DA\nOCORRÊNCIA", "NATUREZA", "LOCAL",
-                "PESSOAS\nENVOLVIDAS", "PLANO DE AÇÃO", "Nº ANC"]
+                "PESSOAS\nENVOLVIDAS", "Nº ANC"]
     id_vals  = [fmt_data_br(anc.data_nc), anc.hora_nc or "—", anc.natureza or "—",
                 anc.local or "—", anc.envolvido or "—",
-                anc.status or "—", str(anc.numero_site or anc.id)]
-    cw = pw / 7
+                str(anc.numero_site or anc.id)]
+    cw = pw / 6
     id_tbl = Table(
         [[Paragraph(h, s_th) for h in id_heads],
          [Paragraph(v, s_td) for v in id_vals]],
-        colWidths=[cw] * 7,
+        colWidths=[cw] * 6,
     )
     id_tbl.setStyle(TableStyle([
         ("BACKGROUND",    (0,0),(-1,0), YELLOW),
@@ -595,16 +633,24 @@ def gerar_pdf_anc_bytes(anc):
     ]))
     story += [foto_tbl, Spacer(1, 1.0*rcm)]
 
-    # ── 6. RODAPÉ ─────────────────────────────────────────────────
-    story.append(Paragraph(
-        f"<b>RESPONSÁVEL PELAS INFORMAÇÕES:</b> {anc.gestor_responsavel or anc.responsavel or '—'}",
-        s_foot,
-    ))
-    story.append(Spacer(1, 0.2*rcm))
-    story.append(Paragraph(
-        f"<b>CARGO:</b> {anc.cargo or 'Segurança Patrimonial'}",
-        s_foot,
-    ))
+    # ── 6. RESPONSÁVEL PELO LEVANTAMENTO ──────────────────────────
+    resp_tbl = Table(
+        [[Paragraph("RESPONSÁVEL PELO LEVANTAMENTO", s_th), Paragraph("CARGO", s_th)],
+         [Paragraph(anc.gestor_responsavel or anc.responsavel or "—", s_td),
+          Paragraph(anc.cargo or "Segurança Patrimonial", s_td)]],
+        colWidths=[pw * 0.60, pw * 0.40],
+    )
+    resp_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(-1,0), YELLOW),
+        ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
+        ("INNERGRID",     (0,0),(-1,-1), 0.5, BLACK),
+        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0),(-1,-1), 6),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 10),
+        ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 8),
+    ]))
+    story += [resp_tbl, Spacer(1, 0.5*rcm)]
 
     # ── 7. PLANO DE AÇÃO / FECHAMENTO (se houver) ─────────────────
     if anc.plano_acao_texto:
@@ -768,7 +814,10 @@ def gerar_docx_de_registro(registro):
         add_section_title(doc, "Evidências")
         for idx, img_obj in enumerate(registro.imagens, start=1):
             try:
-                bio = BytesIO(_b64_decode(img_obj.b64))
+                _raw = img_obj.b64
+                if not _raw:
+                    continue
+                bio = BytesIO(_b64_decode(_raw))
                 bio.seek(0)
                 tbl = doc.add_table(rows=1, cols=2)
                 tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -878,10 +927,14 @@ def gerar_pdf_analise_bytes(form_data, evidencias_bytes):
 
     # ── cabeçalho ──
     logo_path = os.path.join(app.root_path, "static", "logo.png")
-    logo_cell = (RLImage(logo_path, width=4.0*rcm)
-                 if os.path.exists(logo_path)
-                 else Paragraph('<b><font color="#D40511" size="14">DHL</font></b>',
-                                ParagraphStyle("tmp", fontName="Helvetica")))
+    if os.path.exists(logo_path):
+        _lbio = BytesIO(open(logo_path, "rb").read())
+        _liw, _lih = ImageReader(_lbio).getSize()
+        _lscale = min(3.8*rcm / _liw, 1.4*rcm / _lih)
+        logo_cell = RLImage(logo_path, width=_liw*_lscale, height=_lih*_lscale)
+    else:
+        logo_cell = Paragraph('<b><font color="#D40511" size="14">DHL</font></b>',
+                              ParagraphStyle("tmp", fontName="Helvetica"))
 
     hdr = Table(
         [[logo_cell, Paragraph(
@@ -1027,6 +1080,9 @@ def login_required(func):
         if not session.get("user_id"):
             flash("Faça login para continuar.", "warning")
             return redirect(url_for("login"))
+        # Bloqueia acesso enquanto LGPD não for aceita
+        if session.get("user_lgpd_aceito") != "sim":
+            return redirect(url_for("lgpd_aceite"))
         return func(*args, **kwargs)
     return wrapper
 
@@ -1058,10 +1114,12 @@ def normalizar_prioridade(valor):
 
 def aplicar_filtros(query):
     data_inicial = (request.args.get("data_inicial") or "").strip()
-    data_final = (request.args.get("data_final") or "").strip()
-    local = (request.args.get("local") or "").strip()
-    natureza = (request.args.get("natureza") or "").strip()
-    status = (request.args.get("status") or "").strip().upper()
+    data_final   = (request.args.get("data_final")   or "").strip()
+    local        = (request.args.get("local")         or "").strip()
+    natureza     = (request.args.get("natureza")      or "").strip()
+    status       = (request.args.get("status")        or "").strip().upper()
+    operador     = (request.args.get("operador")      or "").strip()
+    site_f       = (request.args.get("site_filtro")   or "").strip()
 
     registros = query.all()
     filtrados = []
@@ -1070,30 +1128,25 @@ def aplicar_filtros(query):
         ok = True
         data_base = (r.data_hora or "")[:10]
 
-        if data_inicial:
-            ok = ok and (data_base >= data_inicial)
-
-        if data_final:
-            ok = ok and (data_base <= data_final)
-
-        if local:
-            ok = ok and (local.lower() in (r.local or "").lower())
-
-        if natureza:
-            ok = ok and (natureza.lower() in (r.natureza or "").lower())
-
-        if status:
-            ok = ok and (normalizar_status(r.status) == status)
+        if data_inicial: ok = ok and (data_base >= data_inicial)
+        if data_final:   ok = ok and (data_base <= data_final)
+        if local:        ok = ok and (local.lower()    in (r.local    or "").lower())
+        if natureza:     ok = ok and (natureza.lower() in (r.natureza or "").lower())
+        if status:       ok = ok and (normalizar_status(r.status) == status)
+        if operador:     ok = ok and (operador.lower() in (r.operador or "").lower())
+        if site_f:       ok = ok and ((r.site or "") == site_f)
 
         if ok:
             filtrados.append(r)
 
     filtros = {
         "data_inicial": data_inicial,
-        "data_final": data_final,
-        "local": local,
-        "natureza": natureza,
-        "status": status,
+        "data_final":   data_final,
+        "local":        local,
+        "natureza":     natureza,
+        "status":       status,
+        "operador":     operador,
+        "site_filtro":  site_f,
     }
     return filtrados, filtros
 
@@ -1115,7 +1168,131 @@ def analise_investigativa():
     site_usuario = session.get("user_site") or ""
     site_atual = SiteCompleto.query.filter_by(nome_do_site=site_usuario).first() if site_usuario else None
     proximo_numero = AnaliseInvestigativa.query.filter_by(site=site_usuario or None).count() + 1
-    return render_template("analise_investigativa.html", site_atual=site_atual, proximo_numero=proximo_numero)
+    return render_template(
+        "analise_investigativa.html",
+        site_atual=site_atual,
+        proximo_numero=proximo_numero,
+        user_nome=session.get("user_nome", ""),
+    )
+
+
+# =========================
+# DASHBOARD — ANÁLISES
+# =========================
+@app.route("/analises/dashboard")
+@login_required
+def dashboard_analise():
+    from datetime import datetime as _dt
+    from collections import Counter
+
+    is_admin    = (session.get("user_perfil") or "").upper() == "ADMIN"
+    site_usuario = session.get("user_site") or None
+    _hoje = _dt.now()
+
+    _sem_blob = [
+        defer(AnaliseInvestigativa.docx_arquivo),
+        defer(AnaliseInvestigativa.anexo_fechamento),
+    ]
+    if is_admin:
+        registros = AnaliseInvestigativa.query.options(*_sem_blob).order_by(AnaliseInvestigativa.id.desc()).all()
+    else:
+        registros = AnaliseInvestigativa.query.options(*_sem_blob).filter_by(site=site_usuario).order_by(AnaliseInvestigativa.id.desc()).all()
+
+    # Filtros simples por querystring
+    f_data_ini   = request.args.get("data_inicial", "")
+    f_data_fim   = request.args.get("data_final", "")
+    f_status     = request.args.get("status", "")
+    f_classif    = request.args.get("classificacao", "")
+    f_site       = request.args.get("site_filtro", "") if is_admin else ""
+
+    filtrados = registros
+    if f_data_ini:
+        try:
+            _di = _dt.strptime(f_data_ini, "%Y-%m-%d")
+            filtrados = [r for r in filtrados if r.criado_em and r.criado_em >= _di]
+        except Exception: pass
+    if f_data_fim:
+        try:
+            _df = _dt.strptime(f_data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            filtrados = [r for r in filtrados if r.criado_em and r.criado_em <= _df]
+        except Exception: pass
+    if f_status:
+        filtrados = [r for r in filtrados if (r.status_analise or "").upper() == f_status.upper()]
+    if f_classif:
+        filtrados = [r for r in filtrados if f_classif.lower() in (r.classificacao or "").lower()]
+    if f_site:
+        filtrados = [r for r in filtrados if (r.site or "") == f_site]
+
+    # Sites disponíveis para o filtro
+    if is_admin:
+        _sites_q = db.session.query(AnaliseInvestigativa.site).distinct().all()
+        todos_sites_dash = sorted(s[0] for s in _sites_q if s[0])
+    else:
+        todos_sites_dash = [site_usuario] if site_usuario else []
+
+    total      = len(filtrados)
+    andamento  = len([r for r in filtrados if (r.status_analise or "").upper() == "EM ANDAMENTO"])
+    fechadas   = len([r for r in filtrados if (r.status_analise or "").upper() == "FECHADA"])
+    taxa_resolucao = round(fechadas / total * 100) if total > 0 else 0
+
+    def _mesmo_mes(r):
+        try:
+            return r.criado_em and r.criado_em.month == _hoje.month and r.criado_em.year == _hoje.year
+        except Exception:
+            return False
+    registros_mes = len([r for r in filtrados if _mesmo_mes(r)])
+
+    # Contagens para gráficos
+    status_count   = Counter((r.status_analise or "Não informado").upper() for r in filtrados)
+    classif_count  = Counter(r.classificacao or "Não informado" for r in filtrados)
+    criador_count  = Counter(r.criado_por or "Não informado" for r in filtrados)
+    resp_count     = Counter(r.responsavel or "Não informado" for r in filtrados)
+
+    # Status em ordem fixa
+    _STATUS_ORDER  = ["EM ANDAMENTO", "FECHADA"]
+    labels_status  = []
+    valores_status = []
+    for _s in _STATUS_ORDER:
+        if _s in status_count:
+            labels_status.append(_s)
+            valores_status.append(status_count[_s])
+    for _s, _v in status_count.items():
+        if _s not in _STATUS_ORDER:
+            labels_status.append(_s)
+            valores_status.append(_v)
+
+    # Resto ordenado crescente
+    classif_sorted = sorted(classif_count.items(), key=lambda x: x[1])
+    criador_sorted = sorted(criador_count.items(), key=lambda x: x[1])
+    resp_sorted    = sorted(resp_count.items(),    key=lambda x: x[1])
+
+    # Todos os status e classificações distintos para filtros
+    todas_classif = sorted(set(r.classificacao for r in registros if r.classificacao))
+
+    return render_template(
+        "dashboard_analise.html",
+        is_admin=is_admin,
+        todos_sites_dash=todos_sites_dash,
+        recentes=filtrados[:10],
+        filtros={"data_inicial": f_data_ini, "data_final": f_data_fim,
+                 "status": f_status, "classificacao": f_classif, "site_filtro": f_site},
+        todas_classif=todas_classif,
+        resumo={
+            "total":          total,
+            "andamento":      andamento,
+            "fechadas":       fechadas,
+            "taxa_resolucao": taxa_resolucao,
+            "registros_mes":  registros_mes,
+        },
+        labels_status=labels_status,
+        valores_status=valores_status,
+        labels_classif=[x[0] for x in classif_sorted],
+        valores_classif=[x[1] for x in classif_sorted],
+        labels_criador=[x[0] for x in criador_sorted],
+        valores_criador=[x[1] for x in criador_sorted],
+        labels_resp=[x[0] for x in resp_sorted],
+        valores_resp=[x[1] for x in resp_sorted],
+    )
 
 
 @app.route("/analises")
@@ -1503,6 +1680,141 @@ def download_analise(analise_id):
 
 
 # ==========================
+# DASHBOARD — ANC
+# ==========================
+@app.route("/anc/dashboard")
+@login_required
+def dashboard_anc():
+    from datetime import datetime as _dt
+    from collections import Counter
+
+    is_admin     = (session.get("user_perfil") or "").upper() == "ADMIN"
+    site_usuario = session.get("user_site") or None
+    _hoje = _dt.now()
+
+    _sem_imgs = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3),
+                 defer(ANC.imagem_4), defer(ANC.imagem_5), defer(ANC.imagem_6),
+                 defer(ANC.anexo_fechamento)]
+
+    if is_admin:
+        base = ANC.query.options(*_sem_imgs).order_by(ANC.id.desc()).all()
+    else:
+        base = ANC.query.options(*_sem_imgs).filter_by(site=site_usuario).order_by(ANC.id.desc()).all()
+
+    # Filtros por querystring
+    f_data_ini  = request.args.get("data_inicial", "")
+    f_data_fim  = request.args.get("data_final", "")
+    f_status    = request.args.get("status", "")
+    f_gravidade = request.args.get("gravidade", "")
+    f_site      = request.args.get("site_filtro", "") if is_admin else ""
+
+    filtrados = base
+    if f_data_ini:
+        try:
+            _di = _dt.strptime(f_data_ini, "%Y-%m-%d")
+            filtrados = [r for r in filtrados if r.criado_em and r.criado_em >= _di]
+        except Exception: pass
+    if f_data_fim:
+        try:
+            _df = _dt.strptime(f_data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            filtrados = [r for r in filtrados if r.criado_em and r.criado_em <= _df]
+        except Exception: pass
+    if f_status:
+        filtrados = [r for r in filtrados if (r.status or "").upper() == f_status.upper()]
+    if f_gravidade:
+        filtrados = [r for r in filtrados if (r.gravidade or "").upper() == f_gravidade.upper()]
+    if f_site:
+        filtrados = [r for r in filtrados if (r.site or "") == f_site]
+
+    # Sites disponíveis para o filtro
+    if is_admin:
+        _sites_q = db.session.query(ANC.site).distinct().all()
+        todos_sites_dash = sorted(s[0] for s in _sites_q if s[0])
+    else:
+        todos_sites_dash = [site_usuario] if site_usuario else []
+
+    total      = len(filtrados)
+    abertos    = len([r for r in filtrados if (r.status or "").upper() == "ABERTO"])
+    andamento  = len([r for r in filtrados if (r.status or "").upper() == "EM ANDAMENTO"])
+    concluidos = len([r for r in filtrados if (r.status or "").upper() == "CONCLUÍDO"])
+    criticos   = len([r for r in filtrados if (r.gravidade or "").upper() == "CRÍTICA"])
+    taxa_resolucao = round(concluidos / total * 100) if total > 0 else 0
+
+    def _mesmo_mes(r):
+        try:
+            return r.criado_em and r.criado_em.month == _hoje.month and r.criado_em.year == _hoje.year
+        except Exception:
+            return False
+    registros_mes = len([r for r in filtrados if _mesmo_mes(r)])
+
+    # Contagens para gráficos
+    status_count    = Counter((r.status or "Não informado").upper() for r in filtrados)
+    gravidade_count = Counter((r.gravidade or "Não informado").upper() for r in filtrados)
+    natureza_count  = Counter(r.natureza or "Não informado" for r in filtrados)
+    setor_count     = Counter(r.setor or "Não informado" for r in filtrados)
+    criador_count   = Counter(r.criado_por or "Não informado" for r in filtrados)
+
+    # Status em ordem fixa
+    _STATUS_ORDER  = ["ABERTO", "EM ANDAMENTO", "CONCLUÍDO"]
+    labels_status  = []
+    valores_status = []
+    for _s in _STATUS_ORDER:
+        if _s in status_count:
+            labels_status.append(_s)
+            valores_status.append(status_count[_s])
+    for _s, _v in status_count.items():
+        if _s not in _STATUS_ORDER:
+            labels_status.append(_s)
+            valores_status.append(_v)
+
+    # Gravidade em ordem fixa de severidade
+    _GRAV_ORDER  = ["BAIXA", "MÉDIA", "ALTA", "CRÍTICA"]
+    labels_grav  = []
+    valores_grav = []
+    for _g in _GRAV_ORDER:
+        if _g in gravidade_count:
+            labels_grav.append(_g)
+            valores_grav.append(gravidade_count[_g])
+    for _g, _v in gravidade_count.items():
+        if _g not in _GRAV_ORDER:
+            labels_grav.append(_g)
+            valores_grav.append(_v)
+
+    natureza_sorted = sorted(natureza_count.items(), key=lambda x: x[1])
+    setor_sorted    = sorted(setor_count.items(),    key=lambda x: x[1])
+    criador_sorted  = sorted(criador_count.items(),  key=lambda x: x[1])
+
+    todas_gravidades = sorted(set(r.gravidade for r in base if r.gravidade))
+
+    return render_template(
+        "dashboard_anc.html",
+        is_admin=is_admin,
+        todos_sites_dash=todos_sites_dash,
+        recentes=filtrados[:10],
+        filtros={"data_inicial": f_data_ini, "data_final": f_data_fim,
+                 "status": f_status, "gravidade": f_gravidade, "site_filtro": f_site},
+        todas_gravidades=todas_gravidades,
+        resumo={
+            "total":          total,
+            "abertos":        abertos,
+            "andamento":      andamento,
+            "concluidos":     concluidos,
+            "criticos":       criticos,
+            "taxa_resolucao": taxa_resolucao,
+            "registros_mes":  registros_mes,
+        },
+        labels_status=labels_status,   valores_status=valores_status,
+        labels_grav=labels_grav,       valores_grav=valores_grav,
+        labels_natureza=[x[0] for x in natureza_sorted],
+        valores_natureza=[x[1] for x in natureza_sorted],
+        labels_setor=[x[0] for x in setor_sorted],
+        valores_setor=[x[1] for x in setor_sorted],
+        labels_criador=[x[0] for x in criador_sorted],
+        valores_criador=[x[1] for x in criador_sorted],
+    )
+
+
+# ==========================
 # ANC - Avisos de Não Conformidade
 # ==========================
 @app.route("/anc", methods=["GET", "POST"])
@@ -1748,10 +2060,423 @@ def exportar_anc_pdf(anc_id):
                      mimetype="application/pdf")
 
 
+# =========================
+# E-MAIL VIA OUTLOOK (COM)
+# =========================
+import subprocess, tempfile, os as _os
+
+def _abrir_outlook(caminho_arquivo: str, assunto: str, corpo_html: str):
+    """
+    Abre o Outlook no modo de composição com o arquivo já anexado,
+    assunto e corpo preenchidos. O usuário só precisa preencher Para/CC.
+    Usa PowerShell + COM — funciona em qualquer Windows com Outlook instalado.
+    """
+    # Escapa aspas simples para o PowerShell
+    ass = assunto.replace("'", "''")
+    bod = corpo_html.replace("'", "''").replace("\n", " ")
+    arq = caminho_arquivo.replace("\\", "\\\\")
+
+    ps = (
+        f"$ol = New-Object -ComObject Outlook.Application; "
+        f"$m  = $ol.CreateItem(0); "
+        f"$m.Subject  = '{ass}'; "
+        f"$m.HTMLBody = '{bod}'; "
+        f"$m.Attachments.Add('{arq}'); "
+        f"$m.Display()"
+    )
+    subprocess.Popen(
+        ["powershell", "-ExecutionPolicy", "Bypass", "-Command", ps],
+        creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+    )
+
+
+@app.route("/anc/<int:anc_id>/email")
+@login_required
+def enviar_email_anc(anc_id):
+    reg = ANC.query.get_or_404(anc_id)
+
+    # Gera o PDF
+    pdf_bytes = gerar_pdf_anc_bytes(reg)
+
+    ano = reg.criado_em.year if reg.criado_em else datetime.now().year
+    num = f"{reg.numero_site:04d}" if reg.numero_site else str(reg.id)
+    nome_arquivo = f"ANC-{ano}-{num} - {reg.natureza or 'ANC'} - {reg.site or 'DHL'}.pdf"
+
+    # Salva com o nome amigável para o Outlook exibir corretamente
+    tmp_path = _os.path.join(tempfile.gettempdir(), nome_arquivo)
+    with open(tmp_path, "wb") as f:
+        data = pdf_bytes.read() if hasattr(pdf_bytes, "read") else pdf_bytes
+        f.write(data)
+
+    assunto = f"ANC-{ano}-{num} - {reg.natureza or ''} - {reg.site or ''}"
+
+    # data_nc é String "YYYY-MM-DD" — converte para DD/MM/YYYY se possível
+    try:
+        from datetime import date as _date
+        data_fmt = _date.fromisoformat(reg.data_nc).strftime("%d/%m/%Y") if reg.data_nc else "—"
+    except Exception:
+        data_fmt = reg.data_nc or "—"
+
+    corpo = (
+        '<div style="font-family:Arial,sans-serif;background-color:#f4f4f4;padding:20px;">'
+        '<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;'
+        'overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.10);">'
+
+        # ── Cabeçalho DHL ──
+        '<div style="background-color:#FFCC00;border-bottom:4px solid #D40511;padding:20px 24px;">'
+        '<div style="font-size:11px;font-weight:900;letter-spacing:1px;color:#111;margin-bottom:4px;">DHL SECURITY</div>'
+        '<div style="font-size:20px;font-weight:900;color:#1A1A1A;">Ato N&#227;o Conforme &#8212; ANC</div>'
+        f'<div style="font-size:13px;color:#333;margin-top:2px;">ANC-{ano}-{num}</div>'
+        '</div>'
+
+        # ── Corpo ──
+        '<div style="padding:24px;">'
+        '<p style="color:#374151;font-size:14px;margin-top:0;">Prezados,</p>'
+        '<p style="color:#374151;font-size:14px;">Segue em anexo o registro de '
+        '<strong>Ato N&#227;o Conforme (ANC)</strong>. '
+        'Confira os dados abaixo:</p>'
+
+        # ── Tabela de info ──
+        '<table style="width:100%;border-collapse:collapse;background:#f8fafc;'
+        'border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin:16px 0;">'
+        '<tr>'
+        '<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;width:45%;">Protocolo</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#1f2937;font-weight:800;">ANC-{ano}-{num}</td>'
+        '</tr><tr>'
+        '<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Natureza</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#1f2937;font-weight:800;">{reg.natureza or "—"}</td>'
+        '</tr><tr>'
+        '<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Data</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#1f2937;font-weight:800;">{data_fmt}</td>'
+        '</tr><tr>'
+        '<td style="padding:10px 14px;color:#6b7280;font-weight:700;">Resp. Levantamento</td>'
+        f'<td style="padding:10px 14px;color:#1f2937;font-weight:800;">{reg.gestor_responsavel or "—"}</td>'
+        '</tr>'
+        '</table>'
+
+        '<p style="color:#374151;font-size:14px;">Colocamo-nos &#224; disposi&#231;&#227;o para esclarecimentos.</p>'
+        '</div>'
+
+        # ── Rodapé ──
+        '<div style="background:#f0f0f0;text-align:center;padding:12px;font-size:11px;color:#9ca3af;">'
+        'DHL Supply Chain &#183; Departamento de Seguran&#231;a &#183; CCTV Control Panel &#183; Uso interno'
+        '</div>'
+        '</div></div>'
+    )
+
+    _abrir_outlook(tmp_path, assunto, corpo)
+    flash("Outlook aberto com o arquivo anexado. Preencha os destinatários e envie.", "success")
+    return redirect(url_for("anc"))
+
+
+@app.route("/analises/<int:analise_id>/email")
+@login_required
+def enviar_email_analise(analise_id):
+    from sqlalchemy.orm import joinedload as _jl
+    reg = (AnaliseInvestigativa.query
+           .options(_jl(AnaliseInvestigativa.imagens))
+           .get_or_404(analise_id))
+
+    # Monta form_data a partir do modelo
+    form_data = {
+        "id_relatorio":       reg.id_relatorio or reg.codigo or str(reg.id),
+        "empresa":            reg.empresa            or "",
+        "unidade":            reg.unidade            or "",
+        "endereco":           reg.endereco           or "",
+        "classificacao":      reg.classificacao      or "",
+        "produtos_segmento":  reg.produtos_segmento  or "",
+        "clientes":           reg.clientes           or "",
+        "objetivo":           reg.objetivo           or "",
+        "responsavel":        reg.responsavel        or "",
+        "funcao_levantamento":reg.funcao_levantamento or "",
+        "data_levantamento":  reg.data_levantamento  or "",
+        "descricao_registro": reg.descricao_registro or "",
+        "conclusao":          reg.conclusao          or "",
+        "sugestao":           reg.sugestao           or "",
+    }
+
+    # Monta lista de evidências (imagem bytes + descrição)
+    evidencias_bytes = []
+    for img in (reg.imagens or []):
+        try:
+            raw = img.b64
+            if not raw:
+                continue
+            evidencias_bytes.append((_b64_decode(raw), img.descricao or ""))
+        except Exception as _e:
+            app.logger.warning("Email PDF — falha ao decodificar imagem id=%s: %s", img.id, _e)
+
+    # Gera o PDF
+    buf = gerar_pdf_analise_bytes(form_data, evidencias_bytes)
+
+    id_rel = form_data["id_relatorio"]
+    nome_arquivo = f"A.I - {id_rel} - {reg.site or 'SEM_SITE'}.pdf"
+
+    # Salva com o nome amigável para o Outlook exibir corretamente
+    tmp_path = _os.path.join(tempfile.gettempdir(), nome_arquivo)
+    with open(tmp_path, "wb") as f:
+        f.write(buf.read())
+
+    assunto = f"Análise Investigativa - {id_rel} - {reg.empresa or ''} - {reg.site or ''}"
+
+    data_fmt = reg.criado_em.strftime("%d/%m/%Y") if reg.criado_em else "—"
+
+    corpo = (
+        '<div style="font-family:Arial,sans-serif;background-color:#f4f4f4;padding:20px;">'
+        '<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;'
+        'overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.10);">'
+
+        # ── Cabeçalho DHL ──
+        '<div style="background-color:#FFCC00;border-bottom:4px solid #D40511;padding:20px 24px;">'
+        '<div style="font-size:11px;font-weight:900;letter-spacing:1px;color:#111;margin-bottom:4px;">DHL SECURITY</div>'
+        '<div style="font-size:20px;font-weight:900;color:#1A1A1A;">An&#225;lise Investigativa</div>'
+        f'<div style="font-size:13px;color:#333;margin-top:2px;">Protocolo: {id_rel}</div>'
+        '</div>'
+
+        # ── Corpo ──
+        '<div style="padding:24px;">'
+        '<p style="color:#374151;font-size:14px;margin-top:0;">Prezados,</p>'
+        '<p style="color:#374151;font-size:14px;">Segue em anexo a '
+        '<strong>An&#225;lise Investigativa</strong> referente ao protocolo '
+        f'<strong>{id_rel}</strong>. Confira os dados abaixo:</p>'
+
+        # ── Tabela de info ──
+        '<table style="width:100%;border-collapse:collapse;background:#f8fafc;'
+        'border:1px solid #e5e7eb;border-radius:8px;font-size:13px;margin:16px 0;">'
+        '<tr>'
+        '<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;width:45%;">Protocolo</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#1f2937;font-weight:800;">{id_rel}</td>'
+        '</tr><tr>'
+        '<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Empresa / Site</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#1f2937;font-weight:800;">{reg.empresa or "—"} &#8212; {reg.site or "—"}</td>'
+        '</tr><tr>'
+        '<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-weight:700;">Data</td>'
+        f'<td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#1f2937;font-weight:800;">{data_fmt}</td>'
+        '</tr><tr>'
+        '<td style="padding:10px 14px;color:#6b7280;font-weight:700;">Respons&#225;vel</td>'
+        f'<td style="padding:10px 14px;color:#1f2937;font-weight:800;">{reg.responsavel or "—"}</td>'
+        '</tr>'
+        '</table>'
+
+        '<p style="color:#374151;font-size:14px;">Colocamo-nos &#224; disposi&#231;&#227;o para esclarecimentos.</p>'
+        '</div>'
+
+        # ── Rodapé ──
+        '<div style="background:#f0f0f0;text-align:center;padding:12px;font-size:11px;color:#9ca3af;">'
+        'DHL Supply Chain &#183; Departamento de Seguran&#231;a &#183; CCTV Control Panel &#183; Uso interno'
+        '</div>'
+        '</div></div>'
+    )
+
+    _abrir_outlook(tmp_path, assunto, corpo)
+    flash("Outlook aberto com o arquivo anexado. Preencha os destinatários e envie.", "success")
+    return redirect(url_for("analises"))
+
+
+# =========================
+# PERFIL DO USUÁRIO
+# =========================
+
+@app.route("/avatar")
+@login_required
+def avatar():
+    """Retorna a foto de perfil do usuário logado."""
+    user = Usuario.query.get(session["user_id"])
+    if not user or not user.foto_perfil:
+        return "", 404
+    raw = user.foto_perfil
+    # suporte a data URI (data:image/png;base64,...) ou base64 puro
+    if "," in raw:
+        header, b64data = raw.split(",", 1)
+        mime = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+    else:
+        b64data = raw
+        mime = "image/jpeg"
+    import base64 as _b64
+    img_bytes = _b64.b64decode(b64data)
+    from flask import Response
+    return Response(img_bytes, mimetype=mime)
+
+
+@app.route("/meu-perfil", methods=["GET", "POST"])
+@login_required
+def meu_perfil():
+    user = Usuario.query.get_or_404(session["user_id"])
+    if request.method == "POST":
+        # Upload de foto
+        foto = request.files.get("foto_perfil")
+        if foto and foto.filename:
+            ext = foto.filename.rsplit(".", 1)[-1].lower() if "." in foto.filename else ""
+            if ext not in EXTENSOES_PERMITIDAS_IMAGEM:
+                flash("Formato de imagem inválido. Use PNG, JPG ou WEBP.", "danger")
+                return redirect(url_for("meu_perfil"))
+            import base64 as _b64
+            raw = foto.read()
+            mime = foto.mimetype or "image/jpeg"
+            b64str = f"data:{mime};base64,{_b64.b64encode(raw).decode()}"
+            user.foto_perfil = b64str
+            session["user_tem_foto"] = True
+            flash("Foto de perfil atualizada com sucesso.", "success")
+        # Alteração de senha
+        nova_senha = (request.form.get("nova_senha") or "").strip()
+        confirma   = (request.form.get("confirma_senha") or "").strip()
+        if nova_senha:
+            if len(nova_senha) < 6:
+                flash("A nova senha deve ter ao menos 6 caracteres.", "danger")
+                return redirect(url_for("meu_perfil"))
+            if nova_senha != confirma:
+                flash("As senhas não coincidem.", "danger")
+                return redirect(url_for("meu_perfil"))
+            user.set_password(nova_senha)
+            flash("Senha alterada com sucesso.", "success")
+        db.session.commit()
+        return redirect(url_for("meu_perfil"))
+
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    return render_template("perfil.html", user=user, is_admin=is_admin)
+
+
+# =========================
+# RECUPERAÇÃO DE SENHA
+# =========================
+
+def _enviar_codigo_reset(email_destino: str, nome: str, codigo: str):
+    """Envia e-mail com o código de redefinição de senha."""
+    msg = MIMEMultipart()
+    msg["Subject"] = "CCTV Control Panel — Código de redefinição de senha"
+    msg["From"]    = EMAIL_FROM
+    msg["To"]      = email_destino
+
+    corpo_html = f"""
+    <div style="font-family:Arial,sans-serif;background-color:#f4f4f4;padding:20px;">
+      <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.1);">
+        <div style="background-color:#FFCC00;border-bottom:4px solid #D40511;padding:20px;text-align:center;">
+          <h2 style="margin:0;color:#1A1A1A;">Redefinição de Senha</h2>
+          <p style="margin:6px 0 0;color:#374151;font-size:13px;">CCTV Control Panel</p>
+        </div>
+        <div style="padding:30px;">
+          <p style="color:#374151;font-size:15px;">Olá, <strong>{nome}</strong>!</p>
+          <p style="color:#6b7280;font-size:14px;line-height:1.6;">
+            Recebemos uma solicitação para redefinir a senha da sua conta.<br>
+            Use o código abaixo — ele é válido por <strong>15 minutos</strong>.
+          </p>
+          <div style="background:#fff8db;border:2px solid #ffcc00;border-radius:12px;
+                      padding:20px;text-align:center;margin:24px 0;">
+            <span style="font-size:40px;font-weight:900;color:#1A1A1A;letter-spacing:12px;">{codigo}</span>
+          </div>
+          <p style="color:#9ca3af;font-size:12px;text-align:center;line-height:1.6;">
+            Se você não solicitou a redefinição, ignore este e-mail.<br>
+            Sua senha permanece a mesma.
+          </p>
+        </div>
+        <div style="background-color:#1A1A1A;color:#f4f4f4;padding:15px;text-align:center;font-size:12px;">
+          <p style="margin:0;">DHL Supply Chain &middot; CCTV Control Panel &middot; Uso interno</p>
+        </div>
+      </div>
+    </div>
+    """
+    msg.attach(MIMEText(corpo_html, "html"))
+    try:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as exc:
+        logging.error(f"Erro ao enviar e-mail de reset: {exc}")
+        return False
+
+
+@app.route("/esqueci-senha", methods=["GET", "POST"])
+def esqueci_senha():
+    if session.get("user_id"):
+        return redirect(url_for("ocorrencias"))
+
+    enviado = request.args.get("enviado") == "1"
+
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        if not email:
+            flash("Informe o e-mail cadastrado.", "warning")
+            return redirect(url_for("esqueci_senha"))
+
+        usuario = Usuario.query.filter_by(email=email, is_active=True).first()
+
+        # Mesmo se não encontrado, mostramos sucesso (evita enumeração de e-mails)
+        if usuario:
+            # Invalida tokens anteriores deste usuário
+            ResetToken.query.filter_by(user_id=usuario.id, usado=0).update({"usado": 1})
+            db.session.flush()
+
+            codigo = f"{random.randint(0, 999999):06d}"
+            expira = datetime.utcnow().replace(second=0, microsecond=0)
+            from datetime import timedelta
+            expira += timedelta(minutes=15)
+
+            rt = ResetToken(user_id=usuario.id, token=codigo, expira_em=expira, usado=0)
+            db.session.add(rt)
+            db.session.commit()
+
+            _enviar_codigo_reset(usuario.email, usuario.nome, codigo)
+
+        # Guarda e-mail na sessão para pré-preencher a tela seguinte
+        session["reset_email"] = email
+        return redirect(url_for("esqueci_senha", enviado="1"))
+
+    return render_template("esqueci_senha.html", enviado=enviado)
+
+
+@app.route("/redefinir-senha", methods=["GET", "POST"])
+def redefinir_senha():
+    if session.get("user_id"):
+        return redirect(url_for("ocorrencias"))
+
+    if request.method == "POST":
+        codigo   = (request.form.get("codigo") or "").strip()
+        nova     = (request.form.get("nova_senha") or "").strip()
+        confirma = (request.form.get("confirma_senha") or "").strip()
+
+        if not codigo or not nova or not confirma:
+            flash("Preencha todos os campos.", "warning")
+            return render_template("redefinir_senha.html")
+
+        if nova != confirma:
+            flash("As senhas não coincidem.", "danger")
+            return render_template("redefinir_senha.html")
+
+        if len(nova) < 6:
+            flash("A senha deve ter pelo menos 6 caracteres.", "warning")
+            return render_template("redefinir_senha.html")
+
+        agora = datetime.utcnow()
+        rt = ResetToken.query.filter_by(token=codigo, usado=0).first()
+
+        if not rt or rt.expira_em < agora:
+            flash("Código inválido ou expirado. Solicite um novo.", "danger")
+            return render_template("redefinir_senha.html")
+
+        usuario = Usuario.query.get(rt.user_id)
+        if not usuario or not usuario.is_active:
+            flash("Usuário não encontrado.", "danger")
+            return render_template("redefinir_senha.html")
+
+        usuario.set_password(nova)
+        rt.usado = 1
+        db.session.commit()
+        session.pop("reset_email", None)
+
+        flash("Senha redefinida com sucesso! Faça login com a nova senha.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("redefinir_senha.html")
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("user_id"):
         return redirect(url_for("ocorrencias"))
+
+    todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
 
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
@@ -1759,24 +2484,125 @@ def login():
 
         if not email or not senha:
             flash("Preencha e-mail e senha.", "warning")
-            return render_template("login.html")
+            return render_template("login.html", todos_sites=todos_sites)
 
         usuario = Usuario.query.filter_by(email=email, is_active=True).first()
 
         if not usuario or not usuario.check_password(senha):
             flash("E-mail ou senha inválidos.", "danger")
-            return render_template("login.html")
+            return render_template("login.html", todos_sites=todos_sites)
 
         session["user_id"] = usuario.id
         session["user_nome"] = usuario.nome
         session["username"] = usuario.email
         session["user_perfil"] = usuario.perfil
         session["user_site"] = usuario.site or ""
+        session["user_tem_foto"] = bool(usuario.foto_perfil)
+        session["user_lgpd_aceito"] = usuario.lgpd_aceito or ""
+
+        # Primeiro acesso: redireciona para aceite LGPD
+        if (usuario.lgpd_aceito or "") != "sim":
+            return redirect(url_for("lgpd_aceite"))
 
         flash("Login realizado com sucesso.", "success")
         return redirect(url_for("ocorrencias"))
 
-    return render_template("login.html")
+    return render_template("login.html", todos_sites=todos_sites)
+
+
+def _enviar_email_solicitacao_cadastro(nome, email, site):
+    """Notifica os admins por e-mail sobre nova solicitação de cadastro."""
+    admins_emails = list(EMAIL_DEVS)
+
+    if not admins_emails:
+        return
+
+    msg = MIMEMultipart()
+    msg["Subject"] = "CCTV Control Panel — Nova solicitação de cadastro"
+    msg["From"]    = EMAIL_FROM
+    msg["To"]      = ", ".join(admins_emails)
+
+    data_hora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
+    corpo_html = f"""
+    <div style="font-family:Arial,sans-serif;background-color:#f4f4f4;padding:20px;">
+      <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.10);">
+        <div style="background:#FFCC00;border-bottom:4px solid #D40511;padding:20px 24px;">
+          <h2 style="margin:0;color:#1A1A1A;font-size:18px;">📋 Nova solicitação de cadastro</h2>
+          <p style="margin:6px 0 0;color:#374151;font-size:13px;">CCTV Control Panel · {data_hora}</p>
+        </div>
+        <div style="padding:28px 24px;">
+          <p style="color:#374151;font-size:14px;margin:0 0 18px;">
+            Um novo usuário solicitou acesso à plataforma. Confira os dados abaixo:
+          </p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr style="background:#f9fafb;">
+              <td style="padding:10px 14px;font-weight:700;color:#6b7280;width:120px;border:1px solid #e5e7eb;">Nome</td>
+              <td style="padding:10px 14px;color:#1f2937;border:1px solid #e5e7eb;"><strong>{nome}</strong></td>
+            </tr>
+            <tr>
+              <td style="padding:10px 14px;font-weight:700;color:#6b7280;border:1px solid #e5e7eb;">E-mail</td>
+              <td style="padding:10px 14px;color:#1f2937;border:1px solid #e5e7eb;">{email}</td>
+            </tr>
+            <tr style="background:#f9fafb;">
+              <td style="padding:10px 14px;font-weight:700;color:#6b7280;border:1px solid #e5e7eb;">Site</td>
+              <td style="padding:10px 14px;color:#1f2937;border:1px solid #e5e7eb;">{site or '—'}</td>
+            </tr>
+          </table>
+          <p style="margin:22px 0 0;color:#6b7280;font-size:13px;line-height:1.6;">
+            Para liberar o acesso, cadastre o usuário diretamente no sistema de administração.
+          </p>
+        </div>
+        <div style="background:#1A1A1A;color:#9ca3af;padding:14px 24px;text-align:center;font-size:12px;">
+          DHL Supply Chain &middot; CCTV Control Panel &middot; Uso interno
+        </div>
+      </div>
+    </div>
+    """
+    msg.attach(MIMEText(corpo_html, "html"))
+    try:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+    except Exception as exc:
+        logging.error(f"Erro ao notificar admins sobre solicitação de cadastro: {exc}")
+
+
+@app.route("/solicitar-cadastro", methods=["POST"])
+def solicitar_cadastro():
+    nome  = (request.form.get("nome")  or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    site  = (request.form.get("site")  or "").strip()
+
+    if not nome or not email:
+        flash("Preencha nome e e-mail para solicitar o cadastro.", "warning")
+        return redirect(url_for("login"))
+
+    # Verifica se já existe solicitação pendente para este e-mail
+    existente = SolicitacaoCadastro.query.filter_by(email=email, status="PENDENTE").first()
+    if existente:
+        flash("Já existe uma solicitação pendente para este e-mail. Aguarde o contato do administrador.", "warning")
+        return redirect(url_for("login"))
+
+    # Verifica se já existe usuário com este e-mail
+    usuario_existente = Usuario.query.filter_by(email=email).first()
+    if usuario_existente:
+        flash("Este e-mail já possui acesso cadastrado. Use 'Esqueceu a senha?' caso não lembre sua senha.", "warning")
+        return redirect(url_for("login"))
+
+    solicitacao = SolicitacaoCadastro(nome=nome, email=email, site=site or None)
+    db.session.add(solicitacao)
+    db.session.commit()
+
+    # Notifica admins por e-mail (sem bloquear o fluxo se falhar)
+    try:
+        _enviar_email_solicitacao_cadastro(nome, email, site)
+    except Exception:
+        pass
+
+    flash(f"Solicitação enviada com sucesso! Em breve o administrador entrará em contato com {email}.", "success")
+    return redirect(url_for("login"))
 
 
 @app.route("/logout")
@@ -1784,6 +2610,37 @@ def logout():
     session.clear()
     flash("Sessão encerrada com sucesso.", "success")
     return redirect(url_for("login"))
+
+
+# =========================
+# LGPD — Aceite de Termos
+# =========================
+@app.route("/lgpd-aceite", methods=["GET", "POST"])
+def lgpd_aceite():
+    # Redireciona para login se não houver sessão
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        resposta = request.form.get("resposta", "")
+        usuario = Usuario.query.get(session["user_id"])
+
+        if resposta == "sim":
+            usuario.lgpd_aceito    = "sim"
+            usuario.lgpd_aceito_em = datetime.utcnow()
+            db.session.commit()
+            session["user_lgpd_aceito"] = "sim"
+            flash("Termos da LGPD aceitos. Bem-vindo(a)!", "success")
+            return redirect(url_for("ocorrencias"))
+        else:
+            # Recusou — encerra sessão e bloqueia acesso
+            usuario.lgpd_aceito = "nao"
+            db.session.commit()
+            session.clear()
+            flash("Você recusou os termos da LGPD. O acesso à ferramenta não é permitido.", "danger")
+            return redirect(url_for("login"))
+
+    return render_template("lgpd_aceite.html", user_nome=session.get("user_nome", ""))
 
 
 # =========================
@@ -1903,6 +2760,26 @@ def ocorrencias():
     agora = datetime.now().strftime("%Y-%m-%dT%H:%M")
     hora_atual = datetime.now().strftime("%H:%M")
 
+    # Dados para o gráfico de colunas — investigações por local
+    por_local = Counter(r.local for r in registros if r.local)
+
+    # Lista de sites para filtro (admin)
+    _sites_q = db.session.query(Ocorrencia.site).distinct().all()
+    todos_sites = sorted(s[0] for s in _sites_q if s[0])
+
+    # Lista de operadores para filtro (baseada nos valores já registrados)
+    _ops_q = db.session.query(Ocorrencia.operador).distinct().all()
+    todos_operadores = sorted(o[0] for o in _ops_q if o[0])
+
+    # Usuários do mesmo site para o campo Operador no formulário
+    _site_form = site_usuario or session.get("user_site", "")
+    usuarios_site = (
+        Usuario.query
+        .filter(Usuario.site == _site_form, Usuario.is_active == True)
+        .order_by(Usuario.nome)
+        .all()
+    )
+
     return render_template(
         "ocorrencias.html",
         registros=registros,
@@ -1912,7 +2789,12 @@ def ocorrencias():
         agora=agora,
         hora_atual=hora_atual,
         filtros=filtros,
-        site_usuario=site_usuario
+        site_usuario=site_usuario,
+        is_admin=is_admin,
+        por_local=por_local,
+        todos_sites=todos_sites,
+        todos_operadores=todos_operadores,
+        usuarios_site=usuarios_site,
     )
 
 
@@ -1924,7 +2806,6 @@ def post_ocorrencia(ocorrencia_id):
     if request.method == "POST":
         status_post = normalizar_status(request.form.get("status_post"))
         responsavel = (request.form.get("responsavel_fechamento") or "").strip()
-        anexo_post = request.files.get("anexo_post")
 
         if not status_post:
             flash("Selecione a conclusão da publicação.", "warning")
@@ -1942,20 +2823,50 @@ def post_ocorrencia(ocorrencia_id):
         registro.situacao_investigacao = status_post
         registro.responsavel_fechamento = responsavel
 
-        if anexo_post and anexo_post.filename:
-            novo_anexo_b64, nome_original = arquivo_para_base64(anexo_post, EXTENSOES_PERMITIDAS_POST)
-            if not novo_anexo_b64:
-                flash("Formato de arquivo inválido para o post.", "danger")
-                return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
-
-            registro.anexo_post = novo_anexo_b64
-            registro.anexo_post_nome = nome_original
+        for campo_file, campo_b64, campo_nome in [
+            ("anexo_post",   "anexo_post",   "anexo_post_nome"),
+            ("anexo_post_2", "anexo_post_2", "anexo_post_nome_2"),
+            ("anexo_post_3", "anexo_post_3", "anexo_post_nome_3"),
+        ]:
+            arq = request.files.get(campo_file)
+            if arq and arq.filename:
+                b64, nome = arquivo_para_base64(arq, EXTENSOES_PERMITIDAS_POST)
+                if not b64:
+                    flash(f"Formato inválido no anexo '{arq.filename}'.", "danger")
+                    return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
+                setattr(registro, campo_b64, b64)
+                setattr(registro, campo_nome, nome)
 
         db.session.commit()
         flash("Publicação da ocorrência atualizada com sucesso.", "success")
         return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
 
     return render_template("post_ocorrencia.html", registro=registro)
+
+
+@app.route("/ocorrencias/<int:ocorrencia_id>/anexo/<int:slot>")
+@login_required
+def download_anexo_ocorrencia(ocorrencia_id, slot):
+    """Serve um dos 3 anexos de fechamento da investigação."""
+    reg = Ocorrencia.query.get_or_404(ocorrencia_id)
+    campo_b64  = {1: reg.anexo_post,   2: reg.anexo_post_2,   3: reg.anexo_post_3}
+    campo_nome = {1: reg.anexo_post_nome, 2: reg.anexo_post_nome_2, 3: reg.anexo_post_nome_3}
+    data_uri   = campo_b64.get(slot)
+    nome       = campo_nome.get(slot) or f"anexo_{slot}"
+    if not data_uri:
+        flash("Anexo não disponível.", "warning")
+        return redirect(url_for("ocorrencias"))
+    # data_uri formato: data:mime;base64,<dados>
+    try:
+        header, b64data = data_uri.split(",", 1)
+        mime = header.split(":")[1].split(";")[0]
+        raw  = base64.b64decode(b64data)
+    except Exception:
+        flash("Erro ao ler o anexo.", "danger")
+        return redirect(url_for("ocorrencias"))
+    return send_file(BytesIO(raw), mimetype=mime, as_attachment=True, download_name=nome)
+
+
 @app.route("/excluir/<int:ocorrencia_id>", methods=["POST"])
 @login_required
 @perfil_required("ADMIN", "USUARIO")
@@ -1974,45 +2885,128 @@ def excluir_ocorrencia(ocorrencia_id):
 @app.route("/dashboard")
 @login_required
 def dashboard():
+    is_admin     = (session.get("user_perfil") or "").upper() == "ADMIN"
+    site_usuario = session.get("user_site") or None
+
     query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
+    if not is_admin and site_usuario:
+        query = query.filter_by(site=site_usuario)
+
     registros, filtros = aplicar_filtros(query)
 
-    total = len(registros)
-    pendentes = len([r for r in registros if normalizar_status(r.status) == "PENDENTE"])
-    andamento = len([r for r in registros if normalizar_status(r.status) == "EM ANDAMENTO"])
-    concluidas = len([r for r in registros if normalizar_status(r.status) == "CONCLUIDO"])
-    altas = len([r for r in registros if normalizar_prioridade(r.prioridade) == "ALTA"])
+    # Sites disponíveis para o filtro (admin vê todos; não-admin só o seu)
+    if is_admin:
+        _sites_q = db.session.query(Ocorrencia.site).distinct().all()
+        todos_sites_dash = sorted(s[0] for s in _sites_q if s[0])
+    else:
+        todos_sites_dash = [site_usuario] if site_usuario else []
 
+    from datetime import datetime as _dt
+    _hoje = _dt.now()
+
+    total = len(registros)
+    pendentes  = len([r for r in registros if normalizar_status(r.status) == "PENDENTE"])
+    andamento  = len([r for r in registros if normalizar_status(r.status) == "EM ANDAMENTO"])
+    concluidas = len([r for r in registros if normalizar_status(r.status) == "CONCLUIDO"])
+    altas      = len([r for r in registros if normalizar_prioridade(r.prioridade) == "ALTA"])
+
+    # Taxa de resolução (%)
+    taxa_resolucao = round(concluidas / total * 100) if total > 0 else 0
+
+    # Registros do mês atual
+    def _mesmo_mes(r):
+        try:
+            dh = r.data_hora
+            if isinstance(dh, str):
+                dh = _dt.strptime(dh[:10], "%Y-%m-%d")
+            return dh.month == _hoje.month and dh.year == _hoje.year
+        except Exception:
+            return False
+    registros_mes = len([r for r in registros if _mesmo_mes(r)])
+
+    # Local e natureza mais críticos (maior volume)
     natureza_count = {}
-    local_count = {}
-    status_count = {}
+    local_count    = {}
+    status_count   = {}
+
+    criador_count  = {}
 
     for r in registros:
-        natureza_key = r.natureza or "Não informado"
-        local_key = r.local or "Não informado"
-        status_key = r.status or "Não informado"
+        natureza_key = r.natureza    or "Não informado"
+        local_key    = r.local       or "Não informado"
+        status_key   = r.status      or "Não informado"
+        criador_key  = r.criado_por  or "Não informado"
 
         natureza_count[natureza_key] = natureza_count.get(natureza_key, 0) + 1
-        local_count[local_key] = local_count.get(local_key, 0) + 1
-        status_count[status_key] = status_count.get(status_key, 0) + 1
+        local_count[local_key]       = local_count.get(local_key, 0) + 1
+        status_count[status_key]     = status_count.get(status_key, 0) + 1
+        criador_count[criador_key]   = criador_count.get(criador_key, 0) + 1
+
+    natureza_top = max(natureza_count, key=natureza_count.get) if natureza_count else "—"
+    local_top    = max(local_count,    key=local_count.get)    if local_count    else "—"
+
+    # Operador = usuários do site filtrado (ou do usuário logado se não-admin)
+    _user_site = filtros.get("site_filtro") or session.get("user_site", "")
+    _usuarios_site = (
+        Usuario.query
+        .filter(Usuario.site == _user_site, Usuario.is_active == True)
+        .with_entities(Usuario.nome)
+        .all()
+    )
+    _nomes_site = [u.nome for u in _usuarios_site]
+    # Monta o dict usando os nomes do site como base (garante todos aparecem, mesmo com 0)
+    operador_count = {nome: criador_count.get(nome, 0) for nome in _nomes_site}
+    # Inclui eventuais criadores que não estejam mais cadastrados no site mas têm registros
+    for _nome, _qtd in criador_count.items():
+        if _nome not in operador_count:
+            operador_count[_nome] = _qtd
+
+    # Ordenar todos em ordem crescente (menor → maior)
+    natureza_sorted  = sorted(natureza_count.items(),  key=lambda x: x[1])
+    local_sorted     = sorted(local_count.items(),     key=lambda x: x[1])
+    criador_sorted   = sorted(criador_count.items(),   key=lambda x: x[1])
+    operador_sorted  = sorted(operador_count.items(),  key=lambda x: x[1])
+
+    # Status em ordem fixa: PENDENTE → EM ANDAMENTO → CONCLUIDO
+    _STATUS_ORDER = ["PENDENTE", "EM ANDAMENTO", "CONCLUIDO"]
+    labels_status  = []
+    valores_status = []
+    for _s in _STATUS_ORDER:
+        if _s in status_count:
+            labels_status.append(_s)
+            valores_status.append(status_count[_s])
+    for _s, _v in status_count.items():
+        if _s not in _STATUS_ORDER:
+            labels_status.append(_s)
+            valores_status.append(_v)
 
     return render_template(
         "dashboard.html",
+        is_admin=is_admin,
+        todos_sites_dash=todos_sites_dash,
         registros=registros[:10],
         filtros=filtros,
         resumo={
-            "total": total,
-            "pendentes": pendentes,
-            "andamento": andamento,
-            "concluidas": concluidas,
-            "altas": altas,
+            "total":          total,
+            "pendentes":      pendentes,
+            "andamento":      andamento,
+            "concluidas":     concluidas,
+            "altas":          altas,
+            "taxa_resolucao": taxa_resolucao,
+            "registros_mes":  registros_mes,
+            "natureza_top":   natureza_top,
+            "local_top":      local_top,
         },
-        labels_natureza=list(natureza_count.keys()),
-        valores_natureza=list(natureza_count.values()),
-        labels_local=list(local_count.keys()),
-        valores_local=list(local_count.values()),
-        labels_status=list(status_count.keys()),
-        valores_status=list(status_count.values()),
+        labels_natureza=[x[0] for x in natureza_sorted],
+        valores_natureza=[x[1] for x in natureza_sorted],
+        labels_local=[x[0] for x in local_sorted],
+        valores_local=[x[1] for x in local_sorted],
+        labels_status=labels_status,
+        valores_status=valores_status,
+        labels_criador=[x[0] for x in criador_sorted],
+        valores_criador=[x[1] for x in criador_sorted],
+        labels_operador=[x[0] for x in operador_sorted],
+        valores_operador=[x[1] for x in operador_sorted],
     )
 
 
@@ -2139,6 +3133,281 @@ def exportar_pdf():
     )
 
 
+def gerar_pdf_ocorrencia_bytes(oc):
+    """Gera PDF individual de uma Ocorrência — layout corporativo DHL Security."""
+    buffer   = BytesIO()
+    DHL_RED  = colors.HexColor("#D40511")
+    DHL_YEL  = colors.HexColor("#FFCC00")
+    DHL_DARK = colors.HexColor("#1F2937")
+    DHL_MUTE = colors.HexColor("#6B7280")
+    LBL_BG   = colors.HexColor("#FFF9E6")   # amarelo muito suave p/ labels
+    GRAY_BG  = colors.HexColor("#F9FAFB")
+    GRAY_LN  = colors.HexColor("#E5E7EB")
+
+    pw = A4[0] - 3.4 * rcm
+    doc_pdf = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        leftMargin=1.7*rcm, rightMargin=1.7*rcm,
+        topMargin=2.2*rcm,  bottomMargin=2.8*rcm,
+    )
+
+    # ── estilos ──────────────────────────────────────────────────
+    s_title   = ParagraphStyle("oc_ti", fontName="Helvetica-Bold", fontSize=18,
+                                textColor=DHL_DARK, alignment=TA_CENTER, spaceAfter=3)
+    s_sub     = ParagraphStyle("oc_su", fontName="Helvetica",      fontSize=9,
+                                textColor=DHL_MUTE, alignment=TA_CENTER, spaceAfter=2)
+    s_section = ParagraphStyle("oc_se", fontName="Helvetica-Bold", fontSize=10,
+                                textColor=DHL_RED,  spaceBefore=12, spaceAfter=5)
+    s_label   = ParagraphStyle("oc_lb", fontName="Helvetica-Bold", fontSize=9,
+                                textColor=DHL_DARK)
+    s_body    = ParagraphStyle("oc_bo", fontName="Helvetica",      fontSize=9,
+                                textColor=DHL_DARK, leading=13)
+    s_hdr_r   = ParagraphStyle("oc_hr", fontName="Helvetica",      fontSize=8,
+                                alignment=TA_RIGHT, leading=13)
+    s_badge   = ParagraphStyle("oc_ba", fontName="Helvetica-Bold", fontSize=9,
+                                alignment=TA_CENTER)
+
+    # ── helpers ───────────────────────────────────────────────────
+    def _fit_img_oc(source, max_w, max_h):
+        bio = BytesIO(_b64_decode(source)) if isinstance(source, str) else source
+        bio.seek(0)
+        iw, ih = ImageReader(bio).getSize()
+        scale = min(max_w / iw, max_h / ih, 1.0)
+        bio.seek(0)
+        return RLImage(bio, width=iw * scale, height=ih * scale)
+
+    def info_row(label, value, val_style=None):
+        """Linha chave→valor com fundo amarelado no label."""
+        return [Paragraph(f"<b>{label}</b>", s_label),
+                Paragraph(str(value or "—"), val_style or s_body)]
+
+    def info_table(rows):
+        """Tabela de linhas chave→valor."""
+        t = Table(rows, colWidths=[5.2*rcm, pw - 5.2*rcm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0),(0,-1), LBL_BG),
+            ("BACKGROUND",    (1,0),(1,-1), colors.white),
+            ("GRID",          (0,0),(-1,-1), 0.4, GRAY_LN),
+            ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+            ("TOPPADDING",    (0,0),(-1,-1), 5),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+            ("LEFTPADDING",   (0,0),(-1,-1), 8),
+            ("RIGHTPADDING",  (0,0),(-1,-1), 8),
+        ]))
+        return t
+
+    def text_box(text, min_h=1.8*rcm):
+        t = Table([[Paragraph(str(text or "—"), s_body)]], colWidths=[pw])
+        t.setStyle(TableStyle([
+            ("BOX",           (0,0),(-1,-1), 0.5, GRAY_LN),
+            ("BACKGROUND",    (0,0),(-1,-1), colors.white),
+            ("TOPPADDING",    (0,0),(-1,-1), 10),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 10),
+            ("LEFTPADDING",   (0,0),(-1,-1), 12),
+            ("RIGHTPADDING",  (0,0),(-1,-1), 12),
+            ("MINROWHEIGHT",  (0,0),(-1,-1), min_h),
+        ]))
+        return t
+
+    def badge_cell(text, bg, fg):
+        """Célula colorida estilo badge."""
+        t = Table([[Paragraph(f"<b>{text}</b>", s_badge)]], colWidths=[3.5*rcm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0),(-1,-1), bg),
+            ("TEXTCOLOR",     (0,0),(-1,-1), fg),
+            ("ROUNDEDCORNERS",(0,0),(-1,-1), [4,4,4,4]),
+            ("TOPPADDING",    (0,0),(-1,-1), 4),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+        ]))
+        return t
+
+    # cores de prioridade
+    _PRIOR_COLORS = {
+        "CRITICA":  (colors.HexColor("#FDE8EA"), DHL_RED),
+        "ALTA":     (colors.HexColor("#FEF3C7"), colors.HexColor("#92400E")),
+        "MEDIA":    (colors.HexColor("#DBEAFE"), colors.HexColor("#1E40AF")),
+        "BAIXA":    (colors.HexColor("#D1FAE5"), colors.HexColor("#065F46")),
+    }
+    _STATUS_COLORS = {
+        "PENDENTE":          (colors.HexColor("#FEF3C7"), colors.HexColor("#92400E")),
+        "EM INVESTIGACAO":   (colors.HexColor("#DBEAFE"), colors.HexColor("#1E40AF")),
+        "CONCLUIDO":         (colors.HexColor("#D1FAE5"), colors.HexColor("#065F46")),
+        "INCONCLUSIVA":      (colors.HexColor("#F3F4F6"), colors.HexColor("#374151")),
+    }
+    prior_key  = (oc.prioridade or "").upper()
+    status_key = (oc.status     or "").upper()
+    p_bg, p_fg = _PRIOR_COLORS.get(prior_key,  (GRAY_BG, DHL_DARK))
+    s_bg, s_fg = _STATUS_COLORS.get(status_key, (GRAY_BG, DHL_DARK))
+
+    story = []
+
+    # ── 1. CABEÇALHO ──────────────────────────────────────────────
+    logo_path = os.path.join(app.root_path, "static", "logo.png")
+    if os.path.exists(logo_path):
+        _lbio = BytesIO(open(logo_path, "rb").read())
+        _liw, _lih = ImageReader(_lbio).getSize()
+        _lscale = min(3.8*rcm / _liw, 1.4*rcm / _lih)
+        logo_cell = RLImage(logo_path, width=_liw*_lscale, height=_lih*_lscale)
+    else:
+        logo_cell = Paragraph('<b><font color="#D40511" size="14">DHL</font></b>',
+                              ParagraphStyle("tmp", fontName="Helvetica"))
+
+    hdr = Table(
+        [[logo_cell, Paragraph(
+            '<font color="#D40511"><b>DHL SECURITY</b></font><br/>'
+            '<font color="#6B7280">Controle de Ocorrências</font>', s_hdr_r)]],
+        colWidths=[pw * 0.38, pw * 0.62],
+    )
+    hdr.setStyle(TableStyle([
+        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+        ("LINEBELOW",     (0,0),(-1,-1), 2.0, DHL_RED),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 8),
+    ]))
+    story += [hdr, Spacer(1, 0.4*rcm)]
+
+    # ── 2. TÍTULO + CÓDIGO ────────────────────────────────────────
+    story.append(Paragraph("RELATÓRIO DE OCORRÊNCIA", s_title))
+    codigo = oc.codigo or f"#{oc.id}"
+    story.append(Paragraph(f"Código: {codigo}  |  Site: {oc.site or '—'}  |  "
+                            f"{oc.data_hora or '—'}", s_sub))
+    story.append(Spacer(1, 0.3*rcm))
+
+    # faixa amarela DHL
+    banner = Table([["DHL SECURITY"]], colWidths=[pw])
+    banner.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(-1,-1), DHL_YEL),
+        ("TEXTCOLOR",     (0,0),(-1,-1), colors.HexColor("#7A0000")),
+        ("FONTNAME",      (0,0),(-1,-1), "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0),(-1,-1), 9),
+        ("ALIGN",         (0,0),(-1,-1), "CENTER"),
+        ("TOPPADDING",    (0,0),(-1,-1), 6),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+        ("BOX",           (0,0),(-1,-1), 1.5, DHL_RED),
+    ]))
+    story += [banner, Spacer(1, 0.5*rcm)]
+
+    # ── 3. CLASSIFICAÇÃO (badges) ─────────────────────────────────
+    story.append(Paragraph("CLASSIFICAÇÃO", s_section))
+    badge_prior  = badge_cell(oc.prioridade or "—",  p_bg, p_fg)
+    badge_status = badge_cell(oc.status     or "—",  s_bg, s_fg)
+    badge_tbl = Table(
+        [[Paragraph("<b>Prioridade</b>", s_label), badge_prior,
+          Paragraph("<b>Status</b>",    s_label), badge_status]],
+        colWidths=[3.0*rcm, 3.8*rcm, 2.8*rcm, 3.8*rcm],
+    )
+    badge_tbl.setStyle(TableStyle([
+        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 0),
+        ("LEFTPADDING",   (0,0),(-1,-1), 0),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 8),
+    ]))
+    story += [badge_tbl, Spacer(1, 0.4*rcm)]
+
+    # ── 4. IDENTIFICAÇÃO ──────────────────────────────────────────
+    story.append(Paragraph("IDENTIFICAÇÃO", s_section))
+    story.append(info_table([
+        info_row("Nº / Código:",      f"{oc.numero_site or oc.id}  —  {codigo}"),
+        info_row("Data / Hora:",      f"{oc.data_hora or '—'}  |  Hora ocorrência: {oc.hora_ocorrencia or '—'}"),
+        info_row("Natureza:",         oc.natureza),
+        info_row("Site:",             oc.site),
+        info_row("Local:",            oc.local),
+    ]))
+    story.append(Spacer(1, 0.3*rcm))
+
+    # ── 5. ENVOLVIDOS / OPERACIONAL ───────────────────────────────
+    story.append(Paragraph("ENVOLVIDOS / OPERACIONAL", s_section))
+    story.append(info_table([
+        info_row("Operador / GC:", oc.operador),
+        info_row("Sub-Package Nº:", oc.gc),
+        info_row("Envolvido(s):",   oc.envolvido),
+    ]))
+    story.append(Spacer(1, 0.3*rcm))
+
+    # ── 6. REGISTRO ───────────────────────────────────────────────
+    criado_em_fmt = oc.criado_em.strftime("%d/%m/%Y %H:%M") if oc.criado_em else "—"
+    story.append(Paragraph("REGISTRO", s_section))
+    story.append(info_table([
+        info_row("Registrado por:", oc.criado_por),
+        info_row("Data do registro:", criado_em_fmt),
+    ]))
+    story.append(Spacer(1, 0.3*rcm))
+
+    # ── 7. DESCRIÇÃO ──────────────────────────────────────────────
+    story.append(Paragraph("DESCRIÇÃO DA OCORRÊNCIA", s_section))
+    story.append(text_box(oc.descricao, min_h=2.5*rcm))
+    story.append(Spacer(1, 0.3*rcm))
+
+    # ── 8. FOTO (se houver) ───────────────────────────────────────
+    if oc.foto:
+        story.append(Paragraph("REGISTRO FOTOGRÁFICO", s_section))
+        try:
+            img_max_w = pw * 0.55
+            img_max_h = 8.0 * rcm
+            foto_img  = _fit_img_oc(oc.foto, img_max_w, img_max_h)
+            cap = Paragraph("<i>Foto registrada na ocorrência</i>",
+                            ParagraphStyle("oc_cap", fontName="Helvetica-Oblique",
+                                           fontSize=7, textColor=DHL_MUTE, alignment=TA_CENTER))
+            foto_tbl = Table(
+                [[foto_img], [cap]],
+                colWidths=[img_max_w],
+            )
+            foto_tbl.setStyle(TableStyle([
+                ("BOX",           (0,0),(-1,-1), 0.5, GRAY_LN),
+                ("BACKGROUND",    (0,0),(-1,-1), GRAY_BG),
+                ("ALIGN",         (0,0),(-1,-1), "CENTER"),
+                ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+                ("TOPPADDING",    (0,0),(-1,-1), 10),
+                ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+            ]))
+            story += [foto_tbl, Spacer(1, 0.4*rcm)]
+        except Exception:
+            pass
+
+    # ── 9. ENCERRAMENTO (se houver) ───────────────────────────────
+    if oc.responsavel_fechamento or oc.conclusao_investigacao:
+        story.append(Paragraph("ENCERRAMENTO / CONCLUSÃO", s_section))
+        if oc.conclusao_investigacao:
+            story.append(text_box(oc.conclusao_investigacao))
+            story.append(Spacer(1, 0.3*rcm))
+        story.append(info_table([
+            info_row("Situação final:",            oc.situacao_investigacao or oc.status),
+            info_row("Responsável encerramento:", oc.responsavel_fechamento),
+        ]))
+        story.append(Spacer(1, 0.3*rcm))
+
+    # ── rodapé ────────────────────────────────────────────────────
+    def _footer_oc_pdf(canvas, doc):
+        canvas.saveState()
+        x0, x1 = 1.7*rcm, A4[0] - 1.7*rcm
+        canvas.setStrokeColor(DHL_RED)
+        canvas.setLineWidth(0.8)
+        canvas.line(x0, 1.9*rcm, x1, 1.9*rcm)
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(DHL_MUTE)
+        canvas.drawString(x0, 1.5*rcm,
+            f"DHL Security — Controle de Ocorrências{' | ' + oc.site if oc.site else ''}"
+            f"  |  {codigo}")
+        canvas.drawRightString(x1, 1.5*rcm, f"Página {doc.page}")
+        _desenhar_lgpd(canvas, x0, 1.05*rcm)
+        canvas.restoreState()
+
+    doc_pdf.build(story, onFirstPage=_footer_oc_pdf, onLaterPages=_footer_oc_pdf)
+    buffer.seek(0)
+    return buffer
+
+
+@app.route("/ocorrencias/<int:ocorrencia_id>/exportar-pdf")
+@login_required
+def exportar_ocorrencia_pdf(ocorrencia_id):
+    oc = Ocorrencia.query.get_or_404(ocorrencia_id)
+    buf  = gerar_pdf_ocorrencia_bytes(oc)
+    codigo = oc.codigo or f"OC-{oc.id}"
+    nome   = f"{codigo} - {oc.natureza or 'Ocorrencia'} - {oc.site or 'DHL'}.pdf"
+    return send_file(buf, as_attachment=True, download_name=nome,
+                     mimetype="application/pdf")
+
+
 # =========================
 # VERSÃO BLOQUEADA
 # =========================
@@ -2200,14 +3469,1104 @@ def solicitar_atualizacao():
         return jsonify({"status": "erro", "mensagem": "Erro ao processar e-mail."}), 500
 
 
+# ===========================================================================
+# SHIFT HANDOVER — Modelos
+# ===========================================================================
+class OcorrenciaTurno(db.Model):
+    __tablename__ = "ocorrencias_turno"
+
+    id                  = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    data_ocorrencia     = db.Column(db.Date,    nullable=False, default=date.today)
+    data_hora_registro  = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    site                = db.Column(db.String(80),  nullable=False)
+    turno               = db.Column(db.String(30),  nullable=False)
+    setor               = db.Column(db.String(100), nullable=False)
+    tipo_ocorrencia     = db.Column(db.String(100), nullable=False)
+    prioridade          = db.Column(db.String(20),  nullable=False)
+    responsavel_saida   = db.Column(db.String(120), nullable=False)
+    responsavel_entrada = db.Column(db.String(120), nullable=False)
+    descricao           = db.Column(db.Text, nullable=False)
+    efetivo             = db.Column(db.Text, nullable=False)
+    assinatura_saida       = db.Column(db.Text, nullable=True)
+    assinatura_entrada     = db.Column(db.Text, nullable=True)
+    imagem_1               = db.Column(db.Text, nullable=True)
+    imagem_2               = db.Column(db.Text, nullable=True)
+    imagem_3               = db.Column(db.Text, nullable=True)
+    imagem_4               = db.Column(db.Text, nullable=True)
+    acoes_tomadas          = db.Column(db.Text, nullable=True)
+    pendencias             = db.Column(db.Text, nullable=True)
+    status                 = db.Column(db.String(40), nullable=False)
+    criado_por             = db.Column(db.String(120), nullable=True)
+    created_at             = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    updated_at             = db.Column(db.DateTime, nullable=True)
+    # campos de recebimento
+    ressalva               = db.Column(db.Text, nullable=True)
+    tem_ressalva           = db.Column(db.String(1), nullable=True, default="N")
+    anexo_entrada          = db.Column(db.Text, nullable=True)   # base64
+    anexo_entrada_nome     = db.Column(db.String(255), nullable=True)
+
+    def to_dict(self):
+        from sqlalchemy import inspect as _sa_inspect
+        _unloaded = _sa_inspect(self).unloaded_expirable
+        def _clob(attr):
+            return "" if attr in _unloaded else (getattr(self, attr) or "")
+        return {
+            "id": self.id,
+            "data_ocorrencia": self.data_ocorrencia.strftime("%d/%m/%Y") if self.data_ocorrencia else "",
+            "data_hora_registro": self.data_hora_registro.strftime("%d/%m/%Y %H:%M") if self.data_hora_registro else "",
+            "site": self.site, "turno": self.turno, "setor": self.setor,
+            "tipo_ocorrencia": self.tipo_ocorrencia, "prioridade": self.prioridade,
+            "responsavel_saida": self.responsavel_saida, "responsavel_entrada": self.responsavel_entrada,
+            "descricao": self.descricao, "efetivo": self.efetivo or "",
+            "assinatura_saida": _clob("assinatura_saida"),
+            "assinatura_entrada": _clob("assinatura_entrada"),
+            "imagem_1": _clob("imagem_1"), "imagem_2": _clob("imagem_2"),
+            "imagem_3": _clob("imagem_3"), "imagem_4": _clob("imagem_4"),
+            "acoes_tomadas": self.acoes_tomadas or "", "pendencias": self.pendencias or "",
+            "status": self.status, "criado_por": self.criado_por or "",
+            "criado_em": self.created_at.strftime("%d/%m/%Y %H:%M") if self.created_at else "",
+            "atualizado_em": self.updated_at.strftime("%d/%m/%Y %H:%M") if self.updated_at else "",
+            "ressalva": _clob("ressalva"),
+            "tem_ressalva": self.tem_ressalva or "N",
+            "anexo_entrada_nome": self.anexo_entrada_nome or "",
+        }
+
+
+class SiteSH(db.Model):
+    __tablename__ = "SITES"
+    id_site   = db.Column("ID_SITE",   db.Integer,    primary_key=True)
+    nome_site = db.Column("NOME_SITE", db.String(100), nullable=False)
+
+
+# ===========================================================================
+# SHIFT HANDOVER — Helpers
+# ===========================================================================
+from datetime import date as _date_cls
+
+_SH_TURNOS    = {"TURNO A", "TURNO B", "TURNO C", "ADM"}
+_SH_STATUS    = {"EM ABERTO", "EM ACOMPANHAMENTO", "FINALIZADO"}
+_SH_PRIORS    = {"BAIXA", "MEDIA", "ALTA", "CRITICA"}
+
+
+def _sh_norm(v): return (v or "").strip().upper()
+
+def _sh_norm_prioridade(v):
+    v = _sh_norm(v)
+    return "CRITICA" if v == "CRÍTICA" else "MEDIA" if v == "MÉDIA" else v
+
+def _sh_norm_tipo(v):
+    v = _sh_norm(v)
+    return "MANUTENCAO" if v == "MANUTENÇÃO" else "PENDENCIA" if v == "PENDÊNCIA" else v
+
+def _sh_parse_date(val):
+    val = (val or "").strip()
+    if not val: return None
+    try:    return datetime.strptime(val, "%Y-%m-%d").date()
+    except: return None
+
+def _sh_parse_dt(val):
+    val = (val or "").strip()
+    if not val: return None
+    try:    return datetime.strptime(val, "%Y-%m-%dT%H:%M")
+    except: return None
+
+def _sh_img_b64(file_storage):
+    if not file_storage or not getattr(file_storage, "filename", ""):
+        return None
+    fn = file_storage.filename.strip()
+    if "." not in fn or fn.rsplit(".", 1)[1].lower() not in {"png","jpg","jpeg","webp"}:
+        return None
+    try:
+        img = _PILImage.open(file_storage)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        img.thumbnail((800, 800), _PILImage.Resampling.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, format="JPEG", quality=70, optimize=True)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception as e:
+        logging.error(f"[SH] img_b64 error: {e}")
+        return None
+
+def _sh_verificar_acesso(oc):
+    if session.get("user_perfil") in ("ADMIN", "Admin", "admin"):
+        return True
+    return (_sh_norm(oc.site) == _sh_norm(session.get("user_site", "")))
+
+def _sh_get_filtros():
+    di      = (request.args.get("data_inicial") or "").strip()
+    df      = (request.args.get("data_final")   or "").strip()
+    turno   = _sh_norm(request.args.get("turno"))
+    status  = _sh_norm(request.args.get("status"))
+    perfil  = session.get("user_perfil", "")
+    is_adm  = perfil in ("ADMIN", "Admin", "admin")
+    site_f  = _sh_norm(request.args.get("site")) if is_adm else _sh_norm(session.get("user_site", ""))
+
+    q = OcorrenciaTurno.query
+    if site_f:  q = q.filter(OcorrenciaTurno.site == site_f)
+    if di:
+        d = _sh_parse_date(di)
+        if d: q = q.filter(OcorrenciaTurno.data_ocorrencia >= d)
+    if df:
+        d = _sh_parse_date(df)
+        if d: q = q.filter(OcorrenciaTurno.data_ocorrencia <= d)
+    if turno:  q = q.filter(OcorrenciaTurno.turno  == turno)
+    if status: q = q.filter(OcorrenciaTurno.status == status)
+    q = q.order_by(OcorrenciaTurno.data_hora_registro.desc(), OcorrenciaTurno.id.desc())
+    return q, {"data_inicial": di, "data_final": df, "turno": turno,
+               "status": status, "site": site_f if is_adm else ""}
+
+def _sh_resumo():
+    hoje   = _date_cls.today()
+    is_adm = session.get("user_perfil", "") in ("ADMIN", "Admin", "admin")
+    site_u = _sh_norm(session.get("user_site", ""))
+    # Uma única query com CASE/SUM em vez de 4 queries separadas
+    base = db.session.query(
+        func.sum(case((OcorrenciaTurno.data_ocorrencia == hoje, 1), else_=0)).label("dia"),
+        func.sum(case((OcorrenciaTurno.status.in_(["EM ABERTO","EM ACOMPANHAMENTO"]), 1), else_=0)).label("abertas"),
+        func.sum(case(((OcorrenciaTurno.data_ocorrencia == hoje) & (OcorrenciaTurno.turno != None), 1), else_=0)).label("turnos"),
+        func.sum(case((OcorrenciaTurno.prioridade == "CRITICA", 1), else_=0)).label("criticas"),
+    )
+    if not is_adm and site_u:
+        base = base.filter(OcorrenciaTurno.site == site_u)
+    row = base.one()
+    return {
+        "ocorrencias_dia":      int(row.dia      or 0),
+        "pendencias_abertas":   int(row.abertas  or 0),
+        "turnos_registrados":   int(row.turnos   or 0),
+        "ocorrencias_criticas": int(row.criticas or 0),
+    }
+
+
+# ===========================================================================
+# SHIFT HANDOVER — Rotas
+# ===========================================================================
+@app.route("/shift-handover/")
+@login_required
+def sh_index():
+    q, filtros = _sh_get_filtros()
+    # Carrega lista SEM CLOBs pesados (imagens/assinaturas) — detalhes via AJAX
+    _clobs = (
+        defer(OcorrenciaTurno.imagem_1), defer(OcorrenciaTurno.imagem_2),
+        defer(OcorrenciaTurno.imagem_3), defer(OcorrenciaTurno.imagem_4),
+        defer(OcorrenciaTurno.assinatura_saida), defer(OcorrenciaTurno.assinatura_entrada),
+        defer(OcorrenciaTurno.ressalva), defer(OcorrenciaTurno.anexo_entrada),
+    )
+    ocs_db    = q.options(*_clobs).limit(200).all()
+    ocs       = [o.to_dict() for o in ocs_db]
+    ultima_oc = ocs[0] if ocs else None
+    ultimo_id = db.session.query(func.max(OcorrenciaTurno.id)).scalar() or 0
+
+    user_site  = session.get("user_site", "")
+    user_id    = session.get("user_id")
+    if user_site:
+        usuarios_site = Usuario.query.filter(
+            Usuario.site == user_site, Usuario.id != user_id, Usuario.is_active == True
+        ).order_by(Usuario.nome.asc()).all()
+    else:
+        usuarios_site = Usuario.query.filter(
+            Usuario.id != user_id, Usuario.is_active == True
+        ).order_by(Usuario.nome.asc()).all()
+
+    sites_db = SiteSH.query.order_by(SiteSH.nome_site.asc()).all()
+    return render_template("sh_registrar.html",
+        resumo=_sh_resumo(), ultima_ocorrencia=ultima_oc, ocorrencias=ocs,
+        filtros=filtros, hoje=_date_cls.today().strftime("%Y-%m-%d"),
+        proximo_id_previsto=ultimo_id+1, usuarios_mesmo_site=usuarios_site,
+        sites=sites_db)
+
+
+@app.route("/shift-handover/<int:oc_id>/detalhe")
+@login_required
+def sh_detalhe(oc_id):
+    """API JSON: retorna os detalhes completos (com CLOBs) de uma passagem."""
+    from flask import jsonify
+    oc = OcorrenciaTurno.query.get_or_404(oc_id)
+    if not _sh_verificar_acesso(oc):
+        return jsonify({"error": "Acesso negado"}), 403
+    d = oc.to_dict()
+    d["assinatura_saida"]   = oc.assinatura_saida   or ""
+    d["assinatura_entrada"] = oc.assinatura_entrada  or ""
+    d["imagem_1"] = oc.imagem_1 or ""
+    d["imagem_2"] = oc.imagem_2 or ""
+    d["imagem_3"] = oc.imagem_3 or ""
+    d["imagem_4"] = oc.imagem_4 or ""
+    d["ressalva"] = oc.ressalva or ""
+    d["tem_ressalva"] = oc.tem_ressalva or "N"
+    return jsonify(d)
+
+
+@app.route("/shift-handover/salvar", methods=["POST"])
+@login_required
+def sh_salvar():
+    try:
+        is_adm = session.get("user_perfil", "") in ("ADMIN", "Admin", "admin")
+        site   = request.form.get("site") if is_adm else session.get("user_site", "")
+        turno  = _sh_norm(request.form.get("turno"))
+        setor  = _sh_norm(request.form.get("setor"))
+        tipo   = _sh_norm_tipo(request.form.get("tipo_ocorrencia"))
+        prior  = _sh_norm_prioridade(request.form.get("prioridade"))
+        status = _sh_norm(request.form.get("status"))
+        resp_saida    = session.get("user_nome", "Usuário")
+        resp_entrada  = (request.form.get("responsavel_entrada") or "").strip()
+        descricao     = (request.form.get("descricao") or "").strip()
+        efetivo       = (request.form.get("efetivo") or "").strip()
+        ass_saida     = request.form.get("assinatura_saida") or ""
+        acoes         = (request.form.get("acoes_tomadas") or "").strip()
+        pendencias    = (request.form.get("pendencias") or "").strip()
+        data_oc       = _sh_parse_date(request.form.get("data_ocorrencia"))
+        data_hr       = _sh_parse_dt(request.form.get("data_hora_registro"))
+
+        if not all([data_oc, data_hr, site, turno, setor, tipo, prior,
+                    resp_saida, resp_entrada, descricao, efetivo, status, ass_saida]):
+            flash("Preencha todos os campos obrigatórios e realize sua assinatura.", "danger")
+            return redirect(url_for("sh_index"))
+
+        nova = OcorrenciaTurno(
+            data_ocorrencia=data_oc, data_hora_registro=data_hr,
+            site=site, turno=turno, setor=setor, tipo_ocorrencia=tipo,
+            prioridade=prior, responsavel_saida=resp_saida, responsavel_entrada=resp_entrada,
+            descricao=descricao, efetivo=efetivo, assinatura_saida=ass_saida,
+            imagem_1=_sh_img_b64(request.files.get("imagem_1")),
+            imagem_2=_sh_img_b64(request.files.get("imagem_2")),
+            imagem_3=_sh_img_b64(request.files.get("imagem_3")),
+            imagem_4=_sh_img_b64(request.files.get("imagem_4")),
+            acoes_tomadas=acoes or None, pendencias=pendencias or None,
+            status=status, criado_por=resp_saida,
+        )
+        db.session.add(nova)
+        db.session.commit()
+        flash("Passagem de turno registrada com sucesso! Aguardando assinatura do recebedor.", "success")
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"[SH salvar] {e}")
+        flash(f"Erro ao salvar: {e}", "danger")
+    return redirect(url_for("sh_index"))
+
+
+@app.route("/shift-handover/<int:oc_id>/assinar", methods=["GET", "POST"])
+@login_required
+def sh_assinar(oc_id):
+    oc = OcorrenciaTurno.query.get_or_404(oc_id)
+    if not _sh_verificar_acesso(oc):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("sh_index"))
+    if oc.responsavel_entrada != session.get("user_nome"):
+        flash("Você não é o responsável designado para receber este turno.", "danger")
+        return redirect(url_for("sh_index"))
+    if oc.assinatura_entrada:
+        flash("Este turno já foi assinado.", "warning")
+        return redirect(url_for("sh_index"))
+    if request.method == "POST":
+        ass = request.form.get("assinatura_entrada")
+        if not ass:
+            flash("Assinatura obrigatória.", "danger")
+            return redirect(url_for("sh_assinar", oc_id=oc.id))
+        oc.assinatura_entrada = ass
+        oc.updated_at         = datetime.now()
+        # Ressalva
+        ressalva_txt = (request.form.get("ressalva") or "").strip()
+        if ressalva_txt:
+            oc.ressalva     = ressalva_txt
+            oc.tem_ressalva = "S"
+        else:
+            oc.tem_ressalva = "N"
+        # Anexo do recebedor
+        anexo_file = request.files.get("anexo_entrada")
+        if anexo_file and getattr(anexo_file, "filename", ""):
+            try:
+                data = anexo_file.read()
+                oc.anexo_entrada      = "data:application/octet-stream;base64," + base64.b64encode(data).decode()
+                oc.anexo_entrada_nome = anexo_file.filename
+            except Exception as ex:
+                logging.error(f"[SH anexo] {ex}")
+        db.session.commit()
+        if oc.tem_ressalva == "S":
+            flash("Turno recebido com ressalva registrada!", "warning")
+        else:
+            flash("Turno recebido e assinado com sucesso!", "success")
+        return redirect(url_for("sh_index"))
+    return render_template("sh_assinar.html", ocorrencia=oc)
+
+
+@app.route("/shift-handover/<int:oc_id>/editar", methods=["GET", "POST"])
+@login_required
+def sh_editar(oc_id):
+    oc = OcorrenciaTurno.query.get_or_404(oc_id)
+    if not _sh_verificar_acesso(oc):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("sh_index"))
+    if oc.criado_por != session.get("user_nome"):
+        flash("Somente quem registrou a passagem pode editá-la.", "danger")
+        return redirect(url_for("sh_index"))
+    if oc.assinatura_entrada:
+        flash("Não é possível editar após o recebedor assinar.", "warning")
+        return redirect(url_for("sh_index"))
+    if request.method == "POST":
+        try:
+            is_adm = session.get("user_perfil", "") in ("ADMIN", "Admin", "admin")
+            if is_adm:
+                oc.site = request.form.get("site") or oc.site
+            oc.turno           = _sh_norm(request.form.get("turno")) or oc.turno
+            oc.setor           = _sh_norm(request.form.get("setor")) or oc.setor
+            oc.tipo_ocorrencia = _sh_norm_tipo(request.form.get("tipo_ocorrencia")) or oc.tipo_ocorrencia
+            oc.prioridade      = _sh_norm_prioridade(request.form.get("prioridade")) or oc.prioridade
+            oc.status          = _sh_norm(request.form.get("status")) or oc.status
+            oc.responsavel_entrada = (request.form.get("responsavel_entrada") or oc.responsavel_entrada).strip()
+            oc.efetivo         = (request.form.get("efetivo") or "").strip() or oc.efetivo
+            oc.descricao       = (request.form.get("descricao") or "").strip() or oc.descricao
+            oc.acoes_tomadas   = (request.form.get("acoes_tomadas") or "").strip() or None
+            oc.pendencias      = (request.form.get("pendencias") or "").strip() or None
+            # atualiza assinatura saída se nova for fornecida
+            nova_ass = request.form.get("assinatura_saida") or ""
+            if nova_ass:
+                oc.assinatura_saida = nova_ass
+            # atualiza imagens se enviadas
+            for i in range(1, 5):
+                nova_img = _sh_img_b64(request.files.get(f"imagem_{i}"))
+                if nova_img:
+                    setattr(oc, f"imagem_{i}", nova_img)
+            oc.data_ocorrencia    = _sh_parse_date(request.form.get("data_ocorrencia")) or oc.data_ocorrencia
+            oc.data_hora_registro = _sh_parse_dt(request.form.get("data_hora_registro"))   or oc.data_hora_registro
+            oc.updated_at = datetime.now()
+            db.session.commit()
+            flash("Passagem atualizada com sucesso!", "success")
+            return redirect(url_for("sh_index"))
+        except Exception as e:
+            db.session.rollback()
+            logging.error(f"[SH editar] {e}")
+            flash(f"Erro ao atualizar: {e}", "danger")
+    sites_db      = SiteSH.query.order_by(SiteSH.nome_site.asc()).all()
+    user_site     = session.get("user_site", "")
+    user_id       = session.get("user_id")
+    usuarios_site = Usuario.query.filter(
+        Usuario.site == user_site, Usuario.id != user_id, Usuario.is_active == True
+    ).order_by(Usuario.nome.asc()).all() if user_site else \
+        Usuario.query.filter(Usuario.id != user_id, Usuario.is_active == True).order_by(Usuario.nome.asc()).all()
+    return render_template("sh_editar.html", oc=oc, sites=sites_db,
+        usuarios_mesmo_site=usuarios_site,
+        data_oc_val=oc.data_ocorrencia.strftime("%Y-%m-%d") if oc.data_ocorrencia else "",
+        data_hr_val=oc.data_hora_registro.strftime("%Y-%m-%dT%H:%M") if oc.data_hora_registro else "")
+
+
+@app.route("/shift-handover/<int:oc_id>/exportar-pdf")
+@login_required
+def sh_pdf(oc_id):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImg
+    from reportlab.lib import colors as rl_colors
+
+    oc = OcorrenciaTurno.query.get_or_404(oc_id)
+    if not _sh_verificar_acesso(oc):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("sh_index"))
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+        leftMargin=14*mm, rightMargin=14*mm, topMargin=14*mm, bottomMargin=14*mm)
+    styles = getSampleStyleSheet()
+
+    # Estilos
+    titulo_s = ParagraphStyle("shTit", parent=styles["Title"],
+        fontSize=16, textColor=rl_colors.HexColor("#D40511"),
+        alignment=TA_CENTER, leading=20, spaceAfter=4)
+    sub_s    = ParagraphStyle("shSub", parent=styles["Normal"],
+        fontSize=8, textColor=rl_colors.HexColor("#555555"),
+        alignment=TA_CENTER, spaceAfter=8)
+    sec_s    = ParagraphStyle("shSec", parent=styles["Heading3"],
+        fontSize=9, textColor=rl_colors.HexColor("#D40511"),
+        spaceBefore=6, spaceAfter=4, leading=11)
+    cell_s   = ParagraphStyle("shCell", parent=styles["BodyText"],
+        fontSize=8, leading=10)
+    warn_s   = ParagraphStyle("shWarn", parent=styles["BodyText"],
+        fontSize=8, leading=10, textColor=rl_colors.HexColor("#92400e"),
+        backColor=rl_colors.HexColor("#fff4db"))
+
+    def _v(val): return str(val or "-").strip() or "-"
+    def _p(txt, s=cell_s): return Paragraph(_v(txt).replace("\n","<br/>"), s)
+
+    elems = []
+
+    # Cabeçalho DHL
+    elems.append(Paragraph("SHIFT HANDOVER — PASSAGEM DE TURNO", titulo_s))
+    elems.append(Paragraph(
+        f"DHL SECURITY • {_v(oc.site)} • {oc.data_ocorrencia.strftime('%d/%m/%Y') if oc.data_ocorrencia else '-'}", sub_s))
+
+    # Faixa resumo
+    faixa = Table([[
+        _p(f"<b>ID:</b> #{oc.id}"),
+        _p(f"<b>Turno:</b> {_v(oc.turno)}"),
+        _p(f"<b>Prioridade:</b> {_v(oc.prioridade)}"),
+        _p(f"<b>Status:</b> {_v(oc.status)}"),
+    ]], colWidths=[130, 100, 120, 110])
+    faixa.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,-1),rl_colors.HexColor("#fff4cc")),
+        ("BOX",(0,0),(-1,-1),0.6,rl_colors.HexColor("#ffcc00")),
+        ("INNERGRID",(0,0),(-1,-1),0.4,rl_colors.HexColor("#ffcc00")),
+        ("LEFTPADDING",(0,0),(-1,-1),6), ("RIGHTPADDING",(0,0),(-1,-1),6),
+        ("TOPPADDING",(0,0),(-1,-1),5), ("BOTTOMPADDING",(0,0),(-1,-1),5),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+    ]))
+    elems.append(faixa)
+    elems.append(Spacer(1, 6))
+
+    # Tabela de dados
+    dados_e = [
+        ["ID", str(oc.id)],
+        ["Data", oc.data_ocorrencia.strftime("%d/%m/%Y") if oc.data_ocorrencia else "-"],
+        ["Data/Hora", oc.data_hora_registro.strftime("%d/%m/%Y %H:%M") if oc.data_hora_registro else "-"],
+        ["Site", _v(oc.site)], ["Turno", _v(oc.turno)], ["Setor", _v(oc.setor)],
+        ["Tipo", _v(oc.tipo_ocorrencia)], ["Prioridade", _v(oc.prioridade)], ["Status", _v(oc.status)],
+    ]
+    dados_d = [
+        ["Resp. saída",   _v(oc.responsavel_saida)],
+        ["Resp. entrada", _v(oc.responsavel_entrada)],
+        ["Criado por",    _v(oc.criado_por)],
+        ["Criado em",     oc.created_at.strftime("%d/%m/%Y %H:%M") if oc.created_at else "-"],
+        ["Atualizado",    oc.updated_at.strftime("%d/%m/%Y %H:%M") if oc.updated_at else "-"],
+    ]
+    _ts = TableStyle([
+        ("BACKGROUND",(0,0),(0,-1),rl_colors.HexColor("#ffcc00")),
+        ("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"),
+        ("FONTSIZE",(0,0),(-1,-1),7.5),
+        ("GRID",(0,0),(-1,-1),0.35,rl_colors.HexColor("#cfcfcf")),
+        ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),
+        ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+    ])
+    t_e = Table(dados_e, colWidths=[82,168]); t_e.setStyle(_ts)
+    t_d = Table(dados_d, colWidths=[82,168]); t_d.setStyle(_ts)
+    bloco = Table([[t_e, t_d]], colWidths=[250,250])
+    bloco.setStyle(TableStyle([
+        ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),
+        ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0),
+    ]))
+    elems.append(bloco)
+    elems.append(Spacer(1, 6))
+
+    # Seções de texto
+    for titulo, valor in [("Efetivo", oc.efetivo), ("Descrição", oc.descricao),
+                           ("Ações Tomadas", oc.acoes_tomadas), ("Pendências", oc.pendencias)]:
+        if not valor: continue
+        elems.append(Paragraph(titulo, sec_s))
+        box = Table([[_p(valor)]], colWidths=[500])
+        box.setStyle(TableStyle([
+            ("BOX",(0,0),(-1,-1),0.4,rl_colors.HexColor("#d9d9d9")),
+            ("BACKGROUND",(0,0),(-1,-1),rl_colors.HexColor("#fbfbfb")),
+            ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+            ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+        ]))
+        elems.append(box)
+        elems.append(Spacer(1, 4))
+
+    # Ressalva
+    if oc.ressalva:
+        elems.append(Paragraph("⚠ Ressalva do Recebedor", sec_s))
+        box_r = Table([[_p(oc.ressalva, warn_s)]], colWidths=[500])
+        box_r.setStyle(TableStyle([
+            ("BOX",(0,0),(-1,-1),0.8,rl_colors.HexColor("#f5d66f")),
+            ("BACKGROUND",(0,0),(-1,-1),rl_colors.HexColor("#fff4db")),
+            ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
+            ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+        ]))
+        elems.append(box_r)
+        elems.append(Spacer(1, 4))
+
+    # Assinaturas
+    def _ass_img(b64, w_mm, h_mm):
+        if not b64: return None
+        try:
+            raw = b64.split(",",1)[1] if "," in b64 else b64
+            raw += "=" * ((4-len(raw)%4)%4)
+            return RLImg(BytesIO(base64.b64decode(raw)), width=w_mm*mm, height=h_mm*mm)
+        except: return None
+
+    elems.append(Paragraph("Assinaturas", sec_s))
+    img_saida  = _ass_img(oc.assinatura_saida,  55, 20)
+    img_entrada = _ass_img(oc.assinatura_entrada, 55, 20)
+    ass_tab = Table([
+        [img_saida  or _p("-"), img_entrada or _p("Não assinado")],
+        [_p(f"<b>Saída:</b> {_v(oc.responsavel_saida)}"),
+         _p(f"<b>Entrada:</b> {_v(oc.responsavel_entrada)}")],
+    ], colWidths=[250, 250])
+    ass_tab.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.35,rl_colors.HexColor("#d9d9d9")),
+        ("INNERGRID",(0,0),(-1,-1),0.35,rl_colors.HexColor("#d9d9d9")),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ALIGN",(0,0),(-1,0),"CENTER"),
+        ("BACKGROUND",(0,0),(-1,-1),rl_colors.HexColor("#fcfcfc")),
+        ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),
+        ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
+    ]))
+    elems.append(ass_tab)
+    elems.append(Spacer(1, 6))
+
+    # Imagens
+    imgs_b64 = [getattr(oc,f"imagem_{i}") for i in range(1,5) if getattr(oc,f"imagem_{i}")]
+    if imgs_b64:
+        elems.append(Paragraph("Evidências Fotográficas", sec_s))
+        def _fit(b64, mw, mh):
+            try:
+                raw = b64.split(",",1)[1] if "," in b64 else b64
+                raw += "=" * ((4-len(raw)%4)%4)
+                img = RLImg(BytesIO(base64.b64decode(raw)))
+                iw,ih = img.imageWidth, img.imageHeight
+                if not iw or not ih: return None
+                p = min(mw/iw, mh/ih)
+                img.drawWidth = iw*p; img.drawHeight = ih*p
+                return img
+            except: return None
+        fotos_rows = []
+        linha = []
+        for b in imgs_b64:
+            fi = _fit(b, 235, 130)
+            linha.append(fi or "")
+            if len(linha)==2:
+                fotos_rows.append(linha); linha=[]
+        if linha:
+            while len(linha)<2: linha.append("")
+            fotos_rows.append(linha)
+        ftab = Table(fotos_rows, colWidths=[255,255])
+        ftab.setStyle(TableStyle([
+            ("VALIGN",(0,0),(-1,-1),"MIDDLE"), ("ALIGN",(0,0),(-1,-1),"CENTER"),
+            ("BOX",(0,0),(-1,-1),0.35,rl_colors.HexColor("#dddddd")),
+            ("INNERGRID",(0,0),(-1,-1),0.35,rl_colors.HexColor("#dddddd")),
+            ("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ]))
+        elems.append(ftab)
+
+    # Rodapé DHL no canvas
+    def _draw_header_footer(canvas, _doc):
+        canvas.saveState()
+        pw = A4[0]
+        ph = A4[1]
+        canvas.setFillColor(rl_colors.HexColor("#D40511"))
+        canvas.rect(0, ph-11*mm, pw, 11*mm, fill=1, stroke=0)
+        canvas.setFillColor(rl_colors.HexColor("#FFCC00"))
+        canvas.rect(0, ph-13*mm, pw, 2*mm, fill=1, stroke=0)
+        canvas.setFillColor(rl_colors.white)
+        canvas.setFont("Helvetica-Bold", 10)
+        canvas.drawString(14*mm, ph-7.5*mm, "DHL SECURITY — SHIFT HANDOVER")
+        canvas.setFont("Helvetica", 8)
+        canvas.drawRightString(pw-14*mm, ph-7.5*mm,
+            f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        canvas.setStrokeColor(rl_colors.HexColor("#D1D5DB"))
+        canvas.setLineWidth(0.4)
+        canvas.line(14*mm, 9*mm, pw-14*mm, 9*mm)
+        canvas.setFont("Helvetica", 7.5)
+        canvas.setFillColor(rl_colors.HexColor("#6B7280"))
+        canvas.drawString(14*mm, 5.5*mm, f"Passagem #{oc.id} • {_v(oc.site)} • {_v(oc.turno)}")
+        canvas.drawRightString(pw-14*mm, 5.5*mm, f"Pág. {canvas.getPageNumber()}")
+        canvas.restoreState()
+
+    doc.build(elems, onFirstPage=_draw_header_footer, onLaterPages=_draw_header_footer)
+    buf.seek(0)
+    nome = f"Shift_Handover_{oc.id}_{_v(oc.site)}.pdf"
+    return send_file(buf, as_attachment=True, download_name=nome, mimetype="application/pdf")
+
+
+@app.route("/shift-handover/<int:oc_id>/fechar", methods=["POST"])
+@login_required
+def sh_fechar(oc_id):
+    oc = OcorrenciaTurno.query.get_or_404(oc_id)
+    if not _sh_verificar_acesso(oc):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("sh_index"))
+    if oc.responsavel_entrada != session.get("user_nome"):
+        flash("Apenas o responsável que assumiu pode finalizar.", "danger")
+        return redirect(url_for("sh_index"))
+    if not oc.assinatura_entrada:
+        flash("Assine o recebimento antes de finalizar.", "warning")
+        return redirect(url_for("sh_index"))
+    try:
+        oc.status     = "FINALIZADO"
+        oc.updated_at = datetime.now()
+        db.session.commit()
+        flash("Ocorrência finalizada.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro: {e}", "danger")
+    return redirect(url_for("sh_index"))
+
+
+@app.route("/shift-handover/<int:oc_id>/excluir", methods=["POST"])
+@login_required
+def sh_excluir(oc_id):
+    oc = OcorrenciaTurno.query.get_or_404(oc_id)
+    if not _sh_verificar_acesso(oc):
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("sh_index"))
+    try:
+        db.session.delete(oc)
+        db.session.commit()
+        flash("Registro excluído.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro: {e}", "danger")
+    return redirect(url_for("sh_index"))
+
+
+@app.route("/shift-handover/dashboard")
+@login_required
+def sh_dashboard():
+    is_adm  = session.get("user_perfil", "") in ("ADMIN", "Admin", "admin")
+    site_u  = _sh_norm(session.get("user_site", ""))
+
+    def _qd(col):
+        q = db.session.query(col)
+        if not is_adm: q = q.filter(OcorrenciaTurno.site == site_u)
+        return q
+
+    total        = _qd(func.count(OcorrenciaTurno.id)).scalar() or 0
+    em_aberto    = _qd(func.count(OcorrenciaTurno.id)).filter(OcorrenciaTurno.status == "EM ABERTO").scalar() or 0
+    acompanhamento = _qd(func.count(OcorrenciaTurno.id)).filter(OcorrenciaTurno.status == "EM ACOMPANHAMENTO").scalar() or 0
+    finalizado   = _qd(func.count(OcorrenciaTurno.id)).filter(OcorrenciaTurno.status == "FINALIZADO").scalar() or 0
+
+    _ord_turno = case(
+        (OcorrenciaTurno.turno == "TURNO A", 1),
+        (OcorrenciaTurno.turno == "TURNO B", 2),
+        (OcorrenciaTurno.turno == "TURNO C", 3),
+        (OcorrenciaTurno.turno == "ADM", 4), else_=99)
+    _ord_prior = case(
+        (OcorrenciaTurno.prioridade == "CRITICA", 1),
+        (OcorrenciaTurno.prioridade == "ALTA", 2),
+        (OcorrenciaTurno.prioridade == "MEDIA", 3),
+        (OcorrenciaTurno.prioridade == "BAIXA", 4), else_=99)
+
+    por_turno = [(r[1], r[0]) for r in
+        _qd(func.count(OcorrenciaTurno.id)).add_columns(OcorrenciaTurno.turno)
+        .group_by(OcorrenciaTurno.turno).order_by(_ord_turno).all()]
+    por_prior = [(r[1], r[0]) for r in
+        _qd(func.count(OcorrenciaTurno.id)).add_columns(OcorrenciaTurno.prioridade)
+        .group_by(OcorrenciaTurno.prioridade).order_by(_ord_prior).all()]
+    por_site  = [(r[1], r[0]) for r in
+        _qd(func.count(OcorrenciaTurno.id)).add_columns(OcorrenciaTurno.site)
+        .group_by(OcorrenciaTurno.site).order_by(OcorrenciaTurno.site.asc()).all()]
+
+    return render_template("sh_dashboard.html",
+        total=total, em_aberto=em_aberto, acompanhamento=acompanhamento,
+        finalizado=finalizado, por_turno=por_turno, por_prior=por_prior,
+        por_site=por_site)
+
+
+@app.route("/shift-handover/excel")
+@login_required
+def sh_excel():
+    q, _ = _sh_get_filtros()
+    rows = q.all()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Shift Handover"
+    hdrs = ["ID","Data","Data/Hora","Site","Turno","Setor","Tipo","Prioridade",
+            "Resp. Saída","Resp. Entrada","Efetivo","Descrição","Ações","Pendências","Status","Criado por","Criado em"]
+    ws.append(hdrs)
+    fill_h = PatternFill("solid", fgColor="FFCC00")
+    for ci, _ in enumerate(hdrs, 1):
+        c = ws.cell(row=1, column=ci)
+        c.fill = fill_h
+        c.font = Font(bold=True)
+    for r in rows:
+        ws.append([r.id,
+            r.data_ocorrencia.strftime("%d/%m/%Y") if r.data_ocorrencia else "",
+            r.data_hora_registro.strftime("%d/%m/%Y %H:%M") if r.data_hora_registro else "",
+            r.site, r.turno, r.setor, r.tipo_ocorrencia, r.prioridade,
+            r.responsavel_saida, r.responsavel_entrada,
+            r.efetivo or "", r.descricao, r.acoes_tomadas or "",
+            r.pendencias or "", r.status, r.criado_por or "",
+            r.created_at.strftime("%d/%m/%Y %H:%M") if r.created_at else ""])
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    nome = f"shift_handover_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return send_file(buf, as_attachment=True, download_name=nome,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# =========================
+# ADMIN — HELPERS DE E-MAIL
+# =========================
+def _enviar_email_credenciais(nome, email, senha):
+    """Envia e-mail com credenciais de acesso ao novo usuário."""
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "DHL Security — Suas credenciais de acesso"
+        msg["From"]    = EMAIL_FROM
+        msg["To"]      = email
+        html = f"""
+<html><body style="font-family:Arial,sans-serif;background:#f3f5f7;padding:32px;">
+<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.1);">
+  <div style="background:#b1030d;padding:24px 28px;">
+    <h2 style="margin:0;color:#fff;font-size:20px;">DHL Security — Acesso Liberado</h2>
+  </div>
+  <div style="padding:28px;">
+    <p style="color:#374151;">Olá, <strong>{nome}</strong>!</p>
+    <p style="color:#374151;">Seu cadastro no <strong>CCTV Control Panel</strong> foi criado. Utilize as credenciais abaixo para acessar a ferramenta:</p>
+    <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+      <tr><td style="padding:10px;background:#f9fafb;border:1px solid #e5e7eb;font-weight:700;color:#6b7280;font-size:12px;text-transform:uppercase;">E-mail</td>
+          <td style="padding:10px;border:1px solid #e5e7eb;color:#1f2937;">{email}</td></tr>
+      <tr><td style="padding:10px;background:#f9fafb;border:1px solid #e5e7eb;font-weight:700;color:#6b7280;font-size:12px;text-transform:uppercase;">Senha temporária</td>
+          <td style="padding:10px;border:1px solid #e5e7eb;color:#b1030d;font-weight:900;letter-spacing:1px;font-size:16px;">{senha}</td></tr>
+    </table>
+    <p style="color:#6b7280;font-size:13px;">⚠️ Recomendamos alterar sua senha no primeiro acesso em <em>Meu Perfil</em>.</p>
+  </div>
+  <div style="padding:16px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;">
+    DHL Supply Chain Security — Uso interno e confidencial
+  </div>
+</div></body></html>"""
+        msg.attach(MIMEText(html, "html", "utf-8"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+            s.sendmail(EMAIL_FROM, [email], msg.as_string())
+    except Exception:
+        pass
+
+
+def _enviar_email_rejeicao(nome, email, motivo):
+    """Envia e-mail informando rejeição da solicitação de cadastro."""
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "DHL Security — Solicitação de cadastro"
+        msg["From"]    = EMAIL_FROM
+        msg["To"]      = email
+        motivo_html = f"<p style='color:#374151;'><strong>Motivo:</strong> {motivo}</p>" if motivo else ""
+        html = f"""
+<html><body style="font-family:Arial,sans-serif;background:#f3f5f7;padding:32px;">
+<div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.1);">
+  <div style="background:#1f2937;padding:24px 28px;">
+    <h2 style="margin:0;color:#fff;font-size:20px;">DHL Security — Solicitação de Cadastro</h2>
+  </div>
+  <div style="padding:28px;">
+    <p style="color:#374151;">Olá, <strong>{nome}</strong>!</p>
+    <p style="color:#374151;">Sua solicitação de acesso ao <strong>CCTV Control Panel</strong> foi analisada e <strong style="color:#b1030d;">não foi aprovada</strong> neste momento.</p>
+    {motivo_html}
+    <p style="color:#6b7280;font-size:13px;">Em caso de dúvidas, entre em contato com o administrador do sistema.</p>
+  </div>
+  <div style="padding:16px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;">
+    DHL Supply Chain Security — Uso interno e confidencial
+  </div>
+</div></body></html>"""
+        msg.attach(MIMEText(html, "html", "utf-8"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+            s.sendmail(EMAIL_FROM, [email], msg.as_string())
+    except Exception:
+        pass
+
+
+# =========================
+# ADMIN — ROTAS
+# =========================
+def _admin_pendentes():
+    try:
+        return SolicitacaoCadastro.query.filter_by(status="PENDENTE").count()
+    except Exception:
+        return 0
+
+
+@app.route("/admin/dashboard")
+@login_required
+@perfil_required("ADMIN")
+def admin_dashboard():
+    from collections import Counter as _C
+    todos     = Usuario.query.options(defer(Usuario.foto_perfil)).all()
+    total     = len(todos)
+    ativos    = sum(1 for u in todos if u.is_active)
+    admins    = sum(1 for u in todos if (u.perfil or "").upper() == "ADMIN")
+    supers    = sum(1 for u in todos if (u.perfil or "").upper() == "SUPERVISOR")
+    ops       = sum(1 for u in todos if (u.perfil or "").upper() == "OPERACIONAL")
+    pendentes = _admin_pendentes()
+
+    site_c   = _C(u.site or "Sem site" for u in todos)
+    site_ord = site_c.most_common()
+    labels_site  = [x[0] for x in site_ord]
+    valores_site = [x[1] for x in site_ord]
+
+    lgpd_sim      = sum(1 for u in todos if u.lgpd_aceito == "sim")
+    lgpd_nao      = sum(1 for u in todos if u.lgpd_aceito == "nao")
+    lgpd_pendente = total - lgpd_sim - lgpd_nao
+
+    recentes = sorted(todos, key=lambda u: u.created_at or datetime.min, reverse=True)[:10]
+
+    return render_template("admin_dashboard.html",
+        stats={"total": total, "ativos": ativos, "inativos": total - ativos,
+               "admins": admins, "pendentes": pendentes},
+        labels_site=labels_site, valores_site=valores_site,
+        labels_perfil=["ADMIN", "SUPERVISOR", "OPERACIONAL"],
+        valores_perfil=[admins, supers, ops],
+        lgpd_sim=lgpd_sim, lgpd_nao=lgpd_nao, lgpd_pendente=lgpd_pendente,
+        recentes=recentes, pendentes=pendentes,
+    )
+
+
+@app.route("/admin/usuarios")
+@login_required
+@perfil_required("ADMIN")
+def admin_usuarios():
+    busca    = (request.args.get("busca")   or "").strip()
+    f_perfil = (request.args.get("perfil")  or "").strip().upper()
+    f_site   = (request.args.get("site")    or "").strip()
+    f_ativo  = (request.args.get("ativo")   or "").strip()
+
+    q = Usuario.query.options(defer(Usuario.foto_perfil))
+    if busca:
+        q = q.filter(db.or_(
+            Usuario.nome.ilike(f"%{busca}%"),
+            Usuario.email.ilike(f"%{busca}%")
+        ))
+    if f_perfil:
+        q = q.filter(Usuario.perfil == f_perfil)
+    if f_site:
+        q = q.filter(Usuario.site == f_site)
+    if f_ativo == "1":
+        q = q.filter(Usuario.is_active == True)
+    elif f_ativo == "0":
+        q = q.filter(Usuario.is_active == False)
+
+    usuarios    = q.order_by(Usuario.nome).all()
+    todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
+    pendentes   = _admin_pendentes()
+
+    total   = len(usuarios)
+    ativos  = sum(1 for u in usuarios if u.is_active)
+    admins  = sum(1 for u in usuarios if (u.perfil or "").upper() == "ADMIN")
+
+    return render_template(
+        "admin_usuarios.html",
+        usuarios=usuarios,
+        todos_sites=todos_sites,
+        filtros={"busca": busca, "perfil": f_perfil, "site": f_site, "ativo": f_ativo},
+        pendentes=pendentes,
+        stats={"total": total, "ativos": ativos, "inativos": total - ativos, "admins": admins},
+    )
+
+
+@app.route("/admin/usuarios/novo", methods=["GET", "POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_usuario_novo():
+    todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
+    pendentes   = _admin_pendentes()
+
+    if request.method == "POST":
+        nome   = (request.form.get("nome")   or "").strip()
+        email  = (request.form.get("email")  or "").strip().lower()
+        perfil = (request.form.get("perfil") or "OPERACIONAL").strip().upper()
+        site   = (request.form.get("site")   or "").strip() or None
+
+        if not nome or not email:
+            flash("Nome e e-mail são obrigatórios.", "danger")
+            return render_template("admin_usuario_form.html", acao="novo",
+                todos_sites=todos_sites, dados=request.form, pendentes=pendentes)
+
+        if Usuario.query.filter_by(email=email).first():
+            flash("Já existe um usuário com este e-mail.", "danger")
+            return render_template("admin_usuario_form.html", acao="novo",
+                todos_sites=todos_sites, dados=request.form, pendentes=pendentes)
+
+        senha_temp = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        u = Usuario(nome=nome, email=email, perfil=perfil, site=site, is_active=True)
+        u.set_password(senha_temp)
+        try:
+            db.session.add(u)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            flash("Erro ao criar usuário.", "danger")
+            return render_template("admin_usuario_form.html", acao="novo",
+                todos_sites=todos_sites, dados=request.form, pendentes=pendentes)
+
+        _enviar_email_credenciais(nome, email, senha_temp)
+        flash(f"Usuário criado com sucesso! Senha temporária: {senha_temp}", "success")
+        return redirect(url_for("admin_usuarios"))
+
+    return render_template("admin_usuario_form.html", acao="novo",
+        todos_sites=todos_sites, dados={}, pendentes=pendentes)
+
+
+@app.route("/admin/usuarios/<int:uid>/editar", methods=["GET", "POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_usuario_editar(uid):
+    u           = Usuario.query.options(defer(Usuario.foto_perfil)).get_or_404(uid)
+    todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
+    pendentes   = _admin_pendentes()
+
+    if request.method == "POST":
+        u.nome      = (request.form.get("nome")   or "").strip() or u.nome
+        novo_email  = (request.form.get("email")  or "").strip().lower()
+        if novo_email and novo_email != u.email:
+            if Usuario.query.filter(Usuario.email == novo_email, Usuario.id != u.id).first():
+                flash("E-mail já cadastrado para outro usuário.", "danger")
+                return render_template("admin_usuario_form.html", acao="editar",
+                    usuario=u, todos_sites=todos_sites, dados=request.form, pendentes=pendentes)
+            u.email = novo_email
+        u.perfil    = (request.form.get("perfil") or u.perfil).strip().upper()
+        u.site      = (request.form.get("site")   or "").strip() or None
+        u.is_active = request.form.get("ativo") == "1"
+        try:
+            db.session.commit()
+            flash("Usuário atualizado com sucesso.", "success")
+        except Exception:
+            db.session.rollback()
+            flash("Erro ao salvar alterações.", "danger")
+        return redirect(url_for("admin_usuarios"))
+
+    return render_template("admin_usuario_form.html", acao="editar",
+        usuario=u, todos_sites=todos_sites, dados=u, pendentes=pendentes)
+
+
+@app.route("/admin/usuarios/<int:uid>/toggle-ativo", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_toggle_ativo(uid):
+    u = Usuario.query.get_or_404(uid)
+    if u.id == session.get("user_id"):
+        flash("Você não pode desativar sua própria conta.", "warning")
+        return redirect(url_for("admin_usuarios"))
+    u.is_active = not u.is_active
+    db.session.commit()
+    flash(f"Usuário {'ativado' if u.is_active else 'desativado'}: {u.nome}.", "success")
+    return redirect(url_for("admin_usuarios"))
+
+
+@app.route("/admin/usuarios/<int:uid>/redefinir-senha", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_redefinir_senha(uid):
+    u = Usuario.query.get_or_404(uid)
+    senha_nova = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    u.set_password(senha_nova)
+    db.session.commit()
+    _enviar_email_credenciais(u.nome, u.email, senha_nova)
+    flash(f"Nova senha de {u.nome}: {senha_nova}  (e-mail enviado ao usuário)", "success")
+    return redirect(url_for("admin_usuarios"))
+
+
+@app.route("/admin/usuarios/<int:uid>/reset-lgpd", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_reset_lgpd(uid):
+    u = Usuario.query.get_or_404(uid)
+    u.lgpd_aceito    = None
+    u.lgpd_aceito_em = None
+    db.session.commit()
+    flash(f"LGPD de {u.nome} resetada. O usuário aceitará novamente no próximo acesso.", "success")
+    return redirect(url_for("admin_usuarios"))
+
+
+@app.route("/admin/usuarios/<int:uid>/excluir", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_excluir_usuario(uid):
+    u = Usuario.query.get_or_404(uid)
+    if u.id == session.get("user_id"):
+        flash("Você não pode excluir sua própria conta.", "warning")
+        return redirect(url_for("admin_usuarios"))
+    nome = u.nome
+    try:
+        db.session.delete(u)
+        db.session.commit()
+        flash(f"Usuário {nome} excluído.", "success")
+    except Exception:
+        db.session.rollback()
+        flash("Erro ao excluir usuário.", "danger")
+    return redirect(url_for("admin_usuarios"))
+
+
+@app.route("/admin/solicitacoes")
+@login_required
+@perfil_required("ADMIN")
+def admin_solicitacoes():
+    f_status    = (request.args.get("status") or "PENDENTE").strip().upper()
+    q           = SolicitacaoCadastro.query
+    if f_status != "TODAS":
+        q = q.filter_by(status=f_status)
+    sols        = q.order_by(SolicitacaoCadastro.criado_em.desc()).all()
+    todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
+    pendentes   = _admin_pendentes()
+    return render_template("admin_solicitacoes.html",
+        solicitacoes=sols, f_status=f_status,
+        todos_sites=todos_sites, pendentes=pendentes)
+
+
+@app.route("/admin/solicitacoes/<int:sid>/aprovar", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_aprovar_solicitacao(sid):
+    sol        = SolicitacaoCadastro.query.get_or_404(sid)
+    nome       = (request.form.get("nome")   or sol.nome).strip()
+    email      = (request.form.get("email")  or sol.email).strip().lower()
+    perfil     = (request.form.get("perfil") or "OPERACIONAL").strip().upper()
+    site       = (request.form.get("site")   or sol.site or "").strip() or None
+    senha_temp = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+
+    if Usuario.query.filter_by(email=email).first():
+        flash("Já existe um usuário com este e-mail.", "danger")
+        return redirect(url_for("admin_solicitacoes"))
+
+    u = Usuario(nome=nome, email=email, perfil=perfil, site=site, is_active=True)
+    u.set_password(senha_temp)
+    try:
+        db.session.add(u)
+        sol.status = "APROVADO"
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        flash("Erro ao criar usuário.", "danger")
+        return redirect(url_for("admin_solicitacoes"))
+
+    _enviar_email_credenciais(nome, email, senha_temp)
+    flash(f"Solicitação aprovada! Usuário criado. Senha temporária: {senha_temp}", "success")
+    return redirect(url_for("admin_solicitacoes"))
+
+
+@app.route("/admin/solicitacoes/<int:sid>/rejeitar", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_rejeitar_solicitacao(sid):
+    sol    = SolicitacaoCadastro.query.get_or_404(sid)
+    motivo = (request.form.get("motivo") or "").strip()
+    sol.status = "REJEITADO"
+    db.session.commit()
+    _enviar_email_rejeicao(sol.nome, sol.email, motivo)
+    flash(f"Solicitação de {sol.nome} rejeitada.", "success")
+    return redirect(url_for("admin_solicitacoes"))
+
+
 # =========================
 # INIT DB
 # =========================
 with app.app_context():
     try:
         db.create_all()
-    except Exception as _e:
-        print(f"[AVISO] Não foi possível conectar ao banco na inicialização: {_e}")
+        # Migração: adiciona FOTO_PERFIL se ainda não existir
+        db.session.execute(db.text(
+            "ALTER TABLE USERS_LIVRO ADD (FOTO_PERFIL CLOB)"
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()  # coluna já existe ou banco indisponível — OK
+
+    # Migração: novas colunas da tabela ocorrencias_turno
+    for _col_sql in [
+        "ALTER TABLE ocorrencias_turno ADD (RESSALVA CLOB)",
+        "ALTER TABLE ocorrencias_turno ADD (TEM_RESSALVA VARCHAR2(1))",
+        "ALTER TABLE ocorrencias_turno ADD (ANEXO_ENTRADA CLOB)",
+        "ALTER TABLE ocorrencias_turno ADD (ANEXO_ENTRADA_NOME VARCHAR2(255))",
+        # LGPD
+        "ALTER TABLE USERS_LIVRO ADD (LGPD_ACEITO VARCHAR2(3))",
+        "ALTER TABLE USERS_LIVRO ADD (LGPD_ACEITO_EM DATE)",
+        # Solicitações de cadastro
+        "CREATE TABLE SOLICITACOES_CADASTRO (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, NOME VARCHAR2(120) NOT NULL, EMAIL VARCHAR2(120) NOT NULL, SITE VARCHAR2(128), STATUS VARCHAR2(20) DEFAULT 'PENDENTE', CRIADO_EM DATE DEFAULT SYSDATE)",
+    ]:
+        try:
+            db.session.execute(db.text(_col_sql))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
 
 if __name__ == "__main__":

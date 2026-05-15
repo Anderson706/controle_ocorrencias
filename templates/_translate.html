@@ -1,0 +1,295 @@
+<!-- ═══════════════════════════════════════════════════
+     Google Translate Widget — CCTV Control Panel
+     Include este arquivo antes de </body> em todos os templates
+     ═══════════════════════════════════════════════════ -->
+
+<!-- Esconde o banner padrão do Google Translate -->
+<style>
+  .goog-te-banner-frame.skiptranslate,
+  .goog-te-banner-frame { display:none !important; }
+  body { top:0 !important; }
+  iframe.skiptranslate { display:none !important; }
+  .goog-te-gadget { font-size:0 !important; }
+  .goog-te-combo { display:none !important; }
+
+  /* ── Contêiner do widget ── */
+  #gt-widget {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 99990;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  /* ── Botão flutuante ── */
+  #gt-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: #1f1f1f;
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 16px 10px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,.30);
+    transition: background .18s, transform .15s;
+    user-select: none;
+  }
+  #gt-toggle:hover { background: #2d2d2d; transform: translateY(-1px); }
+  #gt-toggle:active { transform: translateY(0); }
+  #gt-toggle svg { flex-shrink:0; }
+  #gt-chevron { transition: transform .2s; }
+  #gt-widget.open #gt-chevron { transform: rotate(180deg); }
+
+  /* Bolinha amarela no ícone do globo quando traduzindo */
+  #gt-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ffcc00;
+    display: none;
+    margin-left: 2px;
+  }
+  #gt-widget.translated #gt-dot { display: inline-block; }
+
+  /* ── Painel de idiomas ── */
+  #gt-panel {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 10px);
+    right: 0;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 8px 36px rgba(0,0,0,.20);
+    padding: 8px;
+    min-width: 200px;
+    border: 1px solid #e5e7eb;
+    animation: gtPanelIn .18s ease;
+  }
+  #gt-widget.open #gt-panel { display: block; }
+  @keyframes gtPanelIn {
+    from { opacity:0; transform:translateY(8px) scale(.97); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+  }
+
+  /* ── Header do painel ── */
+  .gt-panel-header {
+    padding: 6px 10px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 6px;
+  }
+  .gt-panel-header span {
+    font-size: 11px;
+    font-weight: 800;
+    color: #9ca3af;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+  }
+
+  /* ── Botões de idioma ── */
+  .gt-lang-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    text-align: left;
+    transition: background .13s;
+  }
+  .gt-lang-btn:hover { background: #f3f4f6; }
+  .gt-lang-btn.active {
+    background: #fff4db;
+    color: #92400e;
+    font-weight: 800;
+  }
+  .gt-lang-btn .gt-flag { font-size: 18px; line-height: 1; flex-shrink:0; }
+  .gt-lang-btn .gt-name { flex:1; }
+  .gt-lang-btn .gt-check {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #ffcc00;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #111;
+    font-weight: 900;
+    flex-shrink: 0;
+  }
+  .gt-lang-btn.active .gt-check { display: flex; }
+
+  /* Div oculta do Google Translate */
+  #google_translate_element { display:none; }
+</style>
+
+<!-- Widget flutuante -->
+<div id="gt-widget">
+  <div id="gt-panel">
+    <div class="gt-panel-header"><span>🌐 Idioma da Interface</span></div>
+
+    <button class="gt-lang-btn active" data-lang="" onclick="gtSetLang(this)">
+      <span class="gt-flag">🇧🇷</span>
+      <span class="gt-name">Português</span>
+      <span class="gt-check">✓</span>
+    </button>
+    <button class="gt-lang-btn" data-lang="en" onclick="gtSetLang(this)">
+      <span class="gt-flag">🇺🇸</span>
+      <span class="gt-name">English</span>
+      <span class="gt-check">✓</span>
+    </button>
+    <button class="gt-lang-btn" data-lang="es" onclick="gtSetLang(this)">
+      <span class="gt-flag">🇪🇸</span>
+      <span class="gt-name">Español</span>
+      <span class="gt-check">✓</span>
+    </button>
+    <button class="gt-lang-btn" data-lang="de" onclick="gtSetLang(this)">
+      <span class="gt-flag">🇩🇪</span>
+      <span class="gt-name">Deutsch</span>
+      <span class="gt-check">✓</span>
+    </button>
+    <button class="gt-lang-btn" data-lang="fr" onclick="gtSetLang(this)">
+      <span class="gt-flag">🇫🇷</span>
+      <span class="gt-name">Français</span>
+      <span class="gt-check">✓</span>
+    </button>
+    <button class="gt-lang-btn" data-lang="zh-CN" onclick="gtSetLang(this)">
+      <span class="gt-flag">🇨🇳</span>
+      <span class="gt-name">中文 (简体)</span>
+      <span class="gt-check">✓</span>
+    </button>
+    <button class="gt-lang-btn" data-lang="ar" onclick="gtSetLang(this)">
+      <span class="gt-flag">🇸🇦</span>
+      <span class="gt-name">العربية</span>
+      <span class="gt-check">✓</span>
+    </button>
+  </div>
+
+  <button id="gt-toggle" onclick="gtToggle()" title="Traduzir página">
+    <!-- Globo -->
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffcc00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="2" y1="12" x2="22" y2="12"/>
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+    <span id="gt-label">PT</span>
+    <span id="gt-dot"></span>
+    <!-- Chevron -->
+    <svg id="gt-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="18 15 12 9 6 15"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Div oculta necessária para o Google Translate funcionar -->
+<div id="google_translate_element"></div>
+
+<!-- Script do Google Translate -->
+<script>
+  // Mapa lang → label curto
+  var _GT_LABELS = {
+    '': 'PT', 'en': 'EN', 'es': 'ES', 'de': 'DE',
+    'fr': 'FR', 'zh-CN': '中文', 'ar': 'AR'
+  };
+
+  // Inicialização callback do Google
+  function googleTranslateElementInit() {
+    new google.translate.TranslateElement({
+      pageLanguage: 'pt',
+      includedLanguages: 'en,es,de,fr,zh-CN,ar',
+      autoDisplay: false
+    }, 'google_translate_element');
+  }
+
+  function gtToggle() {
+    document.getElementById('gt-widget').classList.toggle('open');
+  }
+
+  function gtClearCookie() {
+    // Remove o cookie googtrans em todas as variações de domínio/path
+    var domains = ['', window.location.hostname, '.' + window.location.hostname];
+    var paths   = ['/', window.location.pathname];
+    var exp     = 'expires=Thu, 01 Jan 1970 00:00:00 UTC';
+    domains.forEach(function(d) {
+      paths.forEach(function(p) {
+        document.cookie = 'googtrans=;' + exp + ';path=' + p + (d ? ';domain=' + d : '');
+      });
+    });
+  }
+
+  function gtSetLang(btn) {
+    var lang   = btn.getAttribute('data-lang');
+    var widget = document.getElementById('gt-widget');
+
+    // ── Voltar ao Português: limpar cookie e recarregar ──
+    if (!lang) {
+      gtClearCookie();
+      try { sessionStorage.removeItem('gt_lang'); } catch(e){}
+      widget.classList.remove('open');
+      window.location.reload();
+      return;
+    }
+
+    // Atualiza botão ativo
+    document.querySelectorAll('.gt-lang-btn').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+
+    // Atualiza label e indicador
+    document.getElementById('gt-label').textContent = _GT_LABELS[lang] || lang.toUpperCase();
+    widget.classList.add('translated');
+
+    // Aplica a tradução via select do Google
+    var applyLang = function() {
+      var sel = document.querySelector('.goog-te-combo');
+      if (!sel) { setTimeout(applyLang, 300); return; }
+      sel.value = lang;
+      sel.dispatchEvent(new Event('change'));
+    };
+    applyLang();
+
+    // Fecha o painel e salva preferência
+    widget.classList.remove('open');
+    try { sessionStorage.setItem('gt_lang', lang); } catch(e){}
+  }
+
+  // Fecha o painel ao clicar fora
+  document.addEventListener('click', function(e) {
+    var widget = document.getElementById('gt-widget');
+    if (!widget.contains(e.target)) { widget.classList.remove('open'); }
+  }, true);
+
+  // Restaura idioma salvo na sessão
+  window.addEventListener('load', function() {
+    try {
+      var saved = sessionStorage.getItem('gt_lang');
+      if (saved) {
+        // Aguarda Google Translate carregar
+        var tries = 0;
+        var restore = setInterval(function() {
+          var sel = document.querySelector('.goog-te-combo');
+          if (sel || tries++ > 20) {
+            clearInterval(restore);
+            if (sel && saved) {
+              sel.value = saved;
+              sel.dispatchEvent(new Event('change'));
+              document.getElementById('gt-label').textContent = _GT_LABELS[saved] || saved.toUpperCase();
+              document.getElementById('gt-widget').classList.add('translated');
+              // Marca botão ativo correto
+              document.querySelectorAll('.gt-lang-btn').forEach(function(b){
+                b.classList.toggle('active', b.getAttribute('data-lang') === saved);
+              });
+            }
+          }
+        }, 400);
+      }
+    } catch(e){}
+  });
+</script>
+<script src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>

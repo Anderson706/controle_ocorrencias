@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Ocorrências | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00;
+      --dhl-red:#d40511;
+      --dhl-red-dark:#b3030e;
+      --dhl-black:#1f1f1f;
+      --bg:#f3f5f7;
+      --card:#ffffff;
+      --line:#e5e7eb;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --shadow:0 12px 28px rgba(15,23,42,.08);
+      --radius:20px;
+      --sidebar:#161a1d;
+      --sidebar-2:#20262b;
+      --ok-bg:#e8f7ee;
+      --ok-text:#146c43;
+      --warn-bg:#fff4db;
+      --warn-text:#9a6700;
+      --danger-bg:#fde8ea;
+      --danger-text:#b42318;
+      --neutral-bg:#eef1f4;
+      --neutral-text:#3f4a5a;
+    }
+
+    *{ box-sizing:border-box; }
+    html, body{
+      margin:0;
+      padding:0;
+      min-height:100vh;
+      background:var(--bg);
+      color:var(--text);
+      font-family:Arial, Helvetica, sans-serif;
+    }
+    a{ text-decoration:none; }
+
+    .app-shell{ display:flex; min-height:100vh; width:100%; }
+
+    /* ── Loading overlay ── */
+    #loading-overlay{
+      display:none; position:fixed; inset:0; z-index:99999;
+      background:rgba(15,23,42,.52); backdrop-filter:blur(3px);
+      align-items:center; justify-content:center; }
+    #loading-overlay.show{ display:flex; }
+    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px;
+      text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb;
+      border-top-color:#d40511; border-radius:50%;
+      animation:spin .75s linear infinite; margin:0 auto 18px; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
+
+    /* ── Sidebar ── */
+    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b);
+      color:#fff; position:fixed; top:0; left:0; bottom:0;
+      padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18);
+      z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+    .brand{ padding-bottom:16px; margin-bottom:14px;
+      border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center;
+      padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111;
+      font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+    .nav-section{ display:flex; align-items:center; gap:10px;
+      padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58);
+      font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase;
+      transition:.18s; border:1px solid transparent; text-decoration:none; }
+    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10);
+      border-color:rgba(255,255,255,.12); }
+    .nav-icon{ font-size:15px; flex-shrink:0; }
+    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+    .sub-nav{ display:flex; flex-direction:column; gap:1px;
+      margin:2px 0 6px 16px; padding-left:14px;
+      border-left:2px solid rgba(255,255,255,.10); }
+    .sub-link{ display:block; padding:8px 10px; border-radius:8px;
+      color:rgba(255,255,255,.52); font-size:13px; font-weight:600;
+      transition:.15s; text-decoration:none; }
+    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .sub-link.cur{ color:#ffcc00; font-weight:800; }
+    .sidebar-footer{ margin-top:auto; padding-top:14px;
+      border-top:1px solid rgba(255,255,255,.08); }
+    .nav-logout{ display:flex; align-items:center; gap:10px; padding:11px 14px;
+      border-radius:12px; color:rgba(255,255,255,.52); font-size:13px; font-weight:700;
+      transition:.18s; text-decoration:none; }
+    .nav-logout:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    /* ── Footer ── */
+    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+
+    .main{
+      margin-left:260px;
+      width:calc(100% - 260px);
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .topbar{
+      height:76px;
+      background:#fff;
+      border-bottom:1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      padding:0 24px;
+      position:sticky;
+      top:0;
+      z-index:900;
+    }
+    .topbar-left{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      min-width:0;
+    }
+    .logo-topbar{
+      height:42px;
+      width:auto;
+      display:block;
+      object-fit:contain;
+      flex-shrink:0;
+    }
+    .topbar-left h1{
+      margin:0;
+      font-size:20px;
+      font-weight:900;
+      color:var(--dhl-black);
+    }
+    .topbar-left p{
+      margin:4px 0 0;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .top-chip{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:8px 12px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      border:1px solid #efd56f;
+      background:#fff8d8;
+      color:#7a5a00;
+      white-space:nowrap;
+    }
+
+    .content{ padding:24px; }
+
+    .flash-wrap{ margin-bottom:16px; }
+    .flash{
+      margin-bottom:12px;
+      padding:12px 14px;
+      border-radius:12px;
+      font-weight:700;
+      border:1px solid transparent;
+    }
+    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+    .hero{
+      position:relative;
+      overflow:hidden;
+      background:linear-gradient(135deg,#d40511,#93000a);
+      color:#fff;
+      border-radius:24px;
+      padding:24px 26px;
+      box-shadow:var(--shadow);
+      margin-bottom:20px;
+    }
+    .hero h2{ margin:0 0 8px 0; font-size:30px; font-weight:900; }
+    .hero p{
+      margin:0;
+      line-height:1.55;
+      font-size:14px;
+      opacity:.96;
+      max-width:850px;
+    }
+
+    .section{ margin-bottom:22px; }
+    .section-title{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:14px;
+      flex-wrap:wrap;
+    }
+    .section-title h3{
+      margin:0;
+      font-size:20px;
+      font-weight:900;
+      color:var(--dhl-black);
+    }
+    .section-chip{
+      background:#fff8db;
+      color:#7a5a00;
+      border:1px solid #f5d66f;
+      border-radius:999px;
+      padding:7px 12px;
+      font-size:12px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.3px;
+    }
+
+    .grid{ display:grid; gap:16px; }
+    .grid-4{ grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      padding:18px;
+      box-shadow:var(--shadow);
+      min-width:0;
+    }
+
+    .kpi{
+      min-height:128px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:8px;
+      position:relative;
+      overflow:hidden;
+      background:linear-gradient(180deg,#fff,#fffef7);
+      border-left:6px solid var(--dhl-yellow);
+    }
+    .kpi .label{
+      color:var(--muted);
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.6px;
+      font-weight:800;
+    }
+    .kpi .value{
+      font-size:34px;
+      font-weight:900;
+      color:var(--dhl-red);
+      line-height:1;
+    }
+
+    .row{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      align-items:end;
+    }
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      flex:1;
+      min-width:220px;
+    }
+    .field label{
+      font-size:13px;
+      color:var(--muted);
+      font-weight:800;
+    }
+    .field input,
+    .field select,
+    .field textarea{
+      width:100%;
+      border:1px solid #d6dae1;
+      background:#fff;
+      border-radius:14px;
+      padding:13px 14px;
+      font-size:14px;
+      outline:none;
+      font-family:Arial, Helvetica, sans-serif;
+      transition:border-color .18s ease, box-shadow .18s ease;
+    }
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus{
+      border-color:#d40511;
+      box-shadow:0 0 0 4px rgba(212,5,17,.08);
+    }
+    .field textarea{
+      min-height:110px;
+      resize:vertical;
+    }
+    .readonly-field{
+      background:#f3f4f6 !important;
+      color:#6b7280;
+      font-weight:700;
+    }
+    .field-locked{
+      display:flex; align-items:center; gap:10px;
+      background:#f1f5f9; border:1px solid #e2e8f0;
+      border-radius:14px; padding:13px 16px;
+      font-size:14px; color:#475569; font-weight:600;
+      user-select:none; cursor:default;
+    }
+    .lock-icon{ font-size:13px; opacity:.55; }
+    .small{
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.45;
+    }
+
+    .actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    .btn{
+      border:none;
+      border-radius:14px;
+      padding:12px 16px;
+      cursor:pointer;
+      font-weight:800;
+      text-decoration:none;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      transition:.18s ease;
+    }
+    .btn:hover{ transform:translateY(-1px); }
+    .btn-red{
+      background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
+      color:#ffcc00;
+      box-shadow:0 8px 18px rgba(212,5,17,.20);
+    }
+    .btn-dark{
+      background:linear-gradient(180deg,#3e434a,#262a2f);
+      color:#fff;
+    }
+    .btn-soft{
+      background:#fff6cf;
+      color:#6d5400;
+      border:1px solid #f0d66a;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+    .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
+    .badge-warning{ background:var(--warn-bg); color:var(--warn-text); }
+    .badge-success{ background:var(--ok-bg); color:var(--ok-text); }
+    .badge-neutral{ background:var(--neutral-bg); color:var(--neutral-text); }
+
+    .table-wrap{
+      overflow:auto;
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:#fff;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      min-width:1450px;
+      background:#fff;
+    }
+    th, td{
+      padding:10px 12px;
+      border-bottom:1px solid #edf0f4;
+      text-align:left;
+      vertical-align:top;
+      font-size:13px;
+    }
+    thead th{
+      background:linear-gradient(180deg,#fff8db,#ffefab);
+      color:#4b3c00;
+      position:sticky;
+      top:0;
+      z-index:2;
+      font-weight:800;
+      white-space:nowrap;
+    }
+    tbody tr:hover{ background:#fffdf5; }
+
+    .thumbs{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .thumbs img{
+      width:72px;
+      height:72px;
+      object-fit:cover;
+      border-radius:10px;
+      border:1px solid #e5e7eb;
+      background:#fff;
+    }
+
+    @media (max-width:1100px){
+      .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
+      .main{ margin-left:0; width:100%; }
+      .app-shell{ flex-direction:column; }
+    }
+    @media (max-width:700px){
+      .content{ padding:16px; }
+      .topbar{
+        padding:14px 16px;
+        height:auto;
+        align-items:flex-start;
+        flex-direction:column;
+      }
+      .topbar-left{ align-items:flex-start; }
+      .hero h2{ font-size:24px; }
+    }
+  </style>
+</head>
+<body>
+<div id="loading-overlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p>Processando...</p>
+  </div>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-badge">DHL SECURITY</span>
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc'] -%}
+
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Ocorrências</span>
+        {% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}
+      <div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle de Ocorrências</a>
+        <a href="{{ url_for('dashboard') }}"   class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>
+      {% endif %}
+
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>
+        {% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}
+      <div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}"              class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+      </div>
+      {% endif %}
+
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>
+        {% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}
+      <div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+      </div>
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-footer">
+      <a href="{{ url_for('logout') }}" class="nav-logout">⏻ &nbsp;Sair</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo DHL" class="logo-topbar">
+        <div>
+          <h1>Controle de Ocorrência</h1>
+          <p>Cadastro, consulta e atualização de registros operacionais</p>
+        </div>
+      </div>
+
+      <div>
+        <span class="top-chip">{{ session.get('user_nome', 'Usuário') }} | {{ session.get('user_perfil', '-') }}</span>
+      </div>
+    </header>
+
+    <div class="content">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-wrap">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <section class="hero">
+        <h2>
+          Cadastro de Ocorrência
+          {% if modo_edicao and registro_edicao %}
+            <span style="
+              display:inline-flex;
+              margin-left:10px;
+              padding:6px 12px;
+              border-radius:999px;
+              background:rgba(255,255,255,.15);
+              border:1px solid rgba(255,255,255,.25);
+              font-size:14px;
+              font-weight:800;
+            ">
+              ID #{{ registro_edicao.id }}
+            </span>
+          {% endif %}
+        </h2>
+
+        <p>
+          Utilize este formulário para registrar ocorrências com data, hora, natureza, local, envolvidos, prioridade, status e evidências fotográficas.
+        </p>
+      </section>
+
+      <section class="section">
+        <div class="grid grid-4">
+          <div class="card kpi">
+            <div class="label">Total de registros</div>
+            <div class="value">{{ resumo.total }}</div>
+          </div>
+          <div class="card kpi">
+            <div class="label">Registros de hoje</div>
+            <div class="value">{{ resumo.hoje }}</div>
+          </div>
+          <div class="card kpi">
+            <div class="label">Com foto</div>
+            <div class="value">{{ resumo.com_foto }}</div>
+          </div>
+          <div class="card kpi">
+            <div class="label">Pendentes</div>
+            <div class="value">{{ resumo.pendentes }}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="nova-ocorrencia">
+        <div class="card">
+          <div class="section-title">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <h3>{% if modo_edicao %}Editar ocorrência{% else %}Nova ocorrência{% endif %}</h3>
+
+              {% if modo_edicao and registro_edicao %}
+                <span class="badge badge-neutral" style="font-size:13px; padding:7px 12px;">
+                  ID #{{ registro_edicao.id }}
+                </span>
+              {% endif %}
+            </div>
+
+            <span class="section-chip">
+              {% if modo_edicao %}Modo edição{% else %}Cadastro{% endif %}
+            </span>
+          </div>
+
+          <form method="POST" enctype="multipart/form-data">
+            {% if modo_edicao %}
+              <input type="hidden" name="ocorrencia_id" value="{{ registro_edicao.id }}">
+            {% endif %}
+
+            {% if modo_edicao and registro_edicao %}
+              <div style="margin-bottom:16px;">
+                <div style="
+                  display:inline-flex;
+                  align-items:center;
+                  gap:8px;
+                  padding:10px 16px;
+                  border-radius:14px;
+                  background:#fff8db;
+                  border:1px solid #f0d66a;
+                  color:#7a5a00;
+                  font-weight:800;
+                  font-size:14px;
+                ">
+                  📌 Registro em edição: <strong>ID #{{ registro_edicao.id }}</strong>
+                </div>
+              </div>
+            {% endif %}
+
+            <div class="row">
+              <div class="field">
+                <label>ID</label>
+                <input type="text"
+                       value="{% if modo_edicao %}{{ registro_edicao.id }}{% else %}Gerado automaticamente{% endif %}"
+                       readonly
+                       class="readonly-field"
+                       style="font-weight:900; font-size:16px; color:#d40511;">
+              </div>
+
+              <div class="field">
+                <label>Data / Hora</label>
+                <input type="datetime-local" name="data_hora"
+                       value="{% if modo_edicao %}{{ registro_edicao.data_hora }}{% else %}{{ agora }}{% endif %}"
+                       required>
+              </div>
+
+              <div class="field">
+                <label>Hora da Ocorrência</label>
+                <input type="time" name="hora_ocorrencia"
+                       value="{% if modo_edicao %}{{ registro_edicao.hora_ocorrencia }}{% else %}{{ hora_atual }}{% endif %}"
+                       required>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="row">
+              <div class="field">
+                <label>Site</label>
+                <input type="hidden" name="site" value="{{ (registro_edicao.site if modo_edicao else site_usuario) or '' }}">
+                <div class="field-locked">
+                  <span class="lock-icon">🔒</span>
+                  {{ (registro_edicao.site if modo_edicao else site_usuario) or '— site não configurado —' }}
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Natureza</label>
+                <select name="natureza" required>
+                  <option value="">Selecione</option>
+                  {% for item in ['Assédio','Acidente','Desvio de Conduta','Furto','Pacote No Descarte','Pacote Violado','Desvio de Processo','Desinteligência','Outros'] %}
+                    <option value="{{ item }}" {% if modo_edicao and registro_edicao.natureza == item %}selected{% endif %}>{{ item }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="field">
+                <label>Local</label>
+                <input type="text" name="local"
+                       value="{% if modo_edicao %}{{ registro_edicao.local }}{% endif %}"
+                       placeholder="Ex: Portaria, Inbound, Pátio..."
+                       required>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="field">
+              <label>Descrição</label>
+              <textarea name="descricao" required placeholder="Descreva a ocorrência...">{% if modo_edicao %}{{ registro_edicao.descricao }}{% endif %}</textarea>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="row">
+              <div class="field">
+                <label>Operador</label>
+                <input type="text" name="operador" value="{% if modo_edicao %}{{ registro_edicao.operador }}{% endif %}" required>
+              </div>
+
+              <div class="field">
+                <label>Sub-Package Number</label>
+                <input type="text" name="gc" value="{% if modo_edicao %}{{ registro_edicao.gc }}{% endif %}" required>
+              </div>
+
+              <div class="field">
+                <label>Envolvido</label>
+                <input type="text" name="envolvido" value="{% if modo_edicao %}{{ registro_edicao.envolvido or '' }}{% endif %}">
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="row">
+              <div class="field">
+                <label>Prioridade</label>
+                <select name="prioridade" required>
+                  <option value="">Selecione</option>
+                  <option value="ALTA" {% if modo_edicao and registro_edicao.prioridade == 'ALTA' %}selected{% endif %}>Alta</option>
+                  <option value="MEDIA" {% if modo_edicao and registro_edicao.prioridade == 'MEDIA' %}selected{% endif %}>Média</option>
+                  <option value="BAIXA" {% if modo_edicao and registro_edicao.prioridade == 'BAIXA' %}selected{% endif %}>Baixa</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label>Status</label>
+                <select name="status" required>
+                  <option value="PENDENTE" {% if modo_edicao and registro_edicao.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+                  <option value="EM ANDAMENTO" {% if modo_edicao and registro_edicao.status == 'EM ANDAMENTO' %}selected{% endif %}>Em andamento</option>
+                  <option value="CONCLUIDO" {% if modo_edicao and registro_edicao.status == 'CONCLUIDO' %}selected{% endif %}>Concluído</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="field">
+              <label>Foto</label>
+              <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp">
+              <div class="small">Formatos aceitos: JPG, JPEG, PNG e WEBP.</div>
+            </div>
+
+            {% if modo_edicao and registro_edicao.foto %}
+              <div style="height:12px"></div>
+              <div class="field">
+                <label>Foto atual</label>
+                <div class="thumbs">
+                  <a href="{{ registro_edicao.foto }}" target="_blank">
+                    <img src="{{ registro_edicao.foto }}" alt="Foto atual">
+                  </a>
+                </div>
+              </div>
+            {% endif %}
+
+            <div class="actions">
+              <button type="submit" class="btn btn-red">
+                {% if modo_edicao %}Salvar alterações{% else %}Salvar ocorrência{% endif %}
+              </button>
+
+              {% if modo_edicao %}
+                <a href="{{ url_for('ocorrencias') }}" class="btn btn-soft">Cancelar edição</a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="section" id="historico">
+        <div class="card">
+          <div class="section-title">
+            <h3>Histórico de ocorrências</h3>
+            <span class="section-chip">Registros</span>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nº</th>
+                  <th>Site</th>
+                  <th>Data / Hora</th>
+                  <th>Hora ocorrência</th>
+                  <th>Natureza</th>
+                  <th>Descrição</th>
+                  <th>Local</th>
+                  <th>Operador</th>
+                  <th>Sub-Package Number</th>
+                  <th>Envolvido</th>
+                  <th>Prioridade</th>
+                  <th>Status</th>
+                  <th>Foto</th>
+                  <th>Criado por</th>
+                  <th>Pós-investigação</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {% for r in registros %}
+                <tr>
+                  <td><strong style="color:#d40511;">{{ r.numero_site or r.id }}</strong></td>
+                  <td style="white-space:nowrap;">{{ r.site or '-' }}</td>
+                  <td>{{ r.data_hora }}</td>
+                  <td>{{ r.hora_ocorrencia }}</td>
+                  <td>{{ r.natureza }}</td>
+                  <td style="max-width:320px;">{{ r.descricao }}</td>
+                  <td>{{ r.local }}</td>
+                  <td>{{ r.operador }}</td>
+                  <td>{{ r.gc }}</td>
+                  <td>{{ r.envolvido or '-' }}</td>
+                  <td>
+                    {% if r.prioridade == 'ALTA' %}
+                      <span class="badge badge-danger">{{ r.prioridade }}</span>
+                    {% elif r.prioridade == 'MEDIA' %}
+                      <span class="badge badge-warning">{{ r.prioridade }}</span>
+                    {% else %}
+                      <span class="badge badge-neutral">{{ r.prioridade }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if r.status == 'CONCLUIDO' %}
+                      <span class="badge badge-success">{{ r.status }}</span>
+                    {% elif r.status == 'EM ANDAMENTO' %}
+                      <span class="badge badge-warning">{{ r.status }}</span>
+                    {% else %}
+                      <span class="badge badge-danger">{{ r.status }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if r.foto %}
+                      <div class="thumbs">
+                        <a href="{{ r.foto }}" target="_blank">
+                          <img src="{{ r.foto }}" alt="Foto">
+                        </a>
+                      </div>
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td>{{ r.criado_por or '-' }}</td>
+                  <td>
+                    <a href="{{ url_for('post_ocorrencia', ocorrencia_id=r.id) }}" class="btn btn-soft" style="padding:8px 12px;">Post</a>
+                  </td>
+                  <td>
+                    <div class="actions" style="margin-top:0;">
+                      <a href="{{ url_for('ocorrencias', editar=r.id) }}" class="btn btn-dark" style="padding:8px 12px;">Editar</a>
+
+                      {% if session.get('user_perfil') in ['ADMIN', 'USUARIO'] %}
+                      <form method="POST" action="{{ url_for('excluir_ocorrencia', ocorrencia_id=r.id) }}" onsubmit="return confirm('Deseja realmente excluir este registro?');">
+                        <button type="submit" class="btn btn-red" style="padding:8px 12px;">Excluir</button>
+                      </form>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+                {% else %}
+                <tr>
+                  <td colspan="15">Nenhuma ocorrência encontrada.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+    <footer class="app-footer">
+      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+    </footer>
+  </main>
+</div>
+<script>
+(function(){
+  var ov=document.getElementById('loading-overlay');
+  function show(){ov.classList.add('show');}
+  document.querySelectorAll('form').forEach(function(f){
+    f.addEventListener('submit',function(){show();});
+  });
+  document.querySelectorAll('a[href]').forEach(function(a){
+    var h=a.getAttribute('href')||'';
+    if(h.startsWith('#')||h.startsWith('javascript:')) return;
+    if(a.target==='_blank') return;
+    if(h.indexOf('exportar')!==-1||h.indexOf('download')!==-1) return;
+    a.addEventListener('click',function(e){
+      if(e.ctrlKey||e.metaKey||e.shiftKey) return;
+      show();
+    });
+  });
+})();
+</script>
+</body>
+</html>

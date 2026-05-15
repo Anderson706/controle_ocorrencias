@@ -1,0 +1,398 @@
+﻿<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Aceite LGPD | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
+      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
+      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+      --shadow:0 10px 30px rgba(15,23,42,.08); --radius:18px;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+    a{ text-decoration:none; }
+
+    /* ── Loading ── */
+    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+    #loading-overlay.show{ display:flex; }
+    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:var(--dhl-red); border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; }
+
+    /* ── Layout ── */
+    .page{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding:32px 16px 48px; }
+
+    /* ── Header strip ── */
+    .brand-bar{ width:100%; max-width:860px; display:flex; align-items:center; gap:14px; margin-bottom:28px; }
+    .brand-logo{ height:44px; width:auto; object-fit:contain; }
+    .brand-bar h1{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black); }
+    .brand-bar p{ margin:2px 0 0; font-size:12px; color:var(--muted); }
+
+    /* ── Card principal ── */
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); width:100%; max-width:860px; overflow:hidden; }
+
+    /* ── Hero ── */
+    .hero{ background:linear-gradient(135deg,#1f2937,#111827); color:#fff; padding:28px 32px; position:relative; overflow:hidden; }
+    .hero::before{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 90% 10%, rgba(212,5,17,.25), transparent 30%), radial-gradient(circle at 5% 90%, rgba(255,204,0,.15), transparent 25%); pointer-events:none; }
+    .hero-inner{ position:relative; z-index:1; }
+    .hero-badge{ display:inline-flex; align-items:center; gap:6px; background:rgba(212,5,17,.22); border:1px solid rgba(212,5,17,.4); color:#fca5a5; padding:5px 12px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; margin-bottom:12px; }
+    .hero h2{ margin:0 0 8px; font-size:24px; font-weight:900; line-height:1.2; }
+    .hero p{ margin:0; font-size:13px; line-height:1.6; opacity:.85; max-width:600px; }
+    .hero-user{ margin-top:14px; display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); padding:7px 14px; border-radius:999px; font-size:13px; font-weight:700; color:#fff; }
+    .hero-user span{ opacity:.75; font-weight:600; }
+
+    /* ── Flash ── */
+    .flash-wrap{ padding:16px 24px 0; }
+    .flash{ padding:12px 16px; border-radius:12px; font-weight:700; border:1px solid transparent; font-size:13px; margin-bottom:6px; }
+    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+    /* ── Instrução ── */
+    .instr{ padding:18px 24px 0; display:flex; align-items:flex-start; gap:12px; }
+    .instr-icon{ font-size:22px; flex-shrink:0; margin-top:2px; }
+    .instr p{ margin:0; font-size:13px; line-height:1.65; color:var(--muted); }
+    .instr strong{ color:var(--text); }
+
+    /* ── Documento LGPD ── */
+    .doc-wrap{ margin:18px 24px 0; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+    .doc-header{ background:linear-gradient(180deg,#f9fafb,#f1f5f9); padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .doc-header h3{ margin:0; font-size:14px; font-weight:900; color:var(--dhl-black); display:flex; align-items:center; gap:8px; }
+    .doc-badge{ background:#fff4db; border:1px solid #f5d66f; color:#735500; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; }
+    .doc-scroll{ height:420px; overflow-y:auto; padding:24px 28px; background:#fff; font-size:13px; line-height:1.75; color:#374151; scroll-behavior:smooth; }
+    .doc-scroll::-webkit-scrollbar{ width:6px; }
+    .doc-scroll::-webkit-scrollbar-track{ background:#f1f5f9; }
+    .doc-scroll::-webkit-scrollbar-thumb{ background:#d1d5db; border-radius:4px; }
+    .doc-scroll h4{ margin:22px 0 8px; font-size:14px; font-weight:900; color:var(--dhl-black); border-left:3px solid var(--dhl-red); padding-left:10px; }
+    .doc-scroll h4:first-child{ margin-top:0; }
+    .doc-scroll p{ margin:0 0 10px; }
+    .doc-scroll ul{ margin:6px 0 10px; padding-left:22px; }
+    .doc-scroll li{ margin-bottom:5px; }
+    .doc-scroll .highlight{ background:#fff8db; border:1px solid #f5d66f; border-radius:8px; padding:10px 14px; margin:14px 0; font-size:12px; color:#5a4100; }
+    .doc-scroll .section-sep{ border:none; border-top:1px dashed #e5e7eb; margin:18px 0; }
+
+    /* ── Scroll indicator ── */
+    .scroll-indicator{ display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 20px; background:#f9fafb; border-top:1px solid var(--line); font-size:12px; color:var(--muted); font-weight:700; transition:.3s; }
+    .scroll-indicator.done{ color:#15803d; background:#f0fdf4; }
+    .scroll-indicator svg{ flex-shrink:0; }
+
+    /* ── Aceite ── */
+    .aceite-wrap{ padding:20px 24px 24px; }
+    .check-row{ display:flex; align-items:flex-start; gap:12px; padding:16px; background:#f9fafb; border:1px solid var(--line); border-radius:14px; margin-bottom:18px; cursor:pointer; transition:.18s; }
+    .check-row:hover{ background:#f0fdf4; border-color:#86efac; }
+    .check-row input[type=checkbox]{ width:20px; height:20px; accent-color:var(--dhl-red); cursor:pointer; flex-shrink:0; margin-top:1px; }
+    .check-row label{ font-size:13px; font-weight:700; color:var(--text); cursor:pointer; line-height:1.5; }
+    .check-row label span{ color:var(--muted); font-weight:600; font-size:12px; display:block; margin-top:3px; }
+
+    .btn-row{ display:flex; gap:12px; flex-wrap:wrap; }
+    .btn{ border:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:13px 24px; border-radius:13px; font-weight:800; transition:.18s ease; font-size:14px; text-decoration:none; font-family:inherit; }
+    .btn:hover{ transform:translateY(-1px); }
+    .btn:disabled{ opacity:.45; cursor:not-allowed; transform:none !important; }
+    .btn-accept{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; box-shadow:0 8px 18px rgba(212,5,17,.22); flex:1; min-width:200px; font-size:15px; }
+    .btn-refuse{ background:#fff; color:#374151; border:1px solid #d1d5db; }
+    .btn-refuse:hover{ border-color:#9ca3af; background:#f9fafb; }
+
+    /* ── Modal de recusa ── */
+    .modal-overlay{ display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); backdrop-filter:blur(4px); z-index:9000; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.open{ display:flex; animation:fadeIn .18s ease; }
+    @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+    .modal-box{ background:#fff; border-radius:20px; padding:32px; max-width:440px; width:100%; box-shadow:0 24px 60px rgba(0,0,0,.22); animation:slideUp .2s ease; }
+    @keyframes slideUp{ from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+    .modal-icon{ font-size:40px; text-align:center; margin-bottom:16px; }
+    .modal-box h3{ margin:0 0 10px; font-size:20px; font-weight:900; color:var(--dhl-black); text-align:center; }
+    .modal-box p{ margin:0 0 22px; font-size:13px; color:var(--muted); line-height:1.65; text-align:center; }
+    .modal-box p strong{ color:#b42318; }
+    .modal-btns{ display:flex; flex-direction:column; gap:10px; }
+    .btn-modal-back{ background:#f3f4f6; color:#374151; width:100%; }
+    .btn-modal-back:hover{ background:#e5e7eb; }
+    .btn-modal-refuse{ background:linear-gradient(180deg,#374151,#1f2937); color:#fff; width:100%; }
+
+    /* ── Footer ── */
+    .page-footer{ margin-top:28px; text-align:center; font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.3px; line-height:1.7; }
+
+    @media(max-width:600px){
+      .hero{ padding:20px; }
+      .hero h2{ font-size:19px; }
+      .doc-scroll{ height:300px; padding:16px; }
+      .aceite-wrap{ padding:16px; }
+      .btn-accept{ min-width:unset; }
+    }
+  </style>
+</head>
+<body>
+<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+
+<!-- Modal de confirmação de recusa -->
+<div class="modal-overlay" id="modal-recusa">
+  <div class="modal-box">
+    <div class="modal-icon">⛔</div>
+    <h3>Confirmar recusa</h3>
+    <p>Ao recusar os termos da LGPD, sua sessão será encerrada e <strong>o acesso à ferramenta não será permitido</strong>.<br><br>Para utilizar o CCTV Control Panel, é obrigatória a aceitação dos termos.</p>
+    <div class="modal-btns">
+      <button class="btn btn-modal-back" onclick="fecharModal()">← Voltar e revisar os termos</button>
+      <form method="POST" id="form-recusar">
+        <input type="hidden" name="resposta" value="nao">
+        <button type="submit" class="btn btn-modal-refuse" style="width:100%;" onclick="document.getElementById('loading-overlay').classList.add('show')">
+          ⛔ Confirmar recusa e sair
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- Branding -->
+  <div class="brand-bar">
+    <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="brand-logo">
+    <div>
+      <h1>CCTV Control Panel</h1>
+      <p>DHL Security · Departamento de Segurança Patrimonial</p>
+    </div>
+  </div>
+
+  <div class="card">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-inner">
+        <div class="hero-badge">⚖️ Proteção de Dados Pessoais</div>
+        <h2>Termo de Consentimento — Lei Geral de Proteção de Dados</h2>
+        <p>Para acessar esta ferramenta é necessário ler e aceitar expressamente os termos abaixo,
+           em conformidade com a <strong>Lei nº 13.709/2018 (LGPD)</strong>.</p>
+        {% if user_nome %}
+        <div class="hero-user">
+          👤 <span>Usuário:</span> {{ user_nome }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}<div class="flash-wrap">{% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}</div>{% endif %}
+    {% endwith %}
+
+    <!-- Instrução -->
+    <div class="instr">
+      <div class="instr-icon">📜</div>
+      <p><strong>Leia o documento completo antes de aceitar.</strong> Role até o final do texto para habilitar o botão de confirmação. Caso não concorde com os termos, você não poderá acessar a ferramenta.</p>
+    </div>
+
+    <!-- Documento LGPD -->
+    <div class="doc-wrap">
+      <div class="doc-header">
+        <h3>📄 Documento — Termo de Uso e Proteção de Dados</h3>
+        <span class="doc-badge">LGPD · Lei 13.709/2018</span>
+      </div>
+
+      <div class="doc-scroll" id="doc-scroll">
+
+        <h4>1. Identificação do Controlador de Dados</h4>
+        <p><strong>Controlador:</strong> DHL Supply Chain Brasil Ltda., inscrita no CNPJ sob nº 05.591.763/0001-46, com sede na Av. das Nações Unidas, 12.901, Torre Norte, São Paulo – SP, doravante denominada <strong>DHL</strong>.</p>
+        <p><strong>Encarregado de Proteção de Dados (DPO):</strong> O DPO da DHL Supply Chain Brasil pode ser contactado pelo e-mail: <em>privacy.br@dhl.com</em> para questões relativas à proteção de dados pessoais.</p>
+
+        <hr class="section-sep">
+
+        <h4>2. Descrição da Ferramenta e Finalidade do Tratamento</h4>
+        <p>O <strong>CCTV Control Panel</strong> é uma plataforma interna de uso exclusivo do Departamento de Segurança Patrimonial da DHL Supply Chain Brasil, destinada ao:</p>
+        <ul>
+          <li>Registro e controle de ocorrências de segurança patrimonial;</li>
+          <li>Gerenciamento de Análises Investigativas;</li>
+          <li>Controle de Avisos de Não Conformidade (ANC);</li>
+          <li>Registro de Passagens de Turno (Shift Handover);</li>
+          <li>Geração de relatórios, dashboards e exportações para fins operacionais.</li>
+        </ul>
+        <p>Os dados pessoais tratados nesta ferramenta são utilizados estritamente para as finalidades descritas acima, no exercício das atividades de segurança patrimonial e controle operacional interno.</p>
+
+        <hr class="section-sep">
+
+        <h4>3. Dados Pessoais Tratados</h4>
+        <p>No âmbito da utilização desta ferramenta, poderão ser coletados e tratados os seguintes dados pessoais:</p>
+        <ul>
+          <li><strong>Dados de identificação:</strong> nome completo, endereço de e-mail corporativo, cargo/função e site de operação;</li>
+          <li><strong>Dados de acesso:</strong> registros de login, data e hora de acesso, atividades realizadas na plataforma;</li>
+          <li><strong>Dados operacionais:</strong> informações inseridas nos registros de ocorrências, análises e passagens de turno, incluindo nomes de colaboradores envolvidos, descrições de eventos e fotografias capturadas por sistemas de CFTV;</li>
+          <li><strong>Dados biométricos (assinaturas eletrônicas):</strong> captura de assinatura digital para validação de passagens de turno;</li>
+          <li><strong>Dados de imagem:</strong> foto de perfil do usuário (opcional).</li>
+        </ul>
+
+        <div class="highlight">
+          ⚠️ <strong>Atenção:</strong> Todos os dados inseridos nesta plataforma podem conter dados pessoais de terceiros (colaboradores, prestadores de serviço, etc.). O responsável pelo lançamento dos dados é solidariamente responsável pela minimização, adequação e segurança dessas informações, nos termos do art. 6° da LGPD.
+        </div>
+
+        <hr class="section-sep">
+
+        <h4>4. Base Legal para o Tratamento</h4>
+        <p>O tratamento de dados pessoais realizado nesta ferramenta ampara-se nas seguintes hipóteses legais previstas no art. 7° da Lei nº 13.709/2018 (LGPD):</p>
+        <ul>
+          <li><strong>Cumprimento de obrigação legal ou regulatória</strong> (art. 7°, II): registros exigidos por normas internas, auditorias e órgãos reguladores;</li>
+          <li><strong>Execução de contrato ou procedimentos preliminares</strong> (art. 7°, V): controle operacional de atividades previstas no contrato de trabalho;</li>
+          <li><strong>Legítimo interesse do controlador</strong> (art. 7°, IX): proteção do patrimônio, prevenção de fraudes, controle de acesso e segurança das instalações da DHL;</li>
+          <li><strong>Consentimento</strong> (art. 7°, I): para o uso de foto de perfil e para o aceite eletrônico registrado neste documento.</li>
+        </ul>
+
+        <hr class="section-sep">
+
+        <h4>5. Compartilhamento de Dados</h4>
+        <p>Os dados pessoais tratados nesta plataforma poderão ser compartilhados com:</p>
+        <ul>
+          <li>Equipes internas de Segurança Patrimonial, Recursos Humanos, Jurídico e Auditoria, quando necessário para as finalidades descritas;</li>
+          <li>Autoridades policiais, judiciais ou órgãos governamentais, quando exigido por lei ou decisão judicial;</li>
+          <li>Empresas do Grupo Deutsche Post DHL, para fins de conformidade, auditoria e gestão corporativa.</li>
+        </ul>
+        <p>Não haverá venda, cessão ou compartilhamento de dados pessoais com terceiros para fins comerciais.</p>
+
+        <hr class="section-sep">
+
+        <h4>6. Transferência Internacional de Dados</h4>
+        <p>Em razão de a DHL Supply Chain ser integrante do Grupo Deutsche Post DHL, com sede na Alemanha, poderá haver transferência internacional de dados pessoais para servidores e sistemas localizados em outros países, incluindo países membros da União Europeia. Nesses casos, a transferência será realizada com as garantias adequadas previstas nos arts. 33 a 36 da LGPD, incluindo cláusulas contratuais padrão e mecanismos de proteção equivalentes ao nível exigido pela legislação brasileira.</p>
+
+        <hr class="section-sep">
+
+        <h4>7. Retenção e Eliminação dos Dados</h4>
+        <p>Os dados pessoais serão mantidos pelo tempo necessário para cumprimento das finalidades que motivaram sua coleta e pelo prazo mínimo exigido pela legislação aplicável. Após esse período:</p>
+        <ul>
+          <li>Os dados serão eliminados de forma segura, ou anonimizados quando for tecnicamente possível manter as informações para fins estatísticos;</li>
+          <li>Dados vinculados a investigações, processos judiciais ou obrigações legais poderão ser retidos por prazo superior, conforme exigência legal.</li>
+        </ul>
+
+        <hr class="section-sep">
+
+        <h4>8. Segurança das Informações</h4>
+        <p>A DHL adota medidas técnicas e organizacionais adequadas para proteger os dados pessoais contra acesso não autorizado, perda, destruição ou divulgação indevida, incluindo:</p>
+        <ul>
+          <li>Controle de acesso por credenciais individuais (login e senha);</li>
+          <li>Armazenamento seguro em banco de dados corporativo Oracle com criptografia;</li>
+          <li>Registro de logs de acesso e atividades na plataforma;</li>
+          <li>Acesso restrito por perfil de usuário (ADMIN / OPERACIONAL);</li>
+          <li>Segmentação de dados por site de operação.</li>
+        </ul>
+
+        <hr class="section-sep">
+
+        <h4>9. Direitos do Titular dos Dados</h4>
+        <p>Nos termos do art. 18 da LGPD, você, como titular dos dados pessoais, possui os seguintes direitos:</p>
+        <ul>
+          <li><strong>Confirmação e acesso:</strong> confirmar a existência de tratamento e acessar seus dados;</li>
+          <li><strong>Correção:</strong> solicitar a atualização ou correção de dados incompletos, inexatos ou desatualizados;</li>
+          <li><strong>Anonimização, bloqueio ou eliminação:</strong> quando os dados forem desnecessários, excessivos ou tratados em desconformidade com a LGPD;</li>
+          <li><strong>Portabilidade:</strong> solicitar a portabilidade dos dados a outro fornecedor de serviço ou produto;</li>
+          <li><strong>Revogação do consentimento:</strong> revogar o consentimento a qualquer momento, sem prejuízo da licitude do tratamento realizado anteriormente;</li>
+          <li><strong>Informação:</strong> obter informações sobre as entidades públicas e privadas com as quais a DHL compartilhou seus dados;</li>
+          <li><strong>Oposição:</strong> opor-se ao tratamento realizado com fundamento em outras hipóteses legais, quando não observadas as disposições da LGPD.</li>
+        </ul>
+        <p>Para exercer seus direitos, entre em contato com o DPO pelo e-mail: <em>privacy.br@dhl.com</em></p>
+
+        <hr class="section-sep">
+
+        <h4>10. Registro do Aceite Eletrônico</h4>
+        <p>Ao clicar em <strong>"Li e aceito os termos da LGPD"</strong>, você confirma que:</p>
+        <ul>
+          <li>Leu integralmente e compreendeu o presente Termo de Consentimento;</li>
+          <li>Concorda com o tratamento de seus dados pessoais conforme descrito acima;</li>
+          <li>Está ciente de que o uso desta ferramenta implica o tratamento de dados pessoais de terceiros, para os quais você deve assegurar a devida minimização e adequação;</li>
+          <li>Compreende que a recusa deste termo implica na impossibilidade de acesso à plataforma.</li>
+        </ul>
+        <p>O registro deste aceite será armazenado com data, hora e identificação do usuário, conforme exigido pelo art. 8°, §5° da LGPD.</p>
+
+        <div class="highlight">
+          📋 <strong>Versão do documento:</strong> 1.0 — Vigência a partir de 01/01/2025.<br>
+          A DHL reserva-se o direito de atualizar este documento, notificando os usuários pelos canais internos de comunicação.
+        </div>
+
+      </div><!-- /doc-scroll -->
+
+      <!-- Indicador de scroll -->
+      <div class="scroll-indicator" id="scroll-indicator">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        Role para baixo para ler o documento completo
+      </div>
+
+    </div><!-- /doc-wrap -->
+
+    <!-- Aceite -->
+    <div class="aceite-wrap">
+
+      <label class="check-row" for="chk-aceito">
+        <input type="checkbox" id="chk-aceito" onchange="toggleAceitar()">
+        <div>
+          Li o documento na íntegra e concordo com os termos da LGPD
+          <span>Ao marcar esta opção, você confirma que leu e compreendeu todos os itens acima e consente com o tratamento dos seus dados pessoais conforme descrito.</span>
+        </div>
+      </label>
+
+      <div class="btn-row">
+        <form method="POST" id="form-aceitar" style="flex:1; display:flex;">
+          <input type="hidden" name="resposta" value="sim">
+          <button type="submit" class="btn btn-accept" id="btn-aceitar" disabled
+                  onclick="document.getElementById('loading-overlay').classList.add('show')">
+            ✔ Li e aceito os termos da LGPD
+          </button>
+        </form>
+        <button type="button" class="btn btn-refuse" onclick="abrirModal()">
+          ✖ Recusar e sair
+        </button>
+      </div>
+
+    </div><!-- /aceite-wrap -->
+  </div><!-- /card -->
+
+  <div class="page-footer">
+    <div>DHL Supply Chain Brasil · Departamento de Segurança Patrimonial</div>
+    <div>Ferramenta de uso interno · Em conformidade com a Lei nº 13.709/2018 (LGPD)</div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+  // ── Scroll detector ──
+  const docScroll = document.getElementById('doc-scroll');
+  const scrollIndicator = document.getElementById('scroll-indicator');
+  let scrolledToBottom = false;
+
+  function checkScroll() {
+    const threshold = 40; // px de tolerância
+    const atBottom = docScroll.scrollTop + docScroll.clientHeight >= docScroll.scrollHeight - threshold;
+    if (atBottom && !scrolledToBottom) {
+      scrolledToBottom = true;
+      scrollIndicator.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg> Documento lido — agora marque a caixa abaixo para aceitar';
+      scrollIndicator.classList.add('done');
+    }
+  }
+  docScroll.addEventListener('scroll', checkScroll);
+  // Verifica se documento é pequeno o suficiente para não precisar scroll
+  setTimeout(function(){ checkScroll(); }, 300);
+
+  // ── Habilita botão de aceite ──
+  function toggleAceitar() {
+    const chk = document.getElementById('chk-aceito');
+    const btn = document.getElementById('btn-aceitar');
+    btn.disabled = !(chk.checked && scrolledToBottom);
+    if (chk.checked && !scrolledToBottom) {
+      alert('Por favor, role o documento até o final antes de aceitar.');
+      chk.checked = false;
+    }
+  }
+
+  // ── Modal de recusa ──
+  function abrirModal() {
+    document.getElementById('modal-recusa').classList.add('open');
+  }
+  function fecharModal() {
+    document.getElementById('modal-recusa').classList.remove('open');
+  }
+  document.getElementById('modal-recusa').addEventListener('click', function(e) {
+    if (e.target === this) fecharModal();
+  });
+
+  // ── ESC fecha modal ──
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') fecharModal();
+  });
+</script>
+{% include "_translate.html" %}
+</body>
+</html>

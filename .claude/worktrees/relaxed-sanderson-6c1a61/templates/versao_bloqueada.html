@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Atualização Necessária | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    html,body{
+      min-height:100vh; background:#f3f5f7;
+      font-family:Arial,Helvetica,sans-serif; color:#1f2937;
+      display:flex; align-items:center; justify-content:center;
+      padding:24px;
+    }
+
+    .wrap{
+      width:100%; max-width:520px;
+      background:#fff; border-radius:24px;
+      box-shadow:0 20px 50px rgba(15,23,42,.12);
+      overflow:hidden;
+    }
+
+    /* topo amarelo/vermelho */
+    .top-bar{
+      background:#ffcc00;
+      border-bottom:5px solid #d40511;
+      padding:28px 32px 24px;
+      text-align:center;
+    }
+    .top-bar .logo-badge{
+      display:inline-block;
+      background:#1a1a1a;
+      color:#ffcc00;
+      font-size:10px;
+      font-weight:900;
+      letter-spacing:.6px;
+      padding:4px 12px;
+      border-radius:999px;
+      margin-bottom:14px;
+    }
+    .top-bar h1{
+      font-size:22px;
+      font-weight:900;
+      color:#1a1a1a;
+      line-height:1.2;
+    }
+
+    /* corpo */
+    .body{ padding:32px; }
+
+    .alert{
+      background:#fff4db;
+      border:1px solid #f5d66f;
+      border-radius:14px;
+      padding:16px 18px;
+      margin-bottom:24px;
+      font-size:14px;
+      color:#7a5a00;
+      font-weight:700;
+      line-height:1.6;
+    }
+    .alert strong{ color:#9a6700; }
+
+    .version-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-bottom:28px;
+    }
+    .v-box{
+      border-radius:14px;
+      padding:14px 16px;
+      text-align:center;
+    }
+    .v-box .v-label{
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      margin-bottom:6px;
+    }
+    .v-box .v-num{
+      font-size:28px;
+      font-weight:900;
+      line-height:1;
+    }
+    .v-box.old{
+      background:#ffe4e6;
+      border:1px solid #fecdd3;
+    }
+    .v-box.old .v-label{ color:#9f1239; }
+    .v-box.old .v-num  { color:#d40511; }
+    .v-box.new{
+      background:#e8f7ee;
+      border:1px solid #a7f3d0;
+    }
+    .v-box.new .v-label{ color:#065f46; }
+    .v-box.new .v-num  { color:#15803d; }
+
+    .desc{
+      font-size:13px;
+      color:#6b7280;
+      line-height:1.65;
+      margin-bottom:24px;
+    }
+
+    .btn-solicitar{
+      display:block; width:100%;
+      background:linear-gradient(180deg,#d40511,#b3030e);
+      color:#ffcc00;
+      border:none; border-radius:14px;
+      padding:15px;
+      font-size:15px; font-weight:900;
+      cursor:pointer;
+      letter-spacing:.3px;
+      transition:.18s;
+    }
+    .btn-solicitar:hover{ opacity:.9; transform:translateY(-1px); }
+
+    /* footer */
+    .foot{
+      background:#1a1a1a; color:#6b7280;
+      padding:14px 32px;
+      font-size:11px;
+      font-weight:700;
+      text-align:center;
+      letter-spacing:.4px;
+      text-transform:uppercase;
+    }
+
+    /* ── MODAL ── */
+    .modal-overlay{
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.50); z-index:9000;
+      align-items:center; justify-content:center; padding:20px;
+    }
+    .modal-overlay.open{ display:flex; }
+    .modal-box{
+      background:#fff; border-radius:20px;
+      width:100%; max-width:460px;
+      box-shadow:0 24px 60px rgba(0,0,0,.25);
+      overflow:hidden;
+      animation:slideUp .22s ease;
+    }
+    @keyframes slideUp{
+      from{ transform:translateY(20px); opacity:0; }
+      to  { transform:translateY(0);    opacity:1; }
+    }
+    .modal-head{
+      background:#ffcc00; border-bottom:4px solid #d40511;
+      padding:20px 24px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .modal-head h3{ font-size:16px; font-weight:900; color:#1a1a1a; }
+    .modal-close{
+      background:rgba(0,0,0,.10); border:none;
+      width:30px; height:30px; border-radius:50%;
+      cursor:pointer; font-size:18px; display:flex;
+      align-items:center; justify-content:center;
+      transition:.15s; color:#1a1a1a;
+    }
+    .modal-close:hover{ background:rgba(0,0,0,.2); }
+    .modal-body{ padding:24px; }
+    .field{ display:flex; flex-direction:column; gap:5px; margin-bottom:16px; }
+    .field label{
+      font-size:11px; font-weight:800;
+      text-transform:uppercase; letter-spacing:.4px; color:#6b7280;
+    }
+    .field input{
+      border:1px solid #e5e7eb; border-radius:10px;
+      padding:10px 13px; font-size:14px; font-family:inherit;
+      background:#f8fafc; color:#1f2937; outline:none; transition:.15s;
+    }
+    .field input:focus{
+      border-color:#d40511; background:#fff;
+      box-shadow:0 0 0 3px rgba(212,5,17,.08);
+    }
+    .btn-enviar{
+      width:100%; background:linear-gradient(180deg,#d40511,#b3030e);
+      color:#ffcc00; border:none; border-radius:12px;
+      padding:13px; font-size:14px; font-weight:900;
+      cursor:pointer; transition:.18s; margin-top:4px;
+    }
+    .btn-enviar:hover{ opacity:.9; }
+    .btn-enviar:disabled{ opacity:.5; cursor:not-allowed; }
+
+    .msg-ok{
+      display:none; text-align:center; padding:16px 0 4px;
+      font-size:14px; font-weight:800; color:#15803d;
+    }
+    .msg-err{
+      display:none; text-align:center; padding:8px 0;
+      font-size:13px; font-weight:700; color:#d40511;
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="top-bar">
+    <div class="logo-badge">DHL SECURITY</div>
+    <h1>Atualização Necessária</h1>
+  </div>
+
+  <div class="body">
+    <div class="alert">
+      <strong>Versão desatualizada detectada.</strong><br>
+      A versão instalada neste computador não corresponde à versão atual do sistema.
+      O acesso está bloqueado até que você obtenha a versão correta.
+    </div>
+
+    <div class="version-grid">
+      <div class="v-box old">
+        <div class="v-label">⚠️ Versão no PC</div>
+        <div class="v-num">{{ v_atual }}</div>
+      </div>
+      <div class="v-box new">
+        <div class="v-label">✅ Versão Atual</div>
+        <div class="v-num">{{ v_nova }}</div>
+      </div>
+    </div>
+
+    <p class="desc">
+      Entre em contato com a equipe de desenvolvimento para receber a versão
+      atualizada do <strong>CCTV Control Panel</strong>. Clique no botão abaixo
+      para enviar uma solicitação diretamente por e-mail.
+    </p>
+
+    <button class="btn-solicitar" onclick="abrirModal()">
+      ✉️ &nbsp;Solicitar Versão Atualizada
+    </button>
+  </div>
+
+  <div class="foot">
+    CCTV Control Panel &nbsp;·&nbsp; DHL Supply Chain &nbsp;·&nbsp; Uso Interno
+  </div>
+</div>
+
+<!-- ── MODAL ── -->
+<div class="modal-overlay" id="modal" onclick="fecharFora(event)">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>Solicitar Atualização</h3>
+      <button class="modal-close" onclick="fecharModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Nome completo</label>
+        <input type="text" id="f-nome" placeholder="Seu nome completo">
+      </div>
+      <div class="field">
+        <label>E-mail corporativo</label>
+        <input type="email" id="f-email" placeholder="seu.nome@dhl.com">
+      </div>
+      <div class="field">
+        <label>Site / Unidade</label>
+        <input type="text" id="f-site" placeholder="Ex: GRU, VCP, SSZ...">
+      </div>
+
+      <div class="msg-ok" id="msg-ok">
+        ✅ Solicitação enviada! A equipe entrará em contato em breve.
+      </div>
+      <div class="msg-err" id="msg-err"></div>
+
+      <button class="btn-enviar" id="btn-enviar" onclick="enviarSolicitacao()">
+        Enviar Solicitação
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function abrirModal(){
+    document.getElementById('modal').classList.add('open');
+  }
+  function fecharModal(){
+    document.getElementById('modal').classList.remove('open');
+  }
+  function fecharFora(e){
+    if(e.target === document.getElementById('modal')) fecharModal();
+  }
+  document.addEventListener('keydown', e => { if(e.key==='Escape') fecharModal(); });
+
+  function enviarSolicitacao(){
+    var nome  = document.getElementById('f-nome').value.trim();
+    var email = document.getElementById('f-email').value.trim();
+    var site  = document.getElementById('f-site').value.trim();
+    var btn   = document.getElementById('btn-enviar');
+    var msgOk = document.getElementById('msg-ok');
+    var msgErr= document.getElementById('msg-err');
+
+    msgOk.style.display = 'none';
+    msgErr.style.display = 'none';
+
+    if(!nome || !email){
+      msgErr.textContent = 'Preencha nome e e-mail antes de enviar.';
+      msgErr.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+
+    fetch('/solicitar-atualizacao', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({nome: nome, email: email, site: site})
+    })
+    .then(r => r.json())
+    .then(data => {
+      if(data.status === 'sucesso'){
+        msgOk.textContent   = '✅ ' + data.mensagem;
+        msgOk.style.display = 'block';
+        btn.style.display   = 'none';
+      } else {
+        msgErr.textContent   = data.mensagem || 'Erro ao enviar. Tente novamente.';
+        msgErr.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Enviar Solicitação';
+      }
+    })
+    .catch(() => {
+      msgErr.textContent  = 'Falha na conexão. Tente novamente.';
+      msgErr.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Enviar Solicitação';
+    });
+  }
+</script>
+</body>
+</html>
