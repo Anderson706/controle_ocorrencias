@@ -72,7 +72,10 @@ _DOWNLOAD_JS = r"""
       var href = el.getAttribute('href') || '';
       if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
 
-      var ehDownload = href.indexOf('exportar') !== -1 || href.indexOf('download') !== -1;
+      var ehDownload = href.indexOf('exportar') !== -1
+                    || href.indexOf('download') !== -1
+                    || href.indexOf('comprovante') !== -1
+                    || href.indexOf('export') !== -1;
       if (!ehDownload) return;
 
       e.preventDefault();
@@ -83,6 +86,8 @@ _DOWNLOAD_JS = r"""
       if (!nome) {
         if (href.indexOf('excel') !== -1 || href.indexOf('xlsx') !== -1)
           nome = 'exportacao.xlsx';
+        else if (href.indexOf('comprovante') !== -1)
+          nome = 'comprovante_retirada.pdf';
         else if (href.indexOf('pdf') !== -1)
           nome = 'relatorio.pdf';
         else if (href.indexOf('download') !== -1)

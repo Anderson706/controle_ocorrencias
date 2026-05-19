@@ -31,6 +31,7 @@ hiddenimports = (
     + collect_submodules('cryptography')
     + collect_submodules('sqlalchemy')
     + collect_submodules('sqlalchemy.dialects.oracle')
+    + collect_submodules('sqlalchemy.dialects.sqlite')
     + collect_submodules('flask_sqlalchemy')
     + collect_submodules('reportlab')
     + collect_submodules('docx')
@@ -54,6 +55,8 @@ hiddenimports = (
         'cryptography.hazmat.primitives.kdf.pbkdf2',
         'cryptography.hazmat.primitives.kdf.scrypt',
         'cryptography.hazmat.backends.openssl',
+        # Controle de Chaves
+        'chaves_blueprint',
     ]
 )
 
@@ -77,10 +80,24 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# ── EXE --onefile (sem Splash — testando compatibilidade Python 3.14) ─────────
+# ── Splash screen (aparece enquanto o EXE extrai e inicializa) ────────────────
+splash = Splash(
+    'static/splash.png',
+    binaries=a.binaries,
+    datas=a.datas,
+    text_pos=None,
+    text_color='black',
+    text_size=12,
+    minify_script=True,
+    always_on_top=True,
+)
+
+# ── EXE --onefile ─────────────────────────────────────────────────────────────
 exe = EXE(
     pyz,
     a.scripts,
+    splash,
+    splash.binaries,
     a.binaries,
     a.zipfiles,
     a.datas,

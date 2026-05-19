@@ -772,6 +772,10 @@
    'C:\\Users\\deivimar\\OneDrive - '
    'DPDHL\\Documents\\GitHub\\controle_ocorrencias\\venv\\Lib\\site-packages\\charset_normalizer\\version.py',
    'PYMODULE'),
+  ('chaves_blueprint',
+   'C:\\Users\\deivimar\\OneDrive - '
+   'DPDHL\\Documents\\GitHub\\controle_ocorrencias\\chaves_blueprint.py',
+   'PYMODULE'),
   ('click',
    'C:\\Users\\deivimar\\OneDrive - '
    'DPDHL\\Documents\\GitHub\\controle_ocorrencias\\venv\\Lib\\site-packages\\click\\__init__.py',

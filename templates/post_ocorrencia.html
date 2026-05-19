@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
@@ -553,6 +553,15 @@
       {% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<div class="sub-nav">
         <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
         <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
+      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
+        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_chv %}<div class="sub-nav">
+        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
+        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
+        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
       </div>{% endif %}
       {% if session.get('user_perfil','') == 'ADMIN' %}
       {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}

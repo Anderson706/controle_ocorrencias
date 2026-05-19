@@ -4982,6 +4982,13 @@ def admin_rejeitar_solicitacao(sid):
 
 
 # =========================
+# CONTROLE DE CHAVES — Blueprint
+# =========================
+from chaves_blueprint import chaves_bp, setup_chaves
+setup_chaves(db)
+app.register_blueprint(chaves_bp, url_prefix='/chaves')
+
+# =========================
 # INIT DB
 # =========================
 with app.app_context():

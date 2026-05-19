@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
@@ -202,6 +202,15 @@
       <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if sec_sh else '' }}">
         <span class="nav-icon">🔄</span><span>Shift Handover</span>
       </a>
+      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
+      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
+        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_chv %}<div class="sub-nav">
+        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
+        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
+        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
+      </div>{% endif %}
       <a href="{{ url_for('admin_usuarios') }}" class="nav-section active">
         <span class="nav-icon">⚙️</span><span>Administração</span><span class="nav-chevron">▾</span>
       </a>

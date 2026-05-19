@@ -1,0 +1,429 @@
+﻿<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Meu Claviculário | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
+      --bg:#f3f5f7; --card:#ffffff; --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+      --shadow:0 10px 30px rgba(15,23,42,.08); --radius:18px;
+      --success-bg:#e8f7ee; --success-text:#146c43;
+      --warn-bg:#fff4db; --warn-text:#9a6700;
+      --danger-bg:#fde8ea; --danger-text:#b42318;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; min-height:100vh; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:var(--text); }
+    a{ text-decoration:none; }
+    .app-shell{ display:flex; min-height:100vh; }
+
+    /* ── Sidebar ── */
+    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+    .nav-icon{ font-size:15px; flex-shrink:0; }
+    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .sub-link.cur{ color:#ffcc00; font-weight:800; }
+    /* Profile widget */
+    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
+    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
+    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
+    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
+    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .sp-info{ flex:1; min-width:0; }
+    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
+    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
+    .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
+    .sp-menu.open{ display:block; }
+    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
+    .sp-item:hover{ background:#f3f4f6; }
+    .sp-item-red{ color:#d40511; }
+    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
+
+    /* ── Main ── */
+    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
+    .topbar{ height:74px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:#1f1f1f; }
+    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+    .topbar-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+
+    /* ── Content ── */
+    .content{ padding:24px; display:flex; flex-direction:column; gap:20px; }
+    .flash-wrap{ display:flex; flex-direction:column; gap:8px; }
+    .flash{ padding:12px 16px; border-radius:12px; font-weight:700; border:1px solid transparent; font-size:13px; }
+    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+    /* ── Hero ── */
+    .hero{ position:relative; overflow:hidden; background:linear-gradient(135deg,#d40511,#93000a); color:#fff; border-radius:24px; padding:24px 28px; box-shadow:var(--shadow); }
+    .hero::before{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 85% 18%,rgba(255,204,0,.22),transparent 18%),radial-gradient(circle at 70% 80%,rgba(255,255,255,.07),transparent 20%); pointer-events:none; }
+    .hero-inner{ position:relative; z-index:1; display:flex; justify-content:space-between; align-items:flex-start; gap:20px; flex-wrap:wrap; }
+    .hero h2{ margin:0 0 8px; font-size:28px; font-weight:900; }
+    .hero p{ margin:0; font-size:14px; line-height:1.55; opacity:.95; }
+    .hero-badges{ display:flex; flex-wrap:wrap; gap:10px; }
+    .hero-badge{ background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.20); color:#fff; padding:9px 14px; border-radius:999px; font-size:12px; font-weight:800; white-space:nowrap; }
+
+    /* ── KPIs ── */
+    .grid-3{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; min-width:0; }
+    .kpi{ position:relative; overflow:hidden; min-height:120px; display:flex; flex-direction:column; justify-content:center; gap:8px; border-left:6px solid var(--dhl-yellow); background:linear-gradient(180deg,#fff,#fffdf8); }
+    .kpi::after{ content:""; position:absolute; right:-18px; top:-20px; width:90px; height:90px; border-radius:50%; background:rgba(255,204,0,.13); }
+    .kpi .label{ position:relative; z-index:1; font-size:11px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+    .kpi .value{ position:relative; z-index:1; font-size:38px; font-weight:900; line-height:1; color:var(--dhl-red); }
+    .kpi .sub{ position:relative; z-index:1; font-size:12px; color:var(--muted); }
+
+    /* ── Buttons ── */
+    .btn{ border:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 16px; border-radius:12px; font-weight:800; transition:.18s; font-size:13px; text-decoration:none; }
+    .btn:hover{ transform:translateY(-1px); }
+    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; box-shadow:0 8px 18px rgba(212,5,17,.20); }
+    .btn-dark{ background:#20242a; color:#fff; }
+    .btn-yellow{ background:var(--dhl-yellow); color:#111; }
+    .btn-soft{ background:#f3f4f6; color:#374151; border:1px solid #e5e7eb; }
+    .btn-sm{ padding:7px 12px; font-size:12px; }
+
+    /* ── Table ── */
+    .section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    .section-title{ margin:0; font-size:18px; font-weight:900; color:#1f1f1f; }
+    .section-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; background:#fff4cc; border:1px solid #efd470; color:#735500; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
+    .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:14px; background:#fff; }
+    table{ width:100%; border-collapse:collapse; min-width:620px; }
+    th,td{ padding:12px 14px; border-bottom:1px solid #edf1f5; text-align:left; vertical-align:middle; font-size:13px; }
+    th{ background:linear-gradient(180deg,#fff8db,#ffefab); color:#4b3c00; font-weight:900; position:sticky; top:0; z-index:1; white-space:nowrap; }
+    tbody tr:hover{ background:#fffdf7; }
+    .badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:900; white-space:nowrap; }
+    .badge-ok{ background:var(--success-bg); color:var(--success-text); }
+    .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
+    .empty{ padding:18px; color:var(--muted); font-size:13px; }
+
+    /* ── Modal ── */
+    .modal-overlay{ display:none; position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:5000; align-items:center; justify-content:center; backdrop-filter:blur(2px); }
+    .modal-overlay.open{ display:flex; }
+    .modal{ background:#fff; border-radius:22px; width:100%; max-width:520px; box-shadow:0 24px 60px rgba(0,0,0,.22); overflow:hidden; }
+    .modal-header{ background:linear-gradient(135deg,#d40511,#93000a); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .modal-header h3{ margin:0; font-size:18px; font-weight:900; }
+    .modal-close{ background:rgba(255,255,255,.15); border:none; color:#fff; border-radius:10px; padding:6px 10px; cursor:pointer; font-size:16px; font-weight:900; }
+    .modal-body{ padding:24px; display:flex; flex-direction:column; gap:14px; }
+    .modal-row{ display:flex; gap:14px; }
+    .modal-field{ flex:1; }
+    .modal-field label{ display:block; font-size:11px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+    .modal-field span{ display:block; font-size:14px; font-weight:800; color:#1f2937; }
+    .modal-status{ padding:10px 16px; border-radius:12px; font-size:14px; font-weight:900; text-align:center; }
+    .modal-status.em-uso{ background:var(--danger-bg); color:var(--danger-text); }
+    .modal-status.disponivel{ background:var(--success-bg); color:var(--success-text); }
+
+    /* ── Add form ── */
+    .add-form{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px 24px; box-shadow:var(--shadow); }
+    .add-form h3{ margin:0 0 16px; font-size:16px; font-weight:900; color:#1f1f1f; }
+    .form-row{ display:flex; gap:14px; flex-wrap:wrap; }
+    .form-field{ flex:1; min-width:180px; }
+    .form-field label{ display:block; margin-bottom:6px; font-size:12px; font-weight:900; color:#374151; text-transform:uppercase; letter-spacing:.3px; }
+    .form-field input{ width:100%; padding:11px 13px; border:1px solid #d7dbe1; border-radius:12px; background:#f9fafb; font-size:13px; outline:none; transition:border-color .18s; }
+    .form-field input:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+    .form-actions{ margin-top:14px; display:flex; gap:10px; }
+
+    @media(max-width:900px){
+      .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
+      .main{ margin-left:0; width:100%; }
+      .app-shell{ flex-direction:column; }
+      .grid-3{ grid-template-columns:1fr 1fr; }
+    }
+    @media(max-width:600px){
+      .grid-3{ grid-template-columns:1fr; }
+      .content{ padding:16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
+      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
+      <a href="{{ url_for('overview') }}" class="nav-section">
+        <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}<div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
+        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}<div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}<div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] else '' }}">
+        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<div class="sub-nav">
+        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
+        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
+        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_chv %}<div class="sub-nav">
+        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
+        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
+        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
+      </div>{% endif %}
+      {% if session.get('user_perfil','') == 'ADMIN' %}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
+        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_adm %}<div class="sub-nav">
+        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
+      </div>{% endif %}
+      {% endif %}
+    </nav>
+    <div class="sp-wrap" id="spWrap">
+      <div class="sp-trigger" onclick="spToggle(event)">
+        <div class="sp-avatar">
+          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
+        </div>
+        <div class="sp-info">
+          <span class="sp-name">{{ session.get('user_nome','') }}</span>
+          <span class="sp-role">{{ session.get('user_site','') }}</span>
+        </div>
+        <span class="sp-dots">⋮</span>
+      </div>
+      <div class="sp-menu" id="spMenu">
+        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
+        <hr class="sp-sep">
+        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='shared image.png') }}" alt="DHL" class="logo-topbar">
+        <div>
+          <h1>🔑 Meu Claviculário</h1>
+          <p>Gerenciamento de chaves do site {{ site }}</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <a href="{{ url_for('chaves.realizar_retirada') }}" class="btn btn-yellow">➕ Realizar Retirada</a>
+        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="btn btn-dark">↩ Devoluções</a>
+      </div>
+    </header>
+
+    <div class="content">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}<div class="flash-wrap">{% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}</div>{% endif %}
+      {% endwith %}
+
+      <!-- Hero -->
+      <section class="hero">
+        <div class="hero-inner">
+          <div>
+            <h2>Claviculário — {{ site }}</h2>
+            <p>Consulte as chaves cadastradas no seu site, verifique o status e gerencie retiradas e devoluções com rapidez.</p>
+          </div>
+          <div class="hero-badges">
+            <span class="hero-badge">📍 {{ site }}</span>
+            <span class="hero-badge">🔑 {{ chaves|length }} chave{{ 's' if chaves|length != 1 else '' }}</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- KPIs -->
+      <div class="grid-3">
+        <div class="card kpi" style="border-left-color:#22c55e;">
+          <div class="label">Chaves Disponíveis</div>
+          <div class="value" style="color:#15803d;">{{ resumo.disponiveis }}</div>
+          <div class="sub">Prontas para retirada</div>
+        </div>
+        <div class="card kpi" style="border-left-color:#d40511;">
+          <div class="label">Chaves em Uso</div>
+          <div class="value" style="color:#d40511;">{{ resumo.em_uso }}</div>
+          <div class="sub">Atualmente retiradas</div>
+        </div>
+        <div class="card kpi" style="border-left-color:#f59e0b;">
+          <div class="label">Em Uso &gt; 3 dias</div>
+          <div class="value" style="color:#b45309;">{{ resumo.mais_de_3_dias }}</div>
+          <div class="sub">Requerem atenção</div>
+        </div>
+      </div>
+
+      <!-- Formulário de adicionar (ADMIN) -->
+      {% if is_admin %}
+      <div class="add-form">
+        <h3>➕ Adicionar Chave ao Claviculário</h3>
+        <form method="POST">
+          <div class="form-row">
+            <div class="form-field">
+              <label>Nº da Chave *</label>
+              <input type="text" name="numero_chave" placeholder="Ex: CH-001" required>
+            </div>
+            <div class="form-field">
+              <label>Local / Descrição *</label>
+              <input type="text" name="local" placeholder="Ex: Sala de Segurança" required>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-red">Adicionar Chave</button>
+          </div>
+        </form>
+      </div>
+      {% endif %}
+
+      <!-- Tabela de chaves -->
+      <div>
+        <div class="section-head">
+          <h2 class="section-title">Chaves Cadastradas</h2>
+          <span class="section-chip">{{ site }}</span>
+        </div>
+        {% if chaves %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nº da Chave</th>
+                <th>Local</th>
+                <th>Site</th>
+                <th>Criador</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for chave in chaves %}
+              <tr>
+                <td><strong>{{ chave.numero_chave }}</strong></td>
+                <td>{{ chave.local }}</td>
+                <td>{{ chave.site }}</td>
+                <td>{{ chave.criador_nome }}</td>
+                <td>
+                  {% if chave._retirada %}
+                    <span class="badge badge-danger">EM USO</span>
+                  {% else %}
+                    <span class="badge badge-ok">DISPONÍVEL</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="btn btn-soft btn-sm" onclick="verDetalhe({{ chave.id }})">🔍 Detalhes</button>
+                    {% if is_admin and not chave._retirada %}
+                    <form method="POST" action="{{ url_for('chaves.excluir_chave_clav', chave_id=chave.id) }}" onsubmit="return confirm('Remover esta chave do claviculário?')">
+                      <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;">🗑 Remover</button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="card"><p class="empty">Nenhuma chave cadastrada para o site <strong>{{ site }}</strong>.{% if is_admin %} Use o formulário acima para adicionar.{% endif %}</p></div>
+        {% endif %}
+      </div>
+
+    </div>{# /content #}
+  </main>
+</div>
+
+<!-- ── Modal de Detalhes ── -->
+<div class="modal-overlay" id="modalOverlay" onclick="fecharModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🔑 Detalhes da Chave</h3>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <p style="color:var(--muted);">Carregando...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  function spToggle(e){ e.stopPropagation(); document.getElementById('spMenu').classList.toggle('open'); }
+  document.addEventListener('click', ()=>{ document.getElementById('spMenu').classList.remove('open'); });
+
+  function verDetalhe(id){
+    document.getElementById('modalOverlay').classList.add('open');
+    document.getElementById('modalBody').innerHTML = '<p style="color:var(--muted);text-align:center;">Carregando...</p>';
+    fetch(`{{ url_for('chaves.detalhe_chave_clav', chave_id=0) }}`.replace(/\/0$/, '/' + id))
+      .then(r => r.json())
+      .then(d => {
+        const statusClass = d.status === 'EM USO' ? 'em-uso' : 'disponivel';
+        let html = `
+          <div class="modal-status ${statusClass}">${d.status === 'EM USO' ? '🔴 EM USO' : '🟢 DISPONÍVEL'}</div>
+          <div class="modal-row">
+            <div class="modal-field"><label>Nº da Chave</label><span>${d.numero_chave}</span></div>
+            <div class="modal-field"><label>Local</label><span>${d.local}</span></div>
+          </div>
+          <div class="modal-row">
+            <div class="modal-field"><label>Site</label><span>${d.site}</span></div>
+            <div class="modal-field"><label>Criador</label><span>${d.criador_nome}</span></div>
+          </div>`;
+        if(d.status === 'EM USO'){
+          html += `
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:4px 0;">
+          <div class="modal-row">
+            <div class="modal-field"><label>Dono Temporário</label><span>${d.dono_temporario || '-'}</span></div>
+            <div class="modal-field"><label>CPF/Matrícula</label><span>${d.cpf_matricula || '-'}</span></div>
+          </div>
+          <div class="modal-row">
+            <div class="modal-field"><label>Data da Retirada</label><span>${d.data_retirada || '-'}</span></div>
+            <div class="modal-field"><label>Responsável pela Entrega</label><span>${d.responsavel_entrega || '-'}</span></div>
+          </div>`;
+          if(d.comprovante_url){
+            html += `<div style="margin-top:12px;"><a href="${d.comprovante_url}" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:800;color:#374151;text-decoration:none;">📄 Baixar Comprovante</a></div>`;
+          }
+        }
+        document.getElementById('modalBody').innerHTML = html;
+      })
+      .catch(()=>{ document.getElementById('modalBody').innerHTML = '<p style="color:red">Erro ao carregar dados.</p>'; });
+  }
+
+  function fecharModal(e){
+    if(!e || e.target === document.getElementById('modalOverlay')){
+      document.getElementById('modalOverlay').classList.remove('open');
+    }
+  }
+</script>
+</body>
+</html>
