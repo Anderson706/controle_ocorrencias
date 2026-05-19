@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Vincular Sites | CCTV Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root{
+      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
+      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff; --line:#e5e7eb;
+      --text:#1f2937; --muted:#6b7280; --shadow:0 10px 30px rgba(15,23,42,.08);
+      --radius:18px;
+      --success-bg:#e8f7ee; --success-text:#146c43;
+      --warn-bg:#fff4db; --warn-text:#9a6700;
+      --danger-bg:#fde8ea; --danger-text:#b42318;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; min-height:100vh; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:var(--text); }
+    a{ text-decoration:none; }
+    .app-shell{ display:flex; min-height:100vh; width:100%; }
+
+    /* ── Loading overlay ── */
+    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
+    #loading-overlay.show{ display:flex; }
+    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
+    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
+
+    /* ── Sidebar ── */
+    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+    .nav-icon{ font-size:15px; flex-shrink:0; }
+    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+    .sub-link.cur{ color:#ffcc00; font-weight:800; }
+    /* ── Profile widget ── */
+    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
+    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
+    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
+    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
+    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+    .sp-info{ flex:1; min-width:0; }
+    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
+    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
+    .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
+    .sp-menu.open{ display:block; animation:spIn .15s ease; }
+    @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
+    .sp-item:hover{ background:#f3f4f6; }
+    .sp-item-red{ color:#d40511; }
+    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
+    /* ── Footer ── */
+    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+
+    /* ── Main ── */
+    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
+    .topbar{ height:74px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+    .topbar-right{ display:flex; align-items:center; gap:10px; }
+    .btn{ border:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 18px; border-radius:12px; font-weight:800; transition:.18s; font-size:13px; text-decoration:none; }
+    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; }
+    .btn-red:hover{ opacity:.9; }
+    .btn-outline{ background:#fff; color:var(--text); border:1.5px solid var(--line); }
+    .btn-outline:hover{ border-color:#aaa; }
+    .content{ flex:1; padding:28px 32px; }
+
+    /* ── Flash ── */
+    .flash-wrap{ margin-bottom:20px; display:flex; flex-direction:column; gap:10px; }
+    .flash{ padding:14px 18px; border-radius:14px; font-size:13px; font-weight:700; border:1px solid; }
+    .flash.success{ background:var(--success-bg); color:var(--success-text); border-color:#a7f3d0; }
+    .flash.danger{ background:var(--danger-bg); color:var(--danger-text); border-color:#fecdd3; }
+    .flash.warning{ background:var(--warn-bg); color:var(--warn-text); border-color:#f5d66f; }
+
+    /* ── Search ── */
+    .search-bar{ width:100%; max-width:420px; padding:11px 16px; border:1.5px solid var(--line); border-radius:12px; font-size:13px; font-family:inherit; background:#fff; outline:none; transition:.18s; margin-bottom:20px; }
+    .search-bar:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+
+    /* ── User card ── */
+    .user-card{ background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 26px; margin-bottom:16px; transition:.18s; }
+    .user-card:hover{ box-shadow:0 14px 36px rgba(15,23,42,.12); }
+    .user-card-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    .user-info{ display:flex; align-items:center; gap:14px; }
+    .user-avatar{ width:44px; height:44px; border-radius:50%; background:#1a1a1a; color:#ffcc00; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900; flex-shrink:0; }
+    .user-name{ font-size:15px; font-weight:800; color:var(--dhl-black); margin-bottom:3px; }
+    .user-meta{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .user-email{ font-size:12px; color:var(--muted); }
+    .badge{ display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px; font-size:10px; font-weight:800; }
+    .badge-perfil{ background:#e0e7ff; color:#3730a3; }
+    .badge-site{ background:#eff6ff; color:#1e40af; }
+    .badge-multi{ background:var(--success-bg); border:1px solid #a7f3d0; color:var(--success-text); font-size:11px; padding:4px 12px; }
+    .badge-default{ background:#f3f4f6; border:1px solid var(--line); color:var(--muted); font-size:11px; padding:4px 12px; }
+
+    /* ── Site tags ── */
+    .sites-label{ font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); margin-bottom:8px; }
+    .sites-wrap{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+    .site-tag{ display:inline-flex; align-items:center; gap:6px; background:var(--success-bg); border:1px solid #a7f3d0; border-radius:999px; padding:5px 12px; }
+    .site-tag span{ font-size:13px; font-weight:700; color:var(--success-text); }
+    .site-tag button{ background:none; border:none; cursor:pointer; color:#dc2626; font-size:15px; padding:0; line-height:1; display:flex; align-items:center; }
+    .site-tag button:hover{ color:#7f1d1d; }
+
+    /* ── Add form ── */
+    .add-form{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .add-select{ padding:9px 13px; border:1.5px solid var(--line); border-radius:10px; font-size:13px; font-family:inherit; background:#f9fafb; outline:none; transition:.18s; min-width:220px; }
+    .add-select:focus{ border-color:var(--dhl-red); background:#fff; }
+    .btn-add{ padding:9px 18px; background:var(--dhl-red); color:#ffcc00; border:none; border-radius:10px; font-size:13px; font-weight:800; cursor:pointer; transition:.18s; }
+    .btn-add:hover{ background:var(--dhl-red-dark); }
+    .btn-clear{ padding:7px 14px; background:#fff; color:#dc2626; border:1.5px solid #fecdd3; border-radius:999px; font-size:11px; font-weight:800; cursor:pointer; transition:.18s; }
+    .btn-clear:hover{ background:#fde8ea; }
+
+    /* ── Empty state ── */
+    .empty-state{ text-align:center; padding:60px 24px; color:var(--muted); }
+    .empty-state-icon{ font-size:48px; margin-bottom:14px; }
+    .empty-state p{ font-size:14px; font-weight:700; }
+    .no-results{ display:none; text-align:center; padding:40px; color:var(--muted); font-size:14px; font-weight:700; }
+  </style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p>Carregando…</p>
+  </div>
+</div>
+
+<div class="app-shell">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-badge">DHL</div>
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
+      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
+        <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}<div class="sub-nav">
+        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
+        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}<div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
+        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}<div class="sub-nav">
+        <a href="{{ url_for('anc') }}" class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle de ANC</a>
+        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
+        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] else '' }}">
+        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<div class="sub-nav">
+        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
+        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      </div>{% endif %}
+      {% if session.get('user_perfil','') == 'ADMIN' %}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
+        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_adm %}<div class="sub-nav">
+        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
+      </div>{% endif %}
+      {% endif %}
+    </nav>
+    <div class="sp-wrap" id="spWrap">
+      <div class="sp-trigger" onclick="spToggle(event)">
+        <div class="sp-avatar">
+          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
+        </div>
+        <div class="sp-info">
+          <span class="sp-name">{{ session.get('user_nome','') }}</span>
+          <span class="sp-role">{{ session.get('user_site','') }}</span>
+        </div>
+        <span class="sp-dots">⋮</span>
+      </div>
+      <div class="sp-menu" id="spMenu">
+        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
+        <hr class="sp-sep">
+        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='shared image.png') }}" alt="DHL Security" class="logo-topbar">
+        <div>
+          <h1>🌐 Vincular Sites a Usuários</h1>
+          <p>Usuários com sites vinculados só enxergam esses sites. Sem vínculo, veem apenas o site cadastrado.</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <a href="{{ url_for('admin_usuarios') }}" class="btn btn-outline">← Administração</a>
+      </div>
+    </header>
+
+    <div class="content">
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-wrap">
+          {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endwith %}
+
+      <!-- Busca -->
+      <input type="text" class="search-bar" id="busca-usuario"
+             placeholder="🔍  Buscar usuário por nome ou e-mail…"
+             oninput="filtrarUsuarios(this.value)">
+
+      {% if not todos_usuarios %}
+      <div class="empty-state">
+        <div class="empty-state-icon">👤</div>
+        <p>Nenhum usuário ativo encontrado.</p>
+      </div>
+      {% else %}
+
+      <div id="lista-usuarios">
+      {% for usuario in todos_usuarios %}
+      {% set sites_vinculados = vinculos_por_usuario.get(usuario.id, []) %}
+      <div class="user-card usuario-card"
+           data-nome="{{ usuario.nome | lower }}" data-email="{{ usuario.email | lower }}">
+
+        <!-- Cabeçalho do card -->
+        <div class="user-card-head">
+          <div class="user-info">
+            <div class="user-avatar">{{ usuario.nome[0].upper() }}</div>
+            <div>
+              <div class="user-name">{{ usuario.nome }}</div>
+              <div class="user-meta">
+                <span class="user-email">{{ usuario.email }}</span>
+                <span class="badge badge-perfil">{{ usuario.perfil }}</span>
+                {% if usuario.site %}
+                <span class="badge badge-site">{{ usuario.site }}</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <!-- Indicador de acesso -->
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            {% if sites_vinculados %}
+            <span class="badge badge-multi">🌐 MULTI-SITE ({{ sites_vinculados | length }})</span>
+            <form method="POST" style="margin:0;">
+              <input type="hidden" name="action" value="remover_todos">
+              <input type="hidden" name="usuario_id" value="{{ usuario.id }}">
+              <button type="submit" class="btn-clear"
+                      data-nome="{{ usuario.nome }}"
+                      data-site="{{ usuario.site or '(nenhum)' }}"
+                      onclick="return confirm('Remover todos os vínculos de ' + this.dataset.nome + '?\nEle voltará a ver apenas o site: ' + this.dataset.site)">
+                ✕ Limpar tudo
+              </button>
+            </form>
+            {% else %}
+            <span class="badge badge-default">Site padrão: {{ usuario.site or '—' }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Sites vinculados -->
+        {% if sites_vinculados %}
+        <div class="sites-label">Sites com acesso</div>
+        <div class="sites-wrap">
+          {% for site in sites_vinculados %}
+          <div class="site-tag">
+            <span>{{ site }}</span>
+            <form method="POST" style="margin:0;">
+              <input type="hidden" name="action" value="remover">
+              <input type="hidden" name="usuario_id" value="{{ usuario.id }}">
+              <input type="hidden" name="site_nome" value="{{ site }}">
+              <button type="submit" title="Remover {{ site }}"
+                      onclick="return confirm('Remover {{ site }} de {{ usuario.nome }}?')">×</button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Adicionar site -->
+        <form method="POST" class="add-form">
+          <input type="hidden" name="action" value="adicionar">
+          <input type="hidden" name="usuario_id" value="{{ usuario.id }}">
+          <select name="site_nome" class="add-select" required>
+            <option value="" disabled selected>Selecione um site para vincular…</option>
+            {% for site in todos_sites %}
+              {% if site not in sites_vinculados %}
+              <option value="{{ site }}">{{ site }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn-add">+ Vincular</button>
+        </form>
+
+      </div>
+      {% endfor %}
+      </div>
+
+      <div class="no-results" id="sem-resultado">
+        🔍 Nenhum usuário encontrado para este termo.
+      </div>
+
+      {% endif %}
+
+    </div><!-- /content -->
+
+    <footer class="app-footer">
+      <span>CCTV Control Panel — DHL Security</span>
+      <span>Administração de Sites</span>
+    </footer>
+  </main>
+</div>
+
+<script>
+function spToggle(e){ e.stopPropagation(); document.getElementById('spMenu').classList.toggle('open'); }
+document.addEventListener('click', function(){ var m=document.getElementById('spMenu'); if(m) m.classList.remove('open'); });
+
+function filtrarUsuarios(termo) {
+  termo = (termo || '').toLowerCase().trim();
+  var cards = document.querySelectorAll('.usuario-card');
+  var visiveis = 0;
+  cards.forEach(function(card) {
+    var nome  = card.dataset.nome  || '';
+    var email = card.dataset.email || '';
+    var match = !termo || nome.includes(termo) || email.includes(termo);
+    card.style.display = match ? '' : 'none';
+    if (match) visiveis++;
+  });
+  var semResultado = document.getElementById('sem-resultado');
+  if (semResultado) semResultado.style.display = visiveis === 0 ? 'block' : 'none';
+}
+</script>
+{% include "_translate.html" %}
+</body>
+</html>

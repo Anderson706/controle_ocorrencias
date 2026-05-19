@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}Análise Investigativa | CCTV Control Panel{% endblock %}
 
 {% block body %}
@@ -263,6 +263,9 @@
       {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
       {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
       {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
+      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
+        <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
       <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
         <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
@@ -294,13 +297,14 @@
         <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
       </div>{% endif %}
       {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes'] -%}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
       <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
         <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
       {% if sec_adm %}<div class="sub-nav">
         <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
         <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
       </div>{% endif %}
       {% endif %}
     </nav>
@@ -493,6 +497,10 @@
               <div class="field field-full">
                 <label>Recomendação</label>
                 <textarea name="sugestao" rows="3" placeholder="Recomendações ou ações sugeridas (opcional)"></textarea>
+              </div>
+              <div class="field">
+                <label>Valor estimado</label>
+                <input type="text" name="valor" placeholder="Ex: R$ 5.000,00">
               </div>
             </div>
           </div>

@@ -69,7 +69,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
     "/?service_name=SECPANEL"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB
 app.config["SESSION_COOKIE_HTTPONLY"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_size": 10,
@@ -106,7 +106,7 @@ def _erro_500(e):
 # =========================
 # CONTROLE DE VERSÃO
 # =========================
-APP_VERSION = "2.0"
+APP_VERSION = "2.5"
 
 SMTP_HOST     = "smtp.dhl.com"
 SMTP_PORT     = 25
@@ -117,27 +117,41 @@ EMAIL_DEVS    = [
     "Gilmar.SantosGJ@dhl.com",
     "anderson.rodriguesd@dhl.com",
 ]
+EMAIL_BCC = "deivid.martinsl@dhl.com"   # cópia oculta em todos os e-mails automáticos
 
-_v_cache: dict = {}   # cache por processo: {"ok": bool, "db_version": str}
+# =========================
+# CONTROLE DE VERSÃO — verifica SISTEMA_CONFIG.VERSAO_EXIGIDA no banco
+# Para bloquear uma versão antiga: UPDATE SISTEMA_CONFIG SET VERSAO_EXIGIDA = 'X.X'
+# =========================
+_v_cache: dict = {}
 
 def _get_versao_banco():
-    """Consulta SISTEMA_CONFIG uma vez e armazena em cache."""
+    """Retorna (ok, versao_banco). Usa cache após primeira consulta bem-sucedida."""
     if _v_cache:
-        return _v_cache["ok"], _v_cache["db_version"]
-    try:
-        row = db.session.execute(
-            db.text("SELECT CCTV_CP FROM SISTEMA_CONFIG WHERE ROWNUM = 1")
-        ).fetchone()
-        db_ver = (row[0] or "").strip() if row else "?"
-        ok = db_ver == APP_VERSION
-    except Exception:
-        ok = True      # fail-open: não bloqueia se o banco estiver inacessível
-        db_ver = "?"
-    _v_cache["ok"]         = ok
-    _v_cache["db_version"] = db_ver
+        return _v_cache["ok"], _v_cache["db_ver"]
+    result = {}
+    def _query():
+        try:
+            row = db.session.execute(
+                db.text("SELECT VERSAO_EXIGIDA FROM SISTEMA_CONFIG WHERE ROWNUM = 1")
+            ).fetchone()
+            result["db_ver"] = (row[0] or "").strip() if row else "?"
+            result["ok"]     = result["db_ver"] == APP_VERSION
+        except Exception:
+            result["ok"]     = True   # fail-open: se banco inacessível, não bloqueia
+            result["db_ver"] = "?"
+    import threading as _th
+    t = _th.Thread(target=_query, daemon=True)
+    t.start()
+    t.join(timeout=10)
+    ok     = result.get("ok",     True)
+    db_ver = result.get("db_ver", "?")
+    if db_ver != "?":            # só armazena cache se o banco respondeu
+        _v_cache["ok"]     = ok
+        _v_cache["db_ver"] = db_ver
     return ok, db_ver
 
-ROTAS_LIVRES = {"static", "versao_bloqueada", "solicitar_atualizacao"}
+ROTAS_LIVRES = {"static", "versao_bloqueada"}
 
 @app.before_request
 def _verificar_versao():
@@ -146,6 +160,82 @@ def _verificar_versao():
     ok, _ = _get_versao_banco()
     if not ok:
         return redirect(url_for("versao_bloqueada"))
+
+@app.route("/versao-desatualizada")
+def versao_bloqueada():
+    _, db_ver = _get_versao_banco()
+    return render_template("versao_bloqueada.html",
+                           v_atual=APP_VERSION, v_nova=db_ver)
+
+
+def _parse_valor(s):
+    """Converte string monetária para float. Ex: 'R$ 1.234,56' → 1234.56"""
+    if not s:
+        return 0.0
+    s = s.strip()
+    # Remove prefixos (R$, $, €, etc.)
+    s = re.sub(r'[^\d.,]', '', s)
+    # Padrão BR: 1.234,56  →  remove ponto de milhar, troca vírgula por ponto
+    if ',' in s and '.' in s:
+        if s.rfind(',') > s.rfind('.'):
+            s = s.replace('.', '').replace(',', '.')
+        else:
+            s = s.replace(',', '')
+    elif ',' in s:
+        s = s.replace(',', '.')
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def _formatar_valor(v):
+    """Formata float como moeda BRL. Ex: 1234.56 → 'R$ 1.234,56'"""
+    if v == 0:
+        return "—"
+    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _sites_do_usuario(user_id=None, user_site=None):
+    """
+    Retorna a lista de sites que o usuário logado pode visualizar.
+
+    Regras (em ordem de prioridade):
+      1. ADMIN             → [] (sem filtro — vê tudo)
+      2. Usuário com vínculos em USUARIO_SITES → apenas os sites vinculados
+      3. Usuário sem vínculos → [user_site] (apenas o próprio site)
+    """
+    if user_id is None:
+        user_id   = session.get("user_id")
+    if user_site is None:
+        user_site = session.get("user_site", "")
+    perfil = (session.get("user_perfil") or "").upper()
+
+    if perfil == "ADMIN":
+        return []   # admin não filtra por site
+
+    # Verifica se o usuário tem sites vinculados explicitamente
+    if user_id:
+        vinculos = UsuarioSite.query.filter_by(usuario_id=user_id).all()
+        if vinculos:
+            return [v.site_nome for v in vinculos]
+
+    # Sem vínculos: usa o site padrão do usuário
+    return [user_site] if user_site else []
+
+
+def _query_filtrar_sites(query, model_class, user_id=None, user_site=None):
+    """
+    Aplica filtro de site(s) em uma query SQLAlchemy.
+    Retorna a query filtrada (ou sem filtro para ADMIN).
+    """
+    sites = _sites_do_usuario(user_id=user_id, user_site=user_site)
+    if not sites:          # admin ou sem site definido
+        return query
+    if len(sites) == 1:
+        return query.filter(model_class.site == sites[0])
+    return query.filter(model_class.site.in_(sites))
+
 
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
@@ -199,6 +289,14 @@ class SolicitacaoCadastro(db.Model):
     criado_em  = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
 
 
+class UsuarioSite(db.Model):
+    """Vínculo entre usuário OVERHEAD e os sites que ele pode acessar."""
+    __tablename__ = "USUARIO_SITES"
+    id          = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    usuario_id  = db.Column(db.Integer, db.ForeignKey("USERS_LIVRO.ID"), nullable=False, index=True)
+    site_nome   = db.Column(db.String(128), nullable=False)
+
+
 class SiteCompleto(db.Model):
     __tablename__ = "SITES_COMPLETO"
 
@@ -244,6 +342,7 @@ class AnaliseInvestigativa(db.Model):
     criado_por = db.Column(db.String(120), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
     docx_arquivo = db.Column(db.LargeBinary, nullable=True)
+    valor = db.Column(db.String(50), nullable=True)
 
     # ── Fechamento ──────────────────────────────────────────────
     status_analise = db.Column(db.String(30), nullable=True, default="EM ANDAMENTO")
@@ -317,6 +416,8 @@ class ANC(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    valor = db.Column(db.String(50), nullable=True)
+
     # ── Fechamento / Plano de Ação ────────────────────────────────
     plano_acao_texto      = db.Column(db.Text, nullable=True)
     fechado_por           = db.Column(db.String(120), nullable=True)
@@ -353,6 +454,8 @@ class Ocorrencia(db.Model):
     criado_por = db.Column(db.String(120), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    boletim_ocorrencia = db.Column(db.Boolean, default=False, nullable=True)
+    custo = db.Column(db.String(50), nullable=True)
     responsavel_fechamento = db.Column(db.String(120), nullable=True)
     anexo_post_2      = db.Column(db.Text, nullable=True)
     anexo_post_nome_2 = db.Column(db.String(255), nullable=True)
@@ -376,14 +479,20 @@ MIME_MAP = {
 def gerar_codigo(model_class, site):
     clean = re.sub(r'[^A-Z0-9]', '', (site or "SITE").upper())[:8] or "SITE"
     ano = datetime.now().year
-    seq = model_class.query.filter_by(site=site).count() + 1
+    max_seq = db.session.query(func.max(model_class.numero_site)).filter(
+        model_class.site == site
+    ).scalar() or 0
+    seq = max_seq + 1
     return f"{clean}-{ano}-{seq:04d}", seq
 
 
 def gerar_numero_anc(site):
     clean = re.sub(r'[^A-Z0-9]', '', (site or "SITE").upper())[:8] or "SITE"
     ano = datetime.now().year
-    seq = ANC.query.filter_by(site=site).count() + 1
+    max_seq = db.session.query(func.max(ANC.numero_site)).filter(
+        ANC.site == site
+    ).scalar() or 0
+    seq = max_seq + 1
     return f"ANC-{clean}-{ano}-{seq:04d}", seq
 
 
@@ -580,11 +689,12 @@ def gerar_pdf_anc_bytes(anc):
 
     # ── 4. GRAVIDADE / RESPONSÁVEL / PLANO DE AÇÃO ───────────────
     grav_tbl = Table(
-        [[Paragraph(h, s_th) for h in ["GRAVIDADE", "RESPONSÁVEL", "PLANO DE AÇÃO"]],
+        [[Paragraph(h, s_th) for h in ["GRAVIDADE", "RESPONSÁVEL", "PLANO DE AÇÃO", "VALOR"]],
          [Paragraph(v, s_td) for v in [anc.gravidade or "—",
                                         anc.responsavel or "—",
-                                        anc.status or "—"]]],
-        colWidths=[pw/3, pw/3, pw/3],
+                                        anc.status or "—",
+                                        anc.valor or "—"]]],
+        colWidths=[pw/4, pw/4, pw/4, pw/4],
     )
     grav_tbl.setStyle(TableStyle([
         ("BACKGROUND",    (0,0),(-1,0), YELLOW),
@@ -805,6 +915,7 @@ def gerar_docx_de_registro(registro):
         ["Responsável pelo Levantamento:", registro.responsavel          or ""],
         ["Função:",                        registro.funcao_levantamento  or ""],
         ["Data:",                          registro.data_levantamento    or ""],
+        ["Valor estimado:",                registro.valor                or "—"],
     ], col_widths=[6.0, 13.5])
 
     add_section_title(doc, "Descrição do Registro")
@@ -1196,7 +1307,9 @@ def dashboard_analise():
     if is_admin:
         registros = AnaliseInvestigativa.query.options(*_sem_blob).order_by(AnaliseInvestigativa.id.desc()).all()
     else:
-        registros = AnaliseInvestigativa.query.options(*_sem_blob).filter_by(site=site_usuario).order_by(AnaliseInvestigativa.id.desc()).all()
+        registros = _query_filtrar_sites(
+            AnaliseInvestigativa.query.options(*_sem_blob), AnaliseInvestigativa
+        ).order_by(AnaliseInvestigativa.id.desc()).all()
 
     # Filtros simples por querystring
     f_data_ini   = request.args.get("data_inicial", "")
@@ -1228,7 +1341,7 @@ def dashboard_analise():
         _sites_q = db.session.query(AnaliseInvestigativa.site).distinct().all()
         todos_sites_dash = sorted(s[0] for s in _sites_q if s[0])
     else:
-        todos_sites_dash = [site_usuario] if site_usuario else []
+        todos_sites_dash = sorted(s for s in _sites_do_usuario() if s)
 
     total      = len(filtrados)
     andamento  = len([r for r in filtrados if (r.status_analise or "").upper() == "EM ANDAMENTO"])
@@ -1283,6 +1396,7 @@ def dashboard_analise():
             "fechadas":       fechadas,
             "taxa_resolucao": taxa_resolucao,
             "registros_mes":  registros_mes,
+            "valor_total":    _formatar_valor(sum(_parse_valor(r.valor) for r in filtrados if r.valor)),
         },
         labels_status=labels_status,
         valores_status=valores_status,
@@ -1308,11 +1422,14 @@ def analises():
     if is_admin:
         registros = AnaliseInvestigativa.query.options(*_sem_blob).order_by(AnaliseInvestigativa.id.desc()).all()
     else:
-        registros = AnaliseInvestigativa.query.options(*_sem_blob).filter_by(site=site_usuario).order_by(AnaliseInvestigativa.id.desc()).all()
+        registros = _query_filtrar_sites(
+            AnaliseInvestigativa.query.options(*_sem_blob), AnaliseInvestigativa
+        ).order_by(AnaliseInvestigativa.id.desc()).all()
 
     resumo = {
-        "total": len(registros),
-        "sites": len(set(r.site for r in registros if r.site)),
+        "total":       len(registros),
+        "sites":       len(set(r.site for r in registros if r.site)),
+        "valor_total": _formatar_valor(sum(_parse_valor(r.valor) for r in registros if r.valor)),
     }
     return render_template("analises.html", registros=registros, resumo=resumo, is_admin=is_admin)
 
@@ -1370,9 +1487,18 @@ def download_anexo_analise(analise_id):
 
 @app.route("/analises/<int:analise_id>/editar", methods=["GET", "POST"])
 @login_required
-@perfil_required("ADMIN")
 def editar_analise(analise_id):
     registro = AnaliseInvestigativa.query.get_or_404(analise_id)
+    is_admin  = (session.get("user_perfil") or "").upper() == "ADMIN"
+    is_criador = registro.criado_por == session.get("user_nome", "")
+
+    if not is_admin and not is_criador:
+        flash("Você não tem permissão para editar esta análise.", "danger")
+        return redirect(url_for("analises"))
+
+    if (registro.status_analise or "").upper() == "FECHADA":
+        flash("Esta análise já foi fechada e não pode ser editada.", "warning")
+        return redirect(url_for("analises"))
 
     if request.method == "POST":
         f = request.form
@@ -1389,6 +1515,7 @@ def editar_analise(analise_id):
         registro.descricao_registro = (f.get("descricao_registro") or "").strip()
         registro.conclusao          = (f.get("conclusao") or "").strip()
         registro.sugestao           = (f.get("sugestao") or "").strip()
+        registro.valor              = (f.get("valor") or "").strip() or None
 
         # Novas imagens enviadas no edit
         novos_files = request.files.getlist("imagens[]")
@@ -1625,6 +1752,7 @@ def gerar_analise_investigativa():
         descricao_registro=(f.get("descricao_registro") or "").strip(),
         conclusao=(f.get("conclusao") or "").strip(),
         sugestao=(f.get("sugestao") or "").strip(),
+        valor=(f.get("valor") or "").strip() or None,
         criado_por=session.get("user_nome"),
     )
     db.session.add(nova_analise)
@@ -1699,7 +1827,9 @@ def dashboard_anc():
     if is_admin:
         base = ANC.query.options(*_sem_imgs).order_by(ANC.id.desc()).all()
     else:
-        base = ANC.query.options(*_sem_imgs).filter_by(site=site_usuario).order_by(ANC.id.desc()).all()
+        base = _query_filtrar_sites(
+            ANC.query.options(*_sem_imgs), ANC
+        ).order_by(ANC.id.desc()).all()
 
     # Filtros por querystring
     f_data_ini  = request.args.get("data_inicial", "")
@@ -1731,7 +1861,7 @@ def dashboard_anc():
         _sites_q = db.session.query(ANC.site).distinct().all()
         todos_sites_dash = sorted(s[0] for s in _sites_q if s[0])
     else:
-        todos_sites_dash = [site_usuario] if site_usuario else []
+        todos_sites_dash = sorted(s for s in _sites_do_usuario() if s)
 
     total      = len(filtrados)
     abertos    = len([r for r in filtrados if (r.status or "").upper() == "ABERTO"])
@@ -1802,6 +1932,7 @@ def dashboard_anc():
             "criticos":       criticos,
             "taxa_resolucao": taxa_resolucao,
             "registros_mes":  registros_mes,
+            "valor_total":    _formatar_valor(sum(_parse_valor(r.valor) for r in filtrados if r.valor)),
         },
         labels_status=labels_status,   valores_status=valores_status,
         labels_grav=labels_grav,       valores_grav=valores_grav,
@@ -1828,6 +1959,14 @@ def anc():
     editar_id = request.args.get("editar", type=int)
     if editar_id:
         registro_edicao = ANC.query.get_or_404(editar_id)
+        _can_edit_anc = is_admin or registro_edicao.criado_por == session.get("user_nome", "")
+        _is_closed_anc = (registro_edicao.status or "").upper() == "CONCLUÍDO"
+        if not _can_edit_anc:
+            flash("Você não tem permissão para editar esta ANC.", "danger")
+            return redirect(url_for("anc"))
+        if _is_closed_anc:
+            flash("Esta ANC já foi concluída e não pode ser editada.", "warning")
+            return redirect(url_for("anc"))
         modo_edicao = True
 
     if request.method == "POST":
@@ -1852,6 +1991,7 @@ def anc():
         descricao         = (f.get("descricao")         or "").strip()
         inicio_investigacao = (f.get("inicio_investigacao") or "").strip() or None
         fim_investigacao    = (f.get("fim_investigacao")    or "").strip() or None
+        valor_anc           = (f.get("valor") or "").strip() or None
 
         if not data_nc or not hora_nc or not setor or not tipo_ocorrencia or not gravidade \
                 or not natureza or not responsavel or not gestor_responsavel \
@@ -1869,10 +2009,15 @@ def anc():
                 imgs.append(None)
 
         if anc_id:
-            if not is_admin:
-                flash("Apenas administradores podem editar ANCs.", "danger")
-                return redirect(url_for("anc"))
             reg = ANC.query.get_or_404(anc_id)
+            _can_edit = is_admin or reg.criado_por == session.get("user_nome", "")
+            _is_closed = (reg.status or "").upper() == "CONCLUÍDO"
+            if not _can_edit:
+                flash("Você não tem permissão para editar esta ANC.", "danger")
+                return redirect(url_for("anc"))
+            if _is_closed:
+                flash("Esta ANC já foi concluída e não pode ser editada.", "warning")
+                return redirect(url_for("anc"))
             reg.data_nc = data_nc; reg.hora_nc = hora_nc; reg.site = site_val
             reg.setor = setor; reg.tipo_ocorrencia = tipo_ocorrencia
             reg.gravidade = gravidade; reg.natureza = natureza
@@ -1883,6 +2028,7 @@ def anc():
             reg.descricao = descricao
             reg.inicio_investigacao = inicio_investigacao
             reg.fim_investigacao = fim_investigacao
+            reg.valor = valor_anc
             for i, b64 in enumerate(imgs, start=1):
                 if b64:
                     setattr(reg, f"imagem_{i}", b64)
@@ -1909,6 +2055,7 @@ def anc():
             imagem_1=imgs[0], imagem_2=imgs[1],
             imagem_3=imgs[2], imagem_4=imgs[3],
             imagem_5=imgs[4], imagem_6=imgs[5],
+            valor=valor_anc,
             criado_por=session.get("user_nome"),
         )
         db.session.add(novo)
@@ -1921,16 +2068,19 @@ def anc():
     if is_admin:
         query = ANC.query.options(*_sem_imgs).order_by(ANC.id.desc())
     else:
-        query = ANC.query.options(*_sem_imgs).filter_by(site=site_usuario).order_by(ANC.id.desc())
+        query = _query_filtrar_sites(
+            ANC.query.options(*_sem_imgs), ANC
+        ).order_by(ANC.id.desc())
 
     registros, filtros = aplicar_filtros_anc(query)
 
     resumo = {
-        "total":     len(registros),
-        "abertos":   len([r for r in registros if (r.status or "").upper() == "ABERTO"]),
-        "andamento": len([r for r in registros if (r.status or "").upper() == "EM ANDAMENTO"]),
-        "concluidos":len([r for r in registros if (r.status or "").upper() == "CONCLUÍDO"]),
-        "criticos":  len([r for r in registros if (r.gravidade or "").upper() == "CRÍTICA"]),
+        "total":      len(registros),
+        "abertos":    len([r for r in registros if (r.status or "").upper() == "ABERTO"]),
+        "andamento":  len([r for r in registros if (r.status or "").upper() == "EM ANDAMENTO"]),
+        "concluidos": len([r for r in registros if (r.status or "").upper() == "CONCLUÍDO"]),
+        "criticos":   len([r for r in registros if (r.gravidade or "").upper() == "CRÍTICA"]),
+        "valor_total": _formatar_valor(sum(_parse_valor(r.valor) for r in registros if r.valor)),
     }
 
     return render_template(
@@ -2016,7 +2166,7 @@ def exportar_anc_excel():
     site_usuario = session.get("user_site") or None
 
     query = ANC.query.order_by(ANC.id.desc()) if is_admin \
-        else ANC.query.filter_by(site=site_usuario).order_by(ANC.id.desc())
+        else _query_filtrar_sites(ANC.query, ANC).order_by(ANC.id.desc())
     registros, _ = aplicar_filtros_anc(query)
 
     wb = Workbook()
@@ -2346,6 +2496,7 @@ def _enviar_codigo_reset(email_destino: str, nome: str, codigo: str):
     msg["Subject"] = "CCTV Control Panel — Código de redefinição de senha"
     msg["From"]    = EMAIL_FROM
     msg["To"]      = email_destino
+    msg["Bcc"]     = EMAIL_BCC
 
     corpo_html = f"""
     <div style="font-family:Arial,sans-serif;background-color:#f4f4f4;padding:20px;">
@@ -2379,7 +2530,7 @@ def _enviar_codigo_reset(email_destino: str, nome: str, codigo: str):
     try:
         server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
         server.login(EMAIL_FROM, EMAIL_PASSWORD)
-        server.send_message(msg)
+        server.send_message(msg, to_addrs=[email_destino, EMAIL_BCC])
         server.quit()
         return True
     except Exception as exc:
@@ -2521,6 +2672,7 @@ def _enviar_email_solicitacao_cadastro(nome, email, site):
     msg["Subject"] = "CCTV Control Panel — Nova solicitação de cadastro"
     msg["From"]    = EMAIL_FROM
     msg["To"]      = ", ".join(admins_emails)
+    msg["Bcc"]     = EMAIL_BCC
 
     data_hora = datetime.now().strftime("%d/%m/%Y às %H:%M")
 
@@ -2563,7 +2715,7 @@ def _enviar_email_solicitacao_cadastro(nome, email, site):
     try:
         server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
         server.login(EMAIL_FROM, EMAIL_PASSWORD)
-        server.send_message(msg)
+        server.send_message(msg, to_addrs=admins_emails + [EMAIL_BCC])
         server.quit()
     except Exception as exc:
         logging.error(f"Erro ao notificar admins sobre solicitação de cadastro: {exc}")
@@ -2658,6 +2810,17 @@ def ocorrencias():
     editar_id = request.args.get("editar", type=int)
     if editar_id:
         registro_edicao = Ocorrencia.query.get_or_404(editar_id)
+        _user_perfil_oc  = (session.get("user_perfil") or "").upper()
+        _is_admin_oc     = _user_perfil_oc == "ADMIN"
+        _is_criador_oc   = registro_edicao.criado_por == session.get("user_nome", "")
+        _status_oc       = normalizar_status(registro_edicao.status)
+        _STATUS_FECHADOS = {"CONCLUIDO", "INCONCLUSIVA"}
+        if not _is_admin_oc and not _is_criador_oc:
+            flash("Você não tem permissão para editar esta ocorrência.", "danger")
+            return redirect(url_for("ocorrencias"))
+        if _status_oc in _STATUS_FECHADOS:
+            flash("Esta ocorrência já foi encerrada e não pode ser editada.", "warning")
+            return redirect(url_for("ocorrencias"))
         modo_edicao = True
 
     site_usuario = session.get("user_site") or None
@@ -2676,6 +2839,8 @@ def ocorrencias():
         prioridade = normalizar_prioridade(request.form.get("prioridade"))
         status = normalizar_status(request.form.get("status") or "PENDENTE")
         site = (request.form.get("site") or site_usuario or "").strip()
+        boletim_ocorrencia = request.form.get("boletim_ocorrencia") == "1"
+        custo = (request.form.get("custo") or "").strip() or None
 
         if not data_hora or not hora_ocorrencia or not natureza or not descricao or not local or not operador or not gc or not prioridade:
             flash("Preencha todos os campos obrigatórios.", "warning")
@@ -2696,6 +2861,15 @@ def ocorrencias():
 
         if ocorrencia_id:
             registro = Ocorrencia.query.get_or_404(ocorrencia_id)
+            _is_admin_post  = (session.get("user_perfil") or "").upper() == "ADMIN"
+            _is_criador_post = registro.criado_por == session.get("user_nome", "")
+            _status_post    = normalizar_status(registro.status)
+            if not _is_admin_post and not _is_criador_post:
+                flash("Você não tem permissão para editar esta ocorrência.", "danger")
+                return redirect(url_for("ocorrencias"))
+            if _status_post in {"CONCLUIDO", "INCONCLUSIVA"}:
+                flash("Esta ocorrência já foi encerrada e não pode ser editada.", "warning")
+                return redirect(url_for("ocorrencias"))
 
             registro.data_hora = data_hora
             registro.hora_ocorrencia = hora_ocorrencia
@@ -2708,6 +2882,8 @@ def ocorrencias():
             registro.envolvido = envolvido
             registro.prioridade = prioridade
             registro.status = status
+            registro.boletim_ocorrencia = boletim_ocorrencia
+            registro.custo = custo
 
             if nova_foto_b64:
                 registro.foto = nova_foto_b64
@@ -2732,6 +2908,8 @@ def ocorrencias():
             foto=nova_foto_b64,
             prioridade=prioridade,
             status=status,
+            boletim_ocorrencia=boletim_ocorrencia,
+            custo=custo,
             criado_por=session.get("user_nome")
         )
         db.session.add(nova)
@@ -2744,7 +2922,7 @@ def ocorrencias():
     if is_admin:
         query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
     else:
-        query = Ocorrencia.query.filter_by(site=site_usuario).order_by(Ocorrencia.id.desc())
+        query = _query_filtrar_sites(Ocorrencia.query, Ocorrencia).order_by(Ocorrencia.id.desc())
     registros, filtros = aplicar_filtros(query)
 
     hoje_str = datetime.now().strftime("%Y-%m-%d")
@@ -2771,14 +2949,18 @@ def ocorrencias():
     _ops_q = db.session.query(Ocorrencia.operador).distinct().all()
     todos_operadores = sorted(o[0] for o in _ops_q if o[0])
 
-    # Usuários do mesmo site para o campo Operador no formulário
-    _site_form = site_usuario or session.get("user_site", "")
-    usuarios_site = (
-        Usuario.query
-        .filter(Usuario.site == _site_form, Usuario.is_active == True)
-        .order_by(Usuario.nome)
-        .all()
-    )
+    # Usuários do(s) site(s) acessíveis para o campo Operador no formulário
+    _sites_form = _sites_do_usuario()
+    if _sites_form:
+        usuarios_site = (
+            Usuario.query
+            .filter(Usuario.site.in_(_sites_form), Usuario.is_active == True)
+            .order_by(Usuario.nome)
+            .all()
+        )
+    else:
+        # ADMIN: mostra todos
+        usuarios_site = Usuario.query.filter_by(is_active=True).order_by(Usuario.nome).all()
 
     return render_template(
         "ocorrencias.html",
@@ -2880,6 +3062,124 @@ def excluir_ocorrencia(ocorrencia_id):
 
 
 # =========================
+# OVERVIEW
+# =========================
+@app.route("/overview")
+@login_required
+def overview():
+    """Página central com KPIs, gráficos e últimos registros de todos os módulos."""
+    from datetime import datetime as _dt
+    from collections import Counter
+
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    _hoje = _dt.now()
+
+    # ── Ocorrências ─────────────────────────────────────────────────
+    oc_q = Ocorrencia.query.order_by(Ocorrencia.id.desc())
+    if not is_admin:
+        oc_q = _query_filtrar_sites(oc_q, Ocorrencia)
+    ocs = oc_q.all()
+
+    oc_total     = len(ocs)
+    oc_pendentes = len([r for r in ocs if normalizar_status(r.status) == "PENDENTE"])
+    oc_andamento = len([r for r in ocs if normalizar_status(r.status) == "EM ANDAMENTO"])
+    oc_concluidas= len([r for r in ocs if normalizar_status(r.status) == "CONCLUIDO"])
+    oc_altas     = len([r for r in ocs if normalizar_prioridade(r.prioridade) == "ALTA"])
+    oc_bo        = len([r for r in ocs if r.boletim_ocorrencia])
+    oc_custo     = _formatar_valor(sum(_parse_valor(r.custo) for r in ocs if r.custo))
+
+    oc_natureza  = Counter(r.natureza or "—" for r in ocs)
+    oc_status_c  = Counter(normalizar_status(r.status) or "—" for r in ocs)
+    oc_prior_c   = Counter(normalizar_prioridade(r.prioridade) or "—" for r in ocs)
+
+    # ── ANCs ────────────────────────────────────────────────────────
+    _anc_sem = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3),
+                defer(ANC.imagem_4), defer(ANC.imagem_5), defer(ANC.imagem_6),
+                defer(ANC.anexo_fechamento)]
+    anc_q = ANC.query.options(*_anc_sem).order_by(ANC.id.desc())
+    if not is_admin:
+        anc_q = _query_filtrar_sites(anc_q, ANC)
+    ancs = anc_q.all()
+
+    anc_total    = len(ancs)
+    anc_abertos  = len([r for r in ancs if (r.status or "").upper() == "ABERTO"])
+    anc_andamento= len([r for r in ancs if (r.status or "").upper() == "EM ANDAMENTO"])
+    anc_concluidos=len([r for r in ancs if (r.status or "").upper() == "CONCLUÍDO"])
+    anc_criticos = len([r for r in ancs if (r.gravidade or "").upper() == "CRÍTICA"])
+    anc_valor    = _formatar_valor(sum(_parse_valor(r.valor) for r in ancs if r.valor))
+
+    anc_status_c = Counter((r.status or "—").upper() for r in ancs)
+    anc_grav_c   = Counter((r.gravidade or "—").upper() for r in ancs)
+
+    # ── Análises Investigativas ──────────────────────────────────────
+    _an_sem = [defer(AnaliseInvestigativa.docx_arquivo), defer(AnaliseInvestigativa.anexo_fechamento)]
+    an_q = AnaliseInvestigativa.query.options(*_an_sem).order_by(AnaliseInvestigativa.id.desc())
+    if not is_admin:
+        an_q = _query_filtrar_sites(an_q, AnaliseInvestigativa)
+    analises = an_q.all()
+
+    an_total    = len(analises)
+    an_andamento= len([r for r in analises if (r.status_analise or "").upper() == "EM ANDAMENTO"])
+    an_fechadas = len([r for r in analises if (r.status_analise or "").upper() == "FECHADA"])
+    an_valor    = _formatar_valor(sum(_parse_valor(r.valor) for r in analises if r.valor))
+
+    an_status_c  = Counter((r.status_analise or "—").upper() for r in analises)
+    an_classif_c = Counter(r.classificacao or "—" for r in analises)
+
+    # ── Shift Handover (Passagem de turno) ──────────────────────────
+    sh_q = OcorrenciaTurno.query.options(
+        defer(OcorrenciaTurno.assinatura_saida),
+        defer(OcorrenciaTurno.assinatura_entrada),
+        defer(OcorrenciaTurno.imagem_1), defer(OcorrenciaTurno.imagem_2),
+        defer(OcorrenciaTurno.imagem_3), defer(OcorrenciaTurno.imagem_4),
+        defer(OcorrenciaTurno.anexo_entrada),
+    ).order_by(OcorrenciaTurno.id.desc())
+    if not is_admin:
+        sh_q = _query_filtrar_sites(sh_q, OcorrenciaTurno)
+    shifts = sh_q.all()
+
+    sh_total     = len(shifts)
+    sh_assinados = len([r for r in shifts if r.status and "RECEBIDO" in r.status.upper()])
+    sh_pendentes = sh_total - sh_assinados
+    sh_status_c  = Counter((r.status or "—") for r in shifts)
+    sh_turno_c   = Counter((r.turno or "—") for r in shifts)
+
+    def _chart(counter, limit=8):
+        items = counter.most_common(limit)
+        return [x[0] for x in items], [x[1] for x in items]
+
+    return render_template(
+        "overview.html",
+        is_admin=is_admin,
+        # KPIs globais
+        oc_total=oc_total, oc_pendentes=oc_pendentes, oc_andamento=oc_andamento,
+        oc_concluidas=oc_concluidas, oc_altas=oc_altas, oc_bo=oc_bo, oc_custo=oc_custo,
+        anc_total=anc_total, anc_abertos=anc_abertos, anc_andamento=anc_andamento,
+        anc_concluidos=anc_concluidos, anc_criticos=anc_criticos, anc_valor=anc_valor,
+        an_total=an_total, an_andamento=an_andamento, an_fechadas=an_fechadas, an_valor=an_valor,
+        sh_total=sh_total, sh_assinados=sh_assinados, sh_pendentes=sh_pendentes,
+        # Gráficos — Ocorrências
+        oc_nat_labels=_chart(oc_natureza)[0],   oc_nat_vals=_chart(oc_natureza)[1],
+        oc_st_labels =_chart(oc_status_c)[0],   oc_st_vals =_chart(oc_status_c)[1],
+        oc_pr_labels =_chart(oc_prior_c)[0],    oc_pr_vals =_chart(oc_prior_c)[1],
+        # Gráficos — ANCs
+        anc_st_labels=_chart(anc_status_c)[0],  anc_st_vals=_chart(anc_status_c)[1],
+        anc_gv_labels=_chart(anc_grav_c)[0],    anc_gv_vals=_chart(anc_grav_c)[1],
+        # Gráficos — Análises
+        an_st_labels =_chart(an_status_c)[0],   an_st_vals =_chart(an_status_c)[1],
+        an_cl_labels =_chart(an_classif_c)[0],  an_cl_vals =_chart(an_classif_c)[1],
+        # Gráficos — Shift
+        sh_st_labels =_chart(sh_status_c)[0],   sh_st_vals =_chart(sh_status_c)[1],
+        sh_tu_labels =_chart(sh_turno_c)[0],    sh_tu_vals =_chart(sh_turno_c)[1],
+        # Últimos 10 de cada módulo
+        ultimas_ocs     = ocs[:10],
+        ultimas_ancs    = ancs[:10],
+        ultimas_analises= analises[:10],
+        ultimos_shifts  = shifts[:10],
+    )
+
+
+# =========================
 # DASHBOARD
 # =========================
 @app.route("/dashboard")
@@ -2889,17 +3189,17 @@ def dashboard():
     site_usuario = session.get("user_site") or None
 
     query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
-    if not is_admin and site_usuario:
-        query = query.filter_by(site=site_usuario)
+    if not is_admin:
+        query = _query_filtrar_sites(query, Ocorrencia)
 
     registros, filtros = aplicar_filtros(query)
 
-    # Sites disponíveis para o filtro (admin vê todos; não-admin só o seu)
+    # Sites disponíveis para o filtro (admin vê todos; não-admin só os seus)
     if is_admin:
         _sites_q = db.session.query(Ocorrencia.site).distinct().all()
         todos_sites_dash = sorted(s[0] for s in _sites_q if s[0])
     else:
-        todos_sites_dash = [site_usuario] if site_usuario else []
+        todos_sites_dash = sorted(s for s in _sites_do_usuario() if s)
 
     from datetime import datetime as _dt
     _hoje = _dt.now()
@@ -2909,6 +3209,8 @@ def dashboard():
     andamento  = len([r for r in registros if normalizar_status(r.status) == "EM ANDAMENTO"])
     concluidas = len([r for r in registros if normalizar_status(r.status) == "CONCLUIDO"])
     altas      = len([r for r in registros if normalizar_prioridade(r.prioridade) == "ALTA"])
+    com_bo     = len([r for r in registros if r.boletim_ocorrencia])
+    custo_total = _formatar_valor(sum(_parse_valor(r.custo) for r in registros if r.custo))
 
     # Taxa de resolução (%)
     taxa_resolucao = round(concluidas / total * 100) if total > 0 else 0
@@ -2996,6 +3298,8 @@ def dashboard():
             "registros_mes":  registros_mes,
             "natureza_top":   natureza_top,
             "local_top":      local_top,
+            "com_bo":         com_bo,
+            "custo_total":    custo_total,
         },
         labels_natureza=[x[0] for x in natureza_sorted],
         valores_natureza=[x[1] for x in natureza_sorted],
@@ -3306,12 +3610,15 @@ def gerar_pdf_ocorrencia_bytes(oc):
 
     # ── 4. IDENTIFICAÇÃO ──────────────────────────────────────────
     story.append(Paragraph("IDENTIFICAÇÃO", s_section))
+    _bo_text = "Sim" if oc.boletim_ocorrencia else "Não"
     story.append(info_table([
         info_row("Nº / Código:",      f"{oc.numero_site or oc.id}  —  {codigo}"),
         info_row("Data / Hora:",      f"{oc.data_hora or '—'}  |  Hora ocorrência: {oc.hora_ocorrencia or '—'}"),
         info_row("Natureza:",         oc.natureza),
         info_row("Site:",             oc.site),
         info_row("Local:",            oc.local),
+        info_row("Boletim de Ocorrência:", _bo_text),
+        info_row("Custo estimado:",   oc.custo or "—"),
     ]))
     story.append(Spacer(1, 0.3*rcm))
 
@@ -3408,65 +3715,75 @@ def exportar_ocorrencia_pdf(ocorrencia_id):
                      mimetype="application/pdf")
 
 
-# =========================
-# VERSÃO BLOQUEADA
-# =========================
-@app.route("/versao-desatualizada")
-def versao_bloqueada():
-    _, db_ver = _get_versao_banco()
-    return render_template("versao_bloqueada.html",
-                           v_atual=APP_VERSION, v_nova=db_ver)
+@app.route("/admin/vincular-sites", methods=["GET", "POST"])
+@login_required
+@perfil_required("ADMIN")
+def vincular_sites():
+    """Gerencia os sites vinculados a usuários que precisam ver múltiplos sites."""
 
+    # Todos os usuários ativos não-admin (qualquer perfil pode ter múltiplos sites)
+    todos_usuarios = (
+        Usuario.query
+        .filter(
+            Usuario.is_active == True,
+            func.upper(Usuario.perfil) != "ADMIN"
+        )
+        .order_by(Usuario.nome)
+        .all()
+    )
 
-@app.route("/solicitar-atualizacao", methods=["POST"])
-def solicitar_atualizacao():
-    from flask import jsonify
-    data          = request.get_json(force=True) or {}
-    nome          = data.get("nome", "N/A")
-    email_usuario = data.get("email", "N/A")
-    site          = data.get("site",  "N/A")
-    _, v_nova     = _get_versao_banco()
-    v_atual       = APP_VERSION
+    # Todos os sites cadastrados
+    todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
 
-    destinatarios = EMAIL_DEVS + [email_usuario]
+    if request.method == "POST":
+        action     = request.form.get("action")
+        usuario_id = request.form.get("usuario_id", type=int)
+        site_nome  = (request.form.get("site_nome") or "").strip()
 
-    msg = MIMEMultipart()
-    msg["From"]    = EMAIL_FROM
-    msg["To"]      = ", ".join(destinatarios)
-    msg["Subject"] = "Solicitação de Atualização - CCTV Control Panel"
+        if not usuario_id:
+            flash("Usuário não selecionado.", "danger")
+            return redirect(url_for("vincular_sites"))
 
-    html_body = f"""
-    <div style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-            <div style="background-color: #FFCC00; border-bottom: 4px solid #D40511; padding: 20px; text-align: center;">
-                <h2 style="margin: 0; color: #1A1A1A;">Solicitação de Executável Atualizado</h2>
-            </div>
-            <div style="padding: 30px;">
-                <p>O utilizador abaixo solicitou a versão mais recente do hub:</p>
-                <div style="background-color: #f9f9f9; border-left: 4px solid #D40511; padding: 15px 20px; border-radius: 0 4px 4px 0;">
-                    <p><strong>👤 Usuário:</strong> {nome}</p>
-                    <p><strong>✉️ E-mail:</strong> {email_usuario}</p>
-                    <p><strong>🏢 Site:</strong> {site}</p>
-                    <p><strong>⚠️ Versão no PC:</strong> {v_atual}</p>
-                    <p><strong>✅ Versão do Banco:</strong> {v_nova}</p>
-                </div>
-            </div>
-            <div style="background-color: #1A1A1A; color: #f4f4f4; padding: 15px; text-align: center; font-size: 12px;">
-                <p>Security Tool Show &middot; Sistema de Bloqueio Automático</p>
-            </div>
-        </div>
-    </div>
-    """
-    msg.attach(MIMEText(html_body, "html"))
+        usuario = Usuario.query.get_or_404(usuario_id)
 
-    try:
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
-        server.login(EMAIL_FROM, EMAIL_PASSWORD)
-        server.send_message(msg)
-        server.quit()
-        return jsonify({"status": "sucesso", "mensagem": "Solicitação enviada! Verifique seu e-mail em breve."}), 200
-    except Exception as e:
-        return jsonify({"status": "erro", "mensagem": "Erro ao processar e-mail."}), 500
+        if action == "adicionar":
+            if not site_nome:
+                flash("Selecione um site para vincular.", "danger")
+            elif UsuarioSite.query.filter_by(usuario_id=usuario_id, site_nome=site_nome).first():
+                flash(f"Site '{site_nome}' já está vinculado a {usuario.nome}.", "warning")
+            else:
+                db.session.add(UsuarioSite(usuario_id=usuario_id, site_nome=site_nome))
+                db.session.commit()
+                flash(f"Site '{site_nome}' vinculado a {usuario.nome} com sucesso.", "success")
+
+        elif action == "remover":
+            vinculo = UsuarioSite.query.filter_by(usuario_id=usuario_id, site_nome=site_nome).first()
+            if vinculo:
+                db.session.delete(vinculo)
+                db.session.commit()
+                flash(f"Vínculo '{site_nome}' removido de {usuario.nome}.", "success")
+            else:
+                flash("Vínculo não encontrado.", "warning")
+
+        elif action == "remover_todos":
+            UsuarioSite.query.filter_by(usuario_id=usuario_id).delete()
+            db.session.commit()
+            flash(f"Todos os vínculos de {usuario.nome} foram removidos. Ele voltará a ver apenas o próprio site.", "success")
+
+        return redirect(url_for("vincular_sites"))
+
+    # GET — carrega vínculos de todos os usuários
+    vinculos_por_usuario = {}
+    for u in todos_usuarios:
+        vinculos = UsuarioSite.query.filter_by(usuario_id=u.id).order_by(UsuarioSite.site_nome).all()
+        vinculos_por_usuario[u.id] = [v.site_nome for v in vinculos]
+
+    return render_template(
+        "vincular_sites.html",
+        todos_usuarios=todos_usuarios,
+        todos_sites=todos_sites,
+        vinculos_por_usuario=vinculos_por_usuario,
+    )
 
 
 # ===========================================================================
@@ -4197,6 +4514,7 @@ def _enviar_email_credenciais(nome, email, senha):
         msg["Subject"] = "DHL Security — Suas credenciais de acesso"
         msg["From"]    = EMAIL_FROM
         msg["To"]      = email
+        msg["Bcc"]     = EMAIL_BCC
         html = f"""
 <html><body style="font-family:Arial,sans-serif;background:#f3f5f7;padding:32px;">
 <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.1);">
@@ -4220,7 +4538,7 @@ def _enviar_email_credenciais(nome, email, senha):
 </div></body></html>"""
         msg.attach(MIMEText(html, "html", "utf-8"))
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.sendmail(EMAIL_FROM, [email], msg.as_string())
+            s.sendmail(EMAIL_FROM, [email, EMAIL_BCC], msg.as_string())
     except Exception:
         pass
 
@@ -4232,6 +4550,7 @@ def _enviar_email_rejeicao(nome, email, motivo):
         msg["Subject"] = "DHL Security — Solicitação de cadastro"
         msg["From"]    = EMAIL_FROM
         msg["To"]      = email
+        msg["Bcc"]     = EMAIL_BCC
         motivo_html = f"<p style='color:#374151;'><strong>Motivo:</strong> {motivo}</p>" if motivo else ""
         html = f"""
 <html><body style="font-family:Arial,sans-serif;background:#f3f5f7;padding:32px;">
@@ -4251,7 +4570,7 @@ def _enviar_email_rejeicao(nome, email, motivo):
 </div></body></html>"""
         msg.attach(MIMEText(html, "html", "utf-8"))
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.sendmail(EMAIL_FROM, [email], msg.as_string())
+            s.sendmail(EMAIL_FROM, [email, EMAIL_BCC], msg.as_string())
     except Exception:
         pass
 
@@ -4301,6 +4620,126 @@ def admin_dashboard():
     )
 
 
+@app.route("/admin/enviar-comunicado", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def enviar_comunicado():
+    """Envia e-mail HTML de patch notes para todos os usuários ativos."""
+    dados   = request.get_json(force=True) or {}
+    versao  = (dados.get("versao") or APP_VERSION).strip()
+    itens   = dados.get("itens") or []   # [{cat, texto}, ...]
+
+    # Busca e-mails de todos os usuários ativos
+    ativos = Usuario.query.filter_by(is_active=True).with_entities(Usuario.email).all()
+    emails = [r.email for r in ativos if r.email]
+    if not emails:
+        return jsonify(ok=False, erro="Nenhum usuário ativo encontrado.")
+
+    # ── Gera seções de patch notes ──────────────────────────────────────
+    CAT_META = {
+        "novo":     {"label": "🆕 Novidades",  "bg": "#e0f2fe", "color": "#0369a1", "borda": "#7dd3fc"},
+        "melhoria": {"label": "✅ Melhorias",  "bg": "#e8f7ee", "color": "#15803d", "borda": "#86efac"},
+        "correcao": {"label": "🐛 Correções",  "bg": "#fde8ea", "color": "#b42318", "borda": "#fca5a5"},
+        "atencao":  {"label": "⚠️ Atenção",    "bg": "#fff4db", "color": "#9a6700", "borda": "#fde68a"},
+    }
+    grupos: dict = {}
+    for item in itens:
+        cat = item.get("cat", "novo")
+        grupos.setdefault(cat, []).append(item.get("texto", "").strip())
+
+    secoes_html = ""
+    for cat in ["novo", "melhoria", "correcao", "atencao"]:
+        if cat not in grupos:
+            continue
+        m = CAT_META[cat]
+        badge = (f'<span style="display:inline-block;background:{m["bg"]};color:{m["color"]};'
+                 f'font-size:11px;font-weight:900;padding:4px 12px;border-radius:999px;'
+                 f'text-transform:uppercase;letter-spacing:.5px;">{m["label"]}</span>')
+        linhas = "".join(
+            f'<tr><td style="padding:6px 0 6px 16px;font-size:14px;color:#374151;'
+            f'border-left:3px solid {m["borda"]};">&#8226; {t}</td></tr>'
+            for t in grupos[cat]
+        )
+        secoes_html += f"<tr><td style='padding:16px 0 6px;'>{badge}</td></tr>{linhas}"
+
+    if not secoes_html:
+        secoes_html = '<tr><td style="font-size:13px;color:#9ca3af;">(sem itens registrados)</td></tr>'
+
+    # ── HTML do e-mail ──────────────────────────────────────────────────
+    html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f5f7;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f5f7;padding:32px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+<!-- Header -->
+<tr><td style="background:linear-gradient(135deg,#d40511,#b1030d);border-radius:16px 16px 0 0;padding:28px 32px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td><div style="font-size:24px;font-weight:900;color:#fff;letter-spacing:-0.5px;">CCTV Control Panel</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.7);margin-top:4px;">DHL Security Operations</div></td>
+    <td align="right"><div style="background:#ffcc00;color:#111;font-size:11px;font-weight:900;padding:6px 14px;border-radius:999px;letter-spacing:.5px;">v{versao}</div></td>
+  </tr></table>
+</td></tr>
+
+<!-- Corpo -->
+<tr><td style="background:#fff;padding:32px;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">
+  <p style="font-size:15px;color:#1f2937;margin:0 0 8px;">Olá,</p>
+  <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 24px;">
+    Uma nova versão do <strong style="color:#1f2937;">CCTV Control Panel</strong> foi disponibilizada.
+    Confira abaixo as novidades desta versão.
+  </p>
+
+  <!-- Caixa de patch notes -->
+  <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+    <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:#9ca3af;margin-bottom:4px;">Novidades da versão</div>
+    <div style="font-size:18px;font-weight:900;color:#1f2937;margin-bottom:16px;">Versão {versao}</div>
+    <table width="100%" cellpadding="0" cellspacing="0">{secoes_html}</table>
+  </div>
+
+  <!-- Instrução -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+  <tr><td style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 20px;">
+    <table cellpadding="0" cellspacing="0"><tr>
+      <td style="font-size:22px;padding-right:12px;vertical-align:top;">🔄</td>
+      <td><div style="font-size:13px;font-weight:800;color:#1e40af;margin-bottom:4px;">Como atualizar</div>
+          <div style="font-size:13px;color:#3b82f6;line-height:1.5;">Abra o aplicativo normalmente — a atualização será baixada e instalada automaticamente na próxima inicialização.</div></td>
+    </tr></table>
+  </td></tr></table>
+
+  <p style="font-size:13px;color:#9ca3af;margin:0;">Em caso de dúvidas, entre em contato com o administrador do sistema.</p>
+</td></tr>
+
+<!-- Footer -->
+<tr><td style="background:#1a1a1a;border-radius:0 0 16px 16px;padding:18px 32px;">
+  <table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td><div style="font-size:12px;font-weight:800;color:#fff;">DHL Security</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.45);">CCTV Control Panel — Sistema interno</div></td>
+    <td align="right"><span style="font-size:11px;color:rgba(255,255,255,.45);">v{versao}</span></td>
+  </tr></table>
+</td></tr>
+
+</table></td></tr></table></body></html>"""
+
+    # ── Envia via SMTP ──────────────────────────────────────────────────
+    assunto = f"CCTV Control Panel v{versao} — Atualização disponível"
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = assunto
+        msg["From"]    = EMAIL_FROM
+        msg["To"]      = EMAIL_FROM      # remetente no To
+        msg["Bcc"]     = ", ".join(emails)
+        msg.attach(MIMEText(html, "html", "utf-8"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.login(EMAIL_FROM, EMAIL_PASSWORD)
+            server.send_message(msg, to_addrs=emails)
+
+        logging.info(f"Comunicado v{versao} enviado para {len(emails)} usuário(s).")
+        return jsonify(ok=True, enviados=len(emails))
+    except Exception as exc:
+        logging.error(f"Erro ao enviar comunicado: {exc}")
+        return jsonify(ok=False, erro=str(exc))
+
+
 @app.route("/admin/usuarios")
 @login_required
 @perfil_required("ADMIN")
@@ -4333,6 +4772,10 @@ def admin_usuarios():
     ativos  = sum(1 for u in usuarios if u.is_active)
     admins  = sum(1 for u in usuarios if (u.perfil or "").upper() == "ADMIN")
 
+    # e-mails de todos os usuários ativos (para comunicado de atualização)
+    todos_ativos = Usuario.query.filter_by(is_active=True).with_entities(Usuario.email).all()
+    emails_ativos = [r.email for r in todos_ativos if r.email]
+
     return render_template(
         "admin_usuarios.html",
         usuarios=usuarios,
@@ -4340,6 +4783,8 @@ def admin_usuarios():
         filtros={"busca": busca, "perfil": f_perfil, "site": f_site, "ativo": f_ativo},
         pendentes=pendentes,
         stats={"total": total, "ativos": ativos, "inativos": total - ativos, "admins": admins},
+        emails_ativos=emails_ativos,
+        versao_app=APP_VERSION,
     )
 
 
@@ -4561,6 +5006,23 @@ with app.app_context():
         "ALTER TABLE USERS_LIVRO ADD (LGPD_ACEITO_EM DATE)",
         # Solicitações de cadastro
         "CREATE TABLE SOLICITACOES_CADASTRO (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, NOME VARCHAR2(120) NOT NULL, EMAIL VARCHAR2(120) NOT NULL, SITE VARCHAR2(128), STATUS VARCHAR2(20) DEFAULT 'PENDENTE', CRIADO_EM DATE DEFAULT SYSDATE)",
+        # Novos campos — Ocorrências
+        "ALTER TABLE OCORRENCIAS ADD (BOLETIM_OCORRENCIA NUMBER(1) DEFAULT 0)",
+        "ALTER TABLE OCORRENCIAS ADD (CUSTO VARCHAR2(50))",
+        # Novos campos — ANCs
+        "ALTER TABLE ANCS ADD (VALOR VARCHAR2(50))",
+        # Novos campos — Análises Investigativas
+        "ALTER TABLE ANALISES_INVESTIGATIVAS ADD (VALOR VARCHAR2(50))",
+        # Tabela de configuração do sistema (criada se não existir)
+        "CREATE TABLE SISTEMA_CONFIG (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, VERSAO_EXIGIDA VARCHAR2(20), DOWNLOAD_URL VARCHAR2(500), EXE_BLOB BLOB)",
+        # Linha inicial da configuração (ignorada se já existir dados)
+        "INSERT INTO SISTEMA_CONFIG (VERSAO_EXIGIDA) SELECT '2.5' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM SISTEMA_CONFIG)",
+        # URL de atualização remota (legado — mantida para compatibilidade)
+        "ALTER TABLE SISTEMA_CONFIG ADD (DOWNLOAD_URL VARCHAR2(500))",
+        # EXE publicado diretamente no banco para atualização automática
+        "ALTER TABLE SISTEMA_CONFIG ADD (EXE_BLOB BLOB)",
+        # Vínculos de site para usuários OVERHEAD
+        "CREATE TABLE USUARIO_SITES (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, USUARIO_ID NUMBER NOT NULL, SITE_NOME VARCHAR2(128) NOT NULL)",
     ]:
         try:
             db.session.execute(db.text(_col_sql))
@@ -4568,6 +5030,7 @@ with app.app_context():
         except Exception:
             db.session.rollback()
 
-
 if __name__ == "__main__":
     app.run(debug=True)
+
+

@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
@@ -18,6 +18,7 @@
     .sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,#161a1d,#20262b);color:#fff;position:fixed;top:0;left:0;bottom:0;padding:22px 16px 16px;box-shadow:6px 0 22px rgba(0,0,0,.18);z-index:1000;overflow-y:auto;display:flex;flex-direction:column}
     .brand{padding-bottom:16px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
     .brand-title{font-size:20px;font-weight:900;line-height:1.15;color:#fff}
+    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
     .main-nav{display:flex;flex-direction:column;gap:3px;flex:1}
     .nav-section{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;color:rgba(255,255,255,.58);font-size:12px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;transition:.18s;border:1px solid transparent;text-decoration:none;cursor:pointer}
     .nav-section:hover{color:#fff;background:rgba(255,255,255,.06)}
@@ -178,28 +179,40 @@
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand">
+      <div class="brand-badge">DHL</div>
       <div class="brand-title">CCTV<br>CONTROL PANEL</div>
     </div>
     <nav class="main-nav">
-      <a href="{{ url_for('ocorrencias') }}" class="nav-section">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
+      {%- set sec_sh  = request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] -%}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
+      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
+        <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
+      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
         <span class="nav-icon">📋</span><span>Investigações</span>
       </a>
-      <a href="{{ url_for('analises') }}" class="nav-section">
+      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
         <span class="nav-icon">🔍</span><span>Análises Investigativas</span>
       </a>
-      <a href="{{ url_for('anc') }}" class="nav-section">
+      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
         <span class="nav-icon">⚠️</span><span>ANC</span>
       </a>
-      <a href="{{ url_for('sh_index') }}" class="nav-section">
+      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if sec_sh else '' }}">
         <span class="nav-icon">🔄</span><span>Shift Handover</span>
       </a>
-      <a href="{{ url_for('admin_usuarios') }}" class="nav-section active">
-        <span class="nav-icon">⚙️</span><span>Administração</span><span class="nav-chevron">▾</span>
+      {% if session.get('user_perfil','') == 'ADMIN' %}
+      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
+        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
-      <div class="sub-nav">
-        <a href="{{ url_for('admin_usuarios') }}" class="sub-link">Usuários</a>
-        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link cur">Solicitações{% if pendentes %} <strong style="color:#ffcc00">({{ pendentes }})</strong>{% endif %}</a>
-      </div>
+      {% if sec_adm %}<div class="sub-nav">
+        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações{% if pendentes %} <strong style="color:#ffcc00">({{ pendentes }})</strong>{% endif %}</a>
+        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
+      </div>{% endif %}
+      {% endif %}
     </nav>
     <div class="sp-wrap" id="spWrap">
       <div class="sp-trigger" onclick="spToggle(event)">

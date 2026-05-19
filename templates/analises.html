@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
@@ -172,6 +172,9 @@
       {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
       {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
       {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
+      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
+        <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
       <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
         <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
@@ -203,13 +206,14 @@
         <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
       </div>{% endif %}
       {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes'] -%}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
       <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
         <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
       {% if sec_adm %}<div class="sub-nav">
         <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
         <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
       </div>{% endif %}
       {% endif %}
     </nav>
@@ -270,6 +274,12 @@
           <div class="card kpi">
             <div class="label">Sites distintos</div>
             <div class="value">{{ resumo.sites }}</div>
+          </div>
+          {% endif %}
+          {% if resumo.valor_total != '—' %}
+          <div class="card kpi" style="border-left-color:#7c3aed; background:linear-gradient(180deg,#fff,#faf5ff);">
+            <div class="label">💰 Valor estimado total</div>
+            <div class="value" style="color:#6d28d9; font-size:22px;">{{ resumo.valor_total }}</div>
           </div>
           {% endif %}
           <div class="card kpi" style="border-left-color:var(--dhl-red);">
@@ -487,8 +497,8 @@
       <a id="m-download" href="#" class="btn btn-red btn-sm" style="flex:1; justify-content:center;">⬇ Baixar DOCX</a>
       <span id="m-sem-docx" style="display:none; color:var(--muted); font-size:12px; font-weight:700; flex:1; text-align:center;">Arquivo não disponível</span>
       <a id="m-btn-email" href="#" class="btn btn-outline btn-sm">📧 E-mail</a>
+      <a id="m-btn-editar" href="#" class="btn btn-dark btn-sm" style="display:none;">✏ Editar</a>
       {% if is_admin %}
-      <a id="m-btn-editar" href="#" class="btn btn-dark btn-sm">✏ Editar</a>
       <form id="m-form-excluir" method="POST" action="" onsubmit="return confirm('Tem certeza que deseja excluir esta análise? Esta ação não pode ser desfeita.');" style="margin:0;">
         <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
       </form>
@@ -528,9 +538,15 @@
     // Botão e-mail
     document.getElementById('m-btn-email').href = d.url_email;
 
-    // Botão editar (ADM)
+    // Botão editar (admin ou criador, se não fechada)
+    const IS_ADMIN_AN = {{ 'true' if is_admin else 'false' }};
+    const CURRENT_USER_AN = "{{ session.get('user_nome', '') }}";
     const btnEditar = document.getElementById('m-btn-editar');
-    if (btnEditar) btnEditar.href = d.url_editar;
+    if (btnEditar) {
+      btnEditar.href = d.url_editar;
+      const podeEditarAnalise = (IS_ADMIN_AN || d.criado_por === CURRENT_USER_AN) && d.status !== 'FECHADA';
+      btnEditar.style.display = podeEditarAnalise ? '' : 'none';
+    }
 
     // Excluir (ADM)
     const formExcluir = document.getElementById('m-form-excluir');

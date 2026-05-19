@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
@@ -253,6 +253,9 @@
       {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
       {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
       {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
+      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
+        <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
       <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
         <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
@@ -284,13 +287,14 @@
         <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
       </div>{% endif %}
       {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes'] -%}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
       <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
         <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
       {% if sec_adm %}<div class="sub-nav">
         <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
         <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
       </div>{% endif %}
       {% endif %}
     </nav>
@@ -358,6 +362,12 @@
           <div class="kpi-label">Críticos</div>
           <div class="kpi-value">{{ resumo.criticos }}</div>
         </div>
+        {% if resumo.valor_total != '—' %}
+        <div class="kpi-card" style="border-left-color:#7c3aed; background:#faf5ff;">
+          <div class="kpi-label">💰 Valor Total</div>
+          <div class="kpi-value" style="color:#6d28d9; font-size:15px;">{{ resumo.valor_total }}</div>
+        </div>
+        {% endif %}
       </div>
 
       <!-- Formulário Criar / Editar -->
@@ -512,6 +522,20 @@
               <div style="font-size:11px; color:var(--muted);">
                 Preencha apenas se houver investigação em andamento ou concluída.
               </div>
+            </div>
+          </div>
+
+          <!-- SEÇÃO: VALOR -->
+          <div class="form-sec-hdr" style="margin-top:20px;">💰 VALOR</div>
+          <div class="form-grid">
+            <div class="form-group full">
+              <label>Valor estimado da ocorrência</label>
+              <input type="text" name="valor" placeholder="Ex: R$ 2.000,00"
+                value="{{ registro_edicao.valor if modo_edicao else '' }}"
+                style="width:100%; border:1.5px solid var(--line); border-radius:10px;
+                       padding:10px 14px; font-size:13px; font-family:inherit; outline:none;"
+                onfocus="this.style.borderColor='var(--dhl-red)'"
+                onblur="this.style.borderColor='var(--line)'">
             </div>
           </div>
 
@@ -732,6 +756,7 @@
                       data-url-excluir="{{ url_for('excluir_anc', anc_id=r.id) }}"
                       data-url-fechar="{{ url_for('fechar_anc', anc_id=r.id) }}"
                       data-url-anexo="{{ url_for('download_anexo_anc', anc_id=r.id) }}"
+                      data-valor="{{ r.valor or '—' }}"
                       data-criado-por="{{ r.criado_por or '' }}"
                       data-ano="{{ r.criado_em.year if r.criado_em else '' }}"
                       data-url-email="{{ url_for('enviar_email_anc', anc_id=r.id) }}">
@@ -818,6 +843,10 @@
           <div class="modal-lbl">Cargo</div>
           <div class="modal-val" id="m-cargo"></div>
         </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Valor estimado</div>
+          <div class="modal-val" id="m-valor"></div>
+        </div>
         <div class="modal-item full">
           <div class="modal-lbl">Envolvido</div>
           <div class="modal-val" id="m-envolvido"></div>
@@ -881,8 +910,8 @@
         📄 Baixar PDF
       </a>
       <a id="m-email-anc" href="#" class="btn btn-outline btn-sm">📧 E-mail</a>
+      <a id="m-editar" href="#" class="btn btn-yellow" style="display:none;">✏️ Editar</a>
       {% if is_admin %}
-      <a id="m-editar" href="#" class="btn btn-yellow">✏️ Editar</a>
       <form id="m-form-excluir" method="POST" action=""
             onsubmit="return confirm('Tem certeza que deseja excluir este ANC? Esta ação não pode ser desfeita.');"
             style="margin:0;">
@@ -907,6 +936,7 @@ function abrirModal(btn) {
   document.getElementById('m-tipo-ocorrencia').textContent = d.tipoOcorrencia;
   document.getElementById('m-turno').textContent           = d.turno;
   document.getElementById('m-gravidade').textContent       = d.gravidade;
+  document.getElementById('m-valor').textContent           = d.valor || '—';
   document.getElementById('m-natureza').textContent        = d.natureza;
   document.getElementById('m-status').textContent          = d.status;
   document.getElementById('m-responsavel').textContent     = d.responsavel;
@@ -923,7 +953,11 @@ function abrirModal(btn) {
   document.getElementById('m-email-anc').href = d.urlEmail;
 
   const editar = document.getElementById('m-editar');
-  if (editar) editar.href = d.urlEditar;
+  if (editar) {
+    editar.href = d.urlEditar;
+    const podeEditar = (IS_ADMIN || d.criadoPor === CURRENT_USER) && (d.status || '').toUpperCase() !== 'CONCLUÍDO';
+    editar.style.display = podeEditar ? '' : 'none';
+  }
 
   const formExcluir = document.getElementById('m-form-excluir');
   if (formExcluir) formExcluir.action = d.urlExcluir;

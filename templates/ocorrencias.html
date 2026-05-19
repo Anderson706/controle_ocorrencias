@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
@@ -593,6 +593,9 @@
       {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
       {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
 
+      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
+        <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
       <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
         <span class="nav-icon">📋</span><span>Investigações</span>
         {% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
@@ -635,13 +638,14 @@
         <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
       </div>{% endif %}
       {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes'] -%}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
       <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
         <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
       </a>
       {% if sec_adm %}<div class="sub-nav">
         <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
         <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
       </div>{% endif %}
       {% endif %}
     </nav>
@@ -903,6 +907,26 @@
 
             <div style="height:12px"></div>
 
+            <div style="height:12px"></div>
+
+            <div class="row">
+              <div class="field">
+                <label>Custo estimado</label>
+                <input type="text" name="custo" placeholder="Ex: R$ 1.500,00"
+                  value="{% if modo_edicao %}{{ registro_edicao.custo or '' }}{% endif %}">
+              </div>
+              <div class="field" style="display:flex;align-items:center;gap:10px;padding-top:22px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+                  <input type="checkbox" name="boletim_ocorrencia" value="1"
+                    {% if modo_edicao and registro_edicao.boletim_ocorrencia %}checked{% endif %}
+                    style="width:18px;height:18px;accent-color:#b1030d;cursor:pointer;">
+                  Boletim de Ocorrência gerado
+                </label>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
             <div class="field">
               <label>Foto</label>
               <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp">
@@ -1060,6 +1084,8 @@
                     data-anexo2_nome="{{ r.anexo_post_nome_2 or '' }}"
                     data-tem_anexo3="{{ '1' if r.anexo_post_3 else '0' }}"
                     data-anexo3_nome="{{ r.anexo_post_nome_3 or '' }}"
+                    data-boletim="{{ 'Sim' if r.boletim_ocorrencia else 'Não' }}"
+                    data-custo="{{ r.custo or '—' }}"
                     data-url_post="{{ url_for('post_ocorrencia', ocorrencia_id=r.id) }}"
                     data-url_editar="{{ url_for('ocorrencias', editar=r.id) }}"
                     data-url_excluir="{{ url_for('excluir_ocorrencia', ocorrencia_id=r.id) }}"
@@ -1153,6 +1179,14 @@
           <div class="modal-val" id="m-status"></div>
         </div>
         <div class="modal-item">
+          <div class="modal-lbl">Boletim de Ocorrência</div>
+          <div class="modal-val" id="m-boletim"></div>
+        </div>
+        <div class="modal-item">
+          <div class="modal-lbl">Custo estimado</div>
+          <div class="modal-val" id="m-custo"></div>
+        </div>
+        <div class="modal-item">
           <div class="modal-lbl">Criado por</div>
           <div class="modal-val" id="m-criado_por"></div>
         </div>
@@ -1213,8 +1247,8 @@
     <div class="modal-foot">
       <a id="m-btn-post" href="#" class="btn btn-dark btn-sm">📋 Ir para Post</a>
       <a id="m-btn-pdf" href="#" class="btn btn-sm" style="background:#fff4db; color:#7a5a00; border:1px solid #f0d66a;" title="Baixar PDF da ocorrência">📄 Exportar PDF</a>
+      <a id="m-btn-editar" href="#" class="btn btn-sm" style="display:none; background:#eef1f4; color:#374151; border:1px solid #d1d5db;">✏ Editar</a>
       {% if is_admin %}
-      <a id="m-btn-editar" href="#" class="btn btn-sm" style="background:#eef1f4; color:#374151; border:1px solid #d1d5db;">✏ Editar</a>
       <form id="m-form-excluir" method="POST" action="" onsubmit="return confirm('Deseja realmente excluir esta investigação? Esta ação não pode ser desfeita.');" style="margin:0;">
         <button type="submit" class="btn btn-danger btn-sm">🗑 Excluir</button>
       </form>
@@ -1244,6 +1278,8 @@ function abrirModal(btn) {
   document.getElementById('m-prioridade').textContent= d.prioridade;
   document.getElementById('m-status').textContent    = d.status;
   document.getElementById('m-criado_por').textContent= d.criado_por;
+  document.getElementById('m-boletim').textContent   = d.boletim || 'Não';
+  document.getElementById('m-custo').textContent     = d.custo   || '—';
   document.getElementById('m-descricao').textContent = d.descricao || '—';
 
   // Botões do footer
@@ -1254,13 +1290,21 @@ function abrirModal(btn) {
   var _natureza = (d.natureza || 'Ocorrencia').replace(/[\/\\:*?"<>|]/g, '');
   var _codigo   = (d.codigo   || ('OC-' + d.id)).replace(/[\/\\:*?"<>|]/g, '');
   btnPdf.setAttribute('data-filename', _codigo + ' - ' + _natureza + ' - ' + _site + '.pdf');
-  const btnEditar = document.getElementById('m-btn-editar');
-  if (btnEditar) btnEditar.href = d.url_editar;
   const formExcluir = document.getElementById('m-form-excluir');
   if (formExcluir) formExcluir.action = d.url_excluir;
 
   // Encerramento
   const statusFechado = ['CONCLUIDO','INCONCLUSIVA'].includes(d.status.trim().toUpperCase());
+
+  // Botão Editar: visível para admin ou criador enquanto não encerrada
+  const btnEditar = document.getElementById('m-btn-editar');
+  if (btnEditar) {
+    btnEditar.href = d.url_editar;
+    const IS_ADMIN_OC = {{ 'true' if is_admin else 'false' }};
+    const CURRENT_USER_OC = "{{ session.get('user_nome', '') }}";
+    const podeEditar = (IS_ADMIN_OC || d.criado_por === CURRENT_USER_OC) && !statusFechado;
+    btnEditar.style.display = podeEditar ? '' : 'none';
+  }
   const infoEnc  = document.getElementById('m-info-encerramento');
   const formWrap = document.getElementById('m-form-fechar-wrap');
   const formFech = document.getElementById('m-form-fechar');

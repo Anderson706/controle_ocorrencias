@@ -11,6 +11,8 @@ datas = [
 datas += collect_data_files('reportlab')
 datas += collect_data_files('docx')
 datas += collect_data_files('oracledb')
+datas += collect_data_files('clr_loader')
+datas += collect_data_files('pythonnet')
 # webview: inclui apenas os arquivos que realmente existem
 _wv = 'venv/Lib/site-packages/webview/lib'
 datas += [
@@ -34,9 +36,12 @@ hiddenimports = (
     + collect_submodules('docx')
     + collect_submodules('openpyxl')
     + collect_submodules('webview')
+    + collect_submodules('clr_loader')
+    + collect_submodules('pythonnet')
     + [
         'webview.platforms.winforms',
         'clr',
+        'clr_loader',
         'pythonnet',
         'werkzeug',
         'werkzeug.security',
@@ -72,24 +77,10 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# ── Splash nativo (aparece antes da extração) ─────────────────────────────────
-splash = Splash(
-    'static/splash.png',
-    binaries=a.binaries,
-    datas=a.datas,
-    text_pos=(240, 200),
-    text_size=10,
-    text_color='#888888',
-    minify_script=True,
-    always_on_top=True,
-)
-
-# ── EXE --onefile ─────────────────────────────────────────────────────────────
+# ── EXE --onefile (sem Splash — testando compatibilidade Python 3.14) ─────────
 exe = EXE(
     pyz,
     a.scripts,
-    splash,
-    splash.binaries,
     a.binaries,
     a.zipfiles,
     a.datas,
@@ -98,7 +89,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

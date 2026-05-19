@@ -1,0 +1,94 @@
+2026-05-15 21:04:27,486 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-15 21:04:27,487 INFO: [33mPress CTRL+C to quit[0m
+2026-05-15 21:04:27,493 INFO:  * Restarting with stat
+2026-05-15 21:04:46,654 WARNING:  * Debugger is active!
+2026-05-15 21:04:46,670 INFO:  * Debugger PIN: 264-060-070
+2026-05-15 21:04:47,518 INFO: 127.0.0.1 - - [15/May/2026 21:04:47] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-15 21:04:48,990 INFO: 127.0.0.1 - - [15/May/2026 21:04:48] "GET /login HTTP/1.1" 200 -
+2026-05-15 21:04:49,086 INFO: 127.0.0.1 - - [15/May/2026 21:04:49] "GET /static/shared%20image.png HTTP/1.1" 200 -
+2026-05-15 21:04:50,889 INFO: 127.0.0.1 - - [15/May/2026 21:04:50] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-05-15 21:05:25,854 INFO: 127.0.0.1 - - [15/May/2026 21:05:25] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-05-15 21:05:34,660 INFO: 127.0.0.1 - - [15/May/2026 21:05:34] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-15 21:05:34,723 INFO: 127.0.0.1 - - [15/May/2026 21:05:34] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:05:45,276 INFO: 127.0.0.1 - - [15/May/2026 21:05:45] "GET /overview HTTP/1.1" 200 -
+2026-05-15 21:05:45,308 INFO: 127.0.0.1 - - [15/May/2026 21:05:45] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:09:38,042 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-15 21:09:38,043 INFO: [33mPress CTRL+C to quit[0m
+2026-05-15 21:09:38,047 INFO:  * Restarting with stat
+2026-05-15 21:09:57,669 WARNING:  * Debugger is active!
+2026-05-15 21:09:57,681 INFO:  * Debugger PIN: 264-060-070
+2026-05-15 21:09:58,515 INFO: 127.0.0.1 - - [15/May/2026 21:09:58] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-15 21:10:06,636 INFO: 127.0.0.1 - - [15/May/2026 21:10:06] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-15 21:10:06,675 INFO: 127.0.0.1 - - [15/May/2026 21:10:06] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:10:21,382 INFO: 127.0.0.1 - - [15/May/2026 21:10:21] "GET /overview HTTP/1.1" 200 -
+2026-05-15 21:10:21,428 INFO: 127.0.0.1 - - [15/May/2026 21:10:21] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:10:40,089 INFO: 127.0.0.1 - - [15/May/2026 21:10:40] "GET /admin/usuarios HTTP/1.1" 200 -
+2026-05-15 21:10:40,121 INFO: 127.0.0.1 - - [15/May/2026 21:10:40] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:10:55,278 INFO: 127.0.0.1 - - [15/May/2026 21:10:55] "GET /admin/usuarios/27/editar HTTP/1.1" 200 -
+2026-05-15 21:10:55,321 INFO: 127.0.0.1 - - [15/May/2026 21:10:55] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:11:10,204 INFO: 127.0.0.1 - - [15/May/2026 21:11:10] "[35m[1mGET /admin/vincular-sites HTTP/1.1[0m" 500 -
+2026-05-15 21:11:10,269 INFO: 127.0.0.1 - - [15/May/2026 21:11:10] "GET /admin/vincular-sites?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2026-05-15 21:11:10,270 INFO: 127.0.0.1 - - [15/May/2026 21:11:10] "GET /admin/vincular-sites?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2026-05-15 21:11:10,326 INFO: 127.0.0.1 - - [15/May/2026 21:11:10] "GET /admin/vincular-sites?__debugger__=yes&cmd=resource&f=console.png&s=hXCLiconypZesPbFs8yW HTTP/1.1" 200 -
+2026-05-15 21:11:10,348 INFO: 127.0.0.1 - - [15/May/2026 21:11:10] "GET /admin/vincular-sites?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2026-05-15 21:11:35,382 INFO: 127.0.0.1 - - [15/May/2026 21:11:35] "[35m[1mGET /admin/vincular-sites HTTP/1.1[0m" 500 -
+2026-05-15 21:11:35,416 INFO: 127.0.0.1 - - [15/May/2026 21:11:35] "[36mGET /admin/vincular-sites?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1[0m" 304 -
+2026-05-15 21:11:35,419 INFO: 127.0.0.1 - - [15/May/2026 21:11:35] "[36mGET /admin/vincular-sites?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1[0m" 304 -
+2026-05-15 21:11:35,435 INFO: 127.0.0.1 - - [15/May/2026 21:11:35] "[36mGET /admin/vincular-sites?__debugger__=yes&cmd=resource&f=console.png&s=hXCLiconypZesPbFs8yW HTTP/1.1[0m" 304 -
+2026-05-15 21:11:35,455 INFO: 127.0.0.1 - - [15/May/2026 21:11:35] "[36mGET /admin/vincular-sites?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1[0m" 304 -
+2026-05-15 21:13:24,983 INFO: 127.0.0.1 - - [15/May/2026 21:13:24] "GET /admin/vincular-sites HTTP/1.1" 200 -
+2026-05-15 21:13:39,181 INFO: 127.0.0.1 - - [15/May/2026 21:13:39] "GET /admin/vincular-sites HTTP/1.1" 200 -
+2026-05-15 21:14:26,511 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-15 21:14:26,512 INFO: [33mPress CTRL+C to quit[0m
+2026-05-15 21:14:26,513 INFO:  * Restarting with stat
+2026-05-15 21:14:44,713 WARNING:  * Debugger is active!
+2026-05-15 21:14:44,734 INFO:  * Debugger PIN: 264-060-070
+2026-05-15 21:14:45,621 INFO: 127.0.0.1 - - [15/May/2026 21:14:45] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-15 21:14:54,478 INFO: 127.0.0.1 - - [15/May/2026 21:14:54] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-15 21:14:54,544 INFO: 127.0.0.1 - - [15/May/2026 21:14:54] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:15:00,212 INFO: 127.0.0.1 - - [15/May/2026 21:15:00] "GET /admin/usuarios HTTP/1.1" 200 -
+2026-05-15 21:15:00,259 INFO: 127.0.0.1 - - [15/May/2026 21:15:00] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:15:11,719 INFO: 127.0.0.1 - - [15/May/2026 21:15:11] "GET /admin/vincular-sites HTTP/1.1" 200 -
+2026-05-15 21:17:36,770 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-15 21:17:36,773 INFO: [33mPress CTRL+C to quit[0m
+2026-05-15 21:17:36,778 INFO:  * Restarting with stat
+2026-05-15 21:17:55,417 WARNING:  * Debugger is active!
+2026-05-15 21:17:55,436 INFO:  * Debugger PIN: 264-060-070
+2026-05-15 21:17:56,338 INFO: 127.0.0.1 - - [15/May/2026 21:17:56] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-15 21:18:03,403 INFO: 127.0.0.1 - - [15/May/2026 21:18:03] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-15 21:18:03,462 INFO: 127.0.0.1 - - [15/May/2026 21:18:03] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:18:13,493 INFO: 127.0.0.1 - - [15/May/2026 21:18:13] "GET /admin/usuarios HTTP/1.1" 200 -
+2026-05-15 21:18:13,548 INFO: 127.0.0.1 - - [15/May/2026 21:18:13] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:18:24,703 INFO: 127.0.0.1 - - [15/May/2026 21:18:24] "GET /admin/vincular-sites HTTP/1.1" 200 -
+2026-05-15 21:26:03,030 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-15 21:26:03,033 INFO: [33mPress CTRL+C to quit[0m
+2026-05-15 21:26:03,038 INFO:  * Restarting with stat
+2026-05-15 21:26:21,229 WARNING:  * Debugger is active!
+2026-05-15 21:26:21,246 INFO:  * Debugger PIN: 264-060-070
+2026-05-15 21:26:22,189 INFO: 127.0.0.1 - - [15/May/2026 21:26:22] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-15 21:26:29,128 INFO: 127.0.0.1 - - [15/May/2026 21:26:29] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-15 21:26:29,195 INFO: 127.0.0.1 - - [15/May/2026 21:26:29] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:26:32,683 INFO: 127.0.0.1 - - [15/May/2026 21:26:32] "GET /admin/usuarios HTTP/1.1" 200 -
+2026-05-15 21:26:32,736 INFO: 127.0.0.1 - - [15/May/2026 21:26:32] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:26:35,394 INFO: 127.0.0.1 - - [15/May/2026 21:26:35] "GET /admin/upload-exe HTTP/1.1" 200 -
+2026-05-15 21:26:35,434 INFO: 127.0.0.1 - - [15/May/2026 21:26:35] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:26:50,348 INFO: 127.0.0.1 - - [15/May/2026 21:26:50] "GET /admin/vincular-sites HTTP/1.1" 200 -
+2026-05-15 21:26:50,384 INFO: 127.0.0.1 - - [15/May/2026 21:26:50] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:27:15,205 INFO: 127.0.0.1 - - [15/May/2026 21:27:15] "GET /anc HTTP/1.1" 200 -
+2026-05-15 21:27:15,261 INFO: 127.0.0.1 - - [15/May/2026 21:27:15] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:28:07,899 INFO: 127.0.0.1 - - [15/May/2026 21:28:07] "GET /anc?editar=81 HTTP/1.1" 200 -
+2026-05-15 21:28:07,931 INFO: 127.0.0.1 - - [15/May/2026 21:28:07] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:28:32,656 INFO: 127.0.0.1 - - [15/May/2026 21:28:32] "[32mPOST /anc HTTP/1.1[0m" 302 -
+2026-05-15 21:28:36,129 INFO: 127.0.0.1 - - [15/May/2026 21:28:36] "GET /anc HTTP/1.1" 200 -
+2026-05-15 21:28:36,180 INFO: 127.0.0.1 - - [15/May/2026 21:28:36] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:28:42,783 INFO: 127.0.0.1 - - [15/May/2026 21:28:42] "GET /admin/usuarios HTTP/1.1" 200 -
+2026-05-15 21:28:42,832 INFO: 127.0.0.1 - - [15/May/2026 21:28:42] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:37:19,945 INFO: 127.0.0.1 - - [15/May/2026 21:37:19] "GET /admin/solicitacoes HTTP/1.1" 200 -
+2026-05-15 21:37:19,996 INFO: 127.0.0.1 - - [15/May/2026 21:37:19] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-15 21:38:39,571 INFO: 127.0.0.1 - - [15/May/2026 21:38:39] "GET /overview HTTP/1.1" 200 -
+2026-05-15 21:38:39,599 INFO: 127.0.0.1 - - [15/May/2026 21:38:39] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -

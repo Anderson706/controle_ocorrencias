@@ -31,13 +31,13 @@ echo [4/4] Gerando executavel...
 pyinstaller cctv_panel.spec
 
 echo.
-if exist "dist\CCTV_ControlPanel\CCTV_ControlPanel.exe" (
+if exist "dist\CCTV_ControlPanel.exe" (
     echo  ============================================
     echo   BUILD CONCLUIDO COM SUCESSO!
-    echo   Executavel: dist\CCTV_ControlPanel\CCTV_ControlPanel.exe
+    echo   Executavel: dist\CCTV_ControlPanel.exe
     echo  ============================================
     echo.
-    explorer dist\CCTV_ControlPanel
+    explorer dist
 ) else (
     echo  [ERRO] Build falhou. Verifique as mensagens acima.
 )
