@@ -1,0 +1,239 @@
+{% extends "base_app.html" %}
+{% block page_title %}Checklist de Câmeras | CCTV Control Panel{% endblock %}
+{% block topbar_title %}📷 Checklist de Câmeras{% endblock %}
+{% block topbar_subtitle %}{{ site }} — Controle de status e histórico de checklists{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('cameras_checklist_novo') }}" class="btn btn-red btn-sm">+ Novo Checklist</a>
+  <a href="{{ url_for('cameras_cadastrar') }}" class="btn btn-soft btn-sm">+ Câmeras</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .kpi-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px; }
+  .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px;
+             box-shadow:var(--shadow); display:flex; flex-direction:column; gap:4px; }
+  .kpi-val{ font-size:28px; font-weight:900; color:var(--text); }
+  .kpi-lbl{ font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.4px; }
+  .kpi-val.green{ color:#16a34a; }
+  .kpi-val.red{ color:var(--dhl-red); }
+
+  .tab-bar{ display:flex; gap:4px; background:#fff; border:1px solid var(--line);
+            border-radius:12px; padding:4px; width:fit-content; margin-bottom:16px; }
+  .tab-btn{ padding:7px 18px; border-radius:9px; font-size:13px; font-weight:700;
+            cursor:pointer; border:none; background:none; color:var(--muted);
+            font-family:inherit; transition:.15s; }
+  .tab-btn.active{ background:var(--dhl-red); color:#fff; }
+  .tab-btn:hover:not(.active){ background:#f3f4f6; color:var(--text); }
+
+  .table-card{ background:#fff; border:1px solid var(--line); border-radius:14px;
+               overflow:hidden; box-shadow:var(--shadow); }
+  .table-card table{ width:100%; border-collapse:collapse; }
+  .table-card th{ padding:10px 14px; text-align:left; font-size:11px; font-weight:800;
+                  color:var(--muted); text-transform:uppercase; letter-spacing:.4px;
+                  background:#f9fafb; border-bottom:1px solid var(--line); }
+  .table-card td{ padding:10px 14px; border-bottom:1px solid var(--line); font-size:13px;
+                  color:var(--text); vertical-align:middle; }
+  .table-card tr:last-child td{ border-bottom:none; }
+  .table-card tr:hover td{ background:#fafafa; }
+
+  .badge{ display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; }
+  .badge-ok  { background:#dcfce7; color:#166534; }
+  .badge-red { background:#fee2e2; color:#991b1b; }
+  .badge-warn{ background:#fff4db; color:#92400e; }
+  .badge-off { background:#f3f4f6; color:#6b7280; }
+
+  .search-bar{ display:flex; gap:10px; margin-bottom:12px; }
+  .search-bar input{ flex:1; padding:9px 13px; border:1px solid var(--line);
+                     border-radius:10px; font-size:13px; font-family:inherit; outline:none; }
+  .search-bar input:focus{ border-color:var(--dhl-red); }
+
+  .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-state p{ font-size:14px; }
+
+  /* modal editar câmera */
+  .modal-edit-body{ display:grid; grid-template-columns:1fr 2fr; gap:12px; }
+</style>
+
+<!-- KPIs -->
+<div class="kpi-row">
+  <div class="kpi-card">
+    <div class="kpi-val">{{ cameras|length }}</div>
+    <div class="kpi-lbl">Total de câmeras</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-val green">{{ ativas }}</div>
+    <div class="kpi-lbl">Ativas</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-val red">{{ inativas }}</div>
+    <div class="kpi-lbl">Desativadas</div>
+  </div>
+</div>
+
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="trocarTab('cams',this)">Câmeras ({{ cameras|length }})</button>
+  <button class="tab-btn" onclick="trocarTab('hist',this)">Histórico ({{ checklists|length }})</button>
+</div>
+
+<!-- Tab: Câmeras -->
+<div id="tab-cams">
+  <div class="search-bar">
+    <input type="text" placeholder="🔍 Buscar câmera por número ou nome..." oninput="filtrar(this.value)">
+  </div>
+  <div class="table-card">
+    {% if cameras %}
+    <table>
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Nome</th>
+          <th>Status</th>
+          <th>Cadastrada em</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tb-cams">
+        {% for cam in cameras %}
+        <tr data-search="{{ cam.numero|lower }} {{ (cam.nome or '')|lower }}">
+          <td><strong>{{ cam.numero }}</strong></td>
+          <td>{{ cam.nome or '<span style="color:var(--muted)">—</span>' }}</td>
+          <td>
+            {% if cam.ativo %}
+              <span class="badge badge-ok">● Ativa</span>
+            {% else %}
+              <span class="badge badge-off">○ Desativada</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--muted)">{{ cam.criado_em.strftime('%d/%m/%Y') if cam.criado_em else '—' }}</td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button class="btn btn-soft btn-sm"
+                onclick="abrirEditar({{ cam.id }},'{{ cam.numero|e }}','{{ (cam.nome or '')|e }}')">✏️</button>
+              <form method="POST" action="{{ url_for('cameras_toggle', cam_id=cam.id) }}" style="margin:0">
+                <button type="submit" class="btn btn-sm {{ 'btn-soft' if cam.ativo else 'btn-green' }}"
+                  onclick="return confirm('{{ 'Desativar' if cam.ativo else 'Ativar' }} câmera {{ cam.numero }}?')">
+                  {{ '⏸ Desativar' if cam.ativo else '▶ Ativar' }}
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p>📷 Nenhuma câmera cadastrada para este site.</p>
+      <a href="{{ url_for('cameras_cadastrar') }}" class="btn btn-red" style="margin-top:12px;display:inline-block">+ Cadastrar Câmeras</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Tab: Histórico -->
+<div id="tab-hist" style="display:none">
+  <div class="table-card">
+    {% if checklists %}
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Hora</th>
+          <th>Operador</th>
+          <th>Total</th>
+          <th>Funcionais</th>
+          <th>Inoperantes</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for chk in checklists %}
+        <tr>
+          <td><strong>{{ chk.data_checklist }}</strong></td>
+          <td>{{ chk.hora_checklist or '—' }}</td>
+          <td>{{ chk.operador or '—' }}</td>
+          <td>{{ chk.total }}</td>
+          <td><span class="badge badge-ok">{{ chk.funcionais }}</span></td>
+          <td>
+            {% if chk.inoperantes > 0 %}
+              <span class="badge badge-red">{{ chk.inoperantes }}</span>
+            {% else %}
+              <span class="badge badge-ok">0</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex;gap:6px;">
+              <a href="{{ url_for('cameras_checklist_ver', chk_id=chk.id) }}" class="btn btn-soft btn-sm">👁 Ver</a>
+              <a href="{{ url_for('cameras_checklist_pdf', chk_id=chk.id) }}" class="btn btn-red btn-sm"
+                 data-filename="checklist_cameras_{{ chk.data_checklist }}.pdf">📄 PDF</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p>Nenhum checklist realizado ainda.</p>
+      <a href="{{ url_for('cameras_checklist_novo') }}" class="btn btn-red" style="margin-top:12px;display:inline-block">+ Novo Checklist</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block modals %}
+<!-- Modal editar câmera -->
+<div class="modal-overlay" id="modal-editar" onclick="if(event.target===this)fecharEditar()">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px">
+    <div class="modal-head">
+      <div><h3>✏️ Editar Câmera</h3></div>
+      <button class="modal-close" onclick="fecharEditar()">✕</button>
+    </div>
+    <form id="form-editar" method="POST" hx-boost="false">
+      <div class="modal-body">
+        <div class="field" style="margin-bottom:14px">
+          <label>Número / Identificador *</label>
+          <input type="text" name="numero" id="edit-numero" required>
+        </div>
+        <div class="field">
+          <label>Nome (opcional)</label>
+          <input type="text" name="nome" id="edit-nome" placeholder="Ex: Entrada Principal, Sorter Sul...">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-soft btn-sm" onclick="fecharEditar()">Cancelar</button>
+        <button type="submit" class="btn btn-red btn-sm">✓ Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function trocarTab(id, btn){
+  document.getElementById('tab-cams').style.display = id==='cams'?'':'none';
+  document.getElementById('tab-hist').style.display = id==='hist'?'':'none';
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function filtrar(q){
+  q = q.toLowerCase();
+  document.querySelectorAll('#tb-cams tr').forEach(tr=>{
+    tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+
+function abrirEditar(id, numero, nome){
+  document.getElementById('edit-numero').value = numero;
+  document.getElementById('edit-nome').value   = nome;
+  document.getElementById('form-editar').action = '/cameras/' + id + '/editar';
+  document.getElementById('modal-editar').classList.add('open');
+}
+function fecharEditar(){ document.getElementById('modal-editar').classList.remove('open'); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') fecharEditar(); });
+</script>
+{% endblock %}

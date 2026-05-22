@@ -1,0 +1,185 @@
+{% extends "base_app.html" %}
+{% block page_title %}Checklist #{{ chk.id }} | CCTV Control Panel{% endblock %}
+{% block topbar_title %}📷 Checklist de Câmeras{% endblock %}
+{% block topbar_subtitle %}{{ chk.site }} — {{ chk.data_checklist }} {{ chk.hora_checklist or '' }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('cameras_checklist_pdf', chk_id=chk.id) }}" class="btn btn-red btn-sm"
+     data-filename="checklist_cameras_{{ chk.data_checklist }}.pdf">📄 Gerar PDF</a>
+  <a href="{{ url_for('cameras_index') }}" class="btn btn-soft btn-sm">← Controle</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .summary-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .sum-card{ background:#fff; border:1px solid var(--line); border-radius:14px;
+             padding:18px 20px; box-shadow:var(--shadow); text-align:center; }
+  .sum-val{ font-size:30px; font-weight:900; }
+  .sum-val.green{ color:#16a34a; }
+  .sum-val.red{ color:#d40511; }
+  .sum-val.blue{ color:#2563eb; }
+  .sum-lbl{ font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase;
+            letter-spacing:.4px; margin-top:4px; }
+
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px;
+         box-shadow:var(--shadow); margin-bottom:16px; overflow:hidden; }
+  .card-hdr{ padding:14px 20px; border-bottom:1px solid var(--line); font-size:14px;
+             font-weight:900; color:var(--text); background:#f9fafb; }
+  .card-body{ padding:16px 20px; }
+
+  .inop-table{ width:100%; border-collapse:collapse; }
+  .inop-table th{ padding:9px 13px; text-align:left; font-size:11px; font-weight:800;
+                  color:var(--muted); text-transform:uppercase; background:#fef2f2;
+                  border-bottom:1px solid #fecaca; }
+  .inop-table td{ padding:9px 13px; border-bottom:1px solid #fef2f2; font-size:13px; vertical-align:top; }
+  .inop-table tr:last-child td{ border-bottom:none; }
+
+  .cam-grid-view{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px; }
+  .cam-chip{ padding:6px 10px; border-radius:8px; font-size:12px; font-weight:700;
+             border:1px solid; display:flex; flex-direction:column; gap:2px; }
+  .cam-chip.func{ background:#dcfce7; border-color:#86efac; color:#166534; }
+  .cam-chip.inop{ background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
+  .cam-chip-num{ font-weight:900; }
+  .cam-chip-nome{ font-size:10px; font-weight:400; opacity:.8; white-space:nowrap;
+                  overflow:hidden; text-overflow:ellipsis; }
+
+  .tab-bar{ display:flex; gap:4px; background:#fff; border:1px solid var(--line);
+            border-radius:12px; padding:4px; width:fit-content; margin-bottom:12px; }
+  .tab-btn{ padding:6px 16px; border-radius:9px; font-size:13px; font-weight:700;
+            cursor:pointer; border:none; background:none; color:var(--muted);
+            font-family:inherit; transition:.15s; }
+  .tab-btn.active{ background:var(--dhl-red); color:#fff; }
+</style>
+
+<!-- KPIs -->
+{% set pct_func = (chk.funcionais / chk.total * 100)|round(1) if chk.total else 0 %}
+<div class="summary-grid">
+  <div class="sum-card">
+    <div class="sum-val blue">{{ chk.total }}</div>
+    <div class="sum-lbl">Total</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val green">{{ chk.funcionais }}</div>
+    <div class="sum-lbl">Funcionais ({{ pct_func }}%)</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val red">{{ chk.inoperantes }}</div>
+    <div class="sum-lbl">Inoperantes</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-val {{ 'green' if pct_func >= 90 else 'red' if pct_func < 70 else '' }}" style="{{ '' if pct_func >= 70 and pct_func < 90 else '' }}">
+      {{ 'Ótimo' if pct_func >= 90 else 'Crítico' if pct_func < 70 else 'Atenção' }}
+    </div>
+    <div class="sum-lbl">Status Geral</div>
+  </div>
+</div>
+
+<!-- Info do checklist -->
+<div class="card">
+  <div class="card-hdr">📋 Informações do Checklist</div>
+  <div class="card-body">
+    <div class="row">
+      <div class="field">
+        <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Site</label>
+        <div style="font-size:14px;font-weight:700;margin-top:4px">{{ chk.site }}</div>
+      </div>
+      <div class="field">
+        <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Data / Hora</label>
+        <div style="font-size:14px;font-weight:700;margin-top:4px">{{ chk.data_checklist }} {{ chk.hora_checklist or '' }}</div>
+      </div>
+      <div class="field">
+        <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Operador</label>
+        <div style="font-size:14px;font-weight:700;margin-top:4px">{{ chk.operador or '—' }}</div>
+      </div>
+    </div>
+    {% if chk.tratativa %}
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+      <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Tratativa</label>
+      <div style="font-size:13px;margin-top:6px;line-height:1.6">{{ chk.tratativa }}</div>
+    </div>
+    {% endif %}
+    {% if chk.anexo_nome %}
+    <div style="margin-top:12px">
+      <a href="{{ url_for('cameras_checklist_anexo', chk_id=chk.id) }}" class="btn btn-soft btn-sm">
+        📎 Baixar Anexo: {{ chk.anexo_nome }}
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Câmeras inoperantes -->
+{% if inoperantes %}
+<div class="card">
+  <div class="card-hdr" style="color:#991b1b;background:#fef2f2">
+    ⚠️ Câmeras Inoperantes ({{ inoperantes|length }})
+  </div>
+  <div class="card-body" style="padding:0">
+    <table class="inop-table">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Nome</th>
+          <th>Motivo / Observação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in inoperantes %}
+        <tr>
+          <td><strong>{{ item.camera.numero }}</strong></td>
+          <td>{{ item.camera.nome or '—' }}</td>
+          <td style="color:var(--muted)">{{ item.motivo or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Listagem completa -->
+<div class="card">
+  <div class="card-hdr">📷 Todas as Câmeras</div>
+  <div class="card-body">
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="trocarViewTab('todas',this)">Todas ({{ itens|length }})</button>
+      <button class="tab-btn" onclick="trocarViewTab('func',this)">Funcionais ({{ chk.funcionais }})</button>
+      {% if chk.inoperantes %}<button class="tab-btn" onclick="trocarViewTab('inop',this)">Inoperantes ({{ chk.inoperantes }})</button>{% endif %}
+    </div>
+    <div class="cam-grid-view" id="grid-cams">
+      {% for item in itens %}
+      <div class="cam-chip {{ 'func' if item.status == 'FUNCIONAL' else 'inop' }}"
+           data-status="{{ item.status }}"
+           title="{{ '✓ Funcional' if item.status == 'FUNCIONAL' else ('✕ Inoperante' + (': ' + item.motivo if item.motivo else '')) }}">
+        <div class="cam-chip-num">{{ item.camera.numero }}</div>
+        {% if item.camera.nome %}<div class="cam-chip-nome">{{ item.camera.nome }}</div>{% endif %}
+        <div style="font-size:10px;font-weight:600;margin-top:2px">
+          {{ '✓' if item.status == 'FUNCIONAL' else '✕ Inop.' }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:16px;display:flex;gap:10px">
+  <a href="{{ url_for('cameras_checklist_pdf', chk_id=chk.id) }}" class="btn btn-red"
+     data-filename="checklist_cameras_{{ chk.data_checklist }}.pdf">📄 Gerar PDF Completo</a>
+  <a href="{{ url_for('cameras_checklist_novo') }}" class="btn btn-soft">+ Novo Checklist</a>
+  <a href="{{ url_for('cameras_index') }}" class="btn btn-soft">← Controle</a>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function trocarViewTab(modo, btn){
+  document.querySelectorAll('#grid-cams .cam-chip').forEach(el => {
+    var s = el.dataset.status;
+    if(modo === 'todas') el.style.display = '';
+    else if(modo === 'func') el.style.display = s === 'FUNCIONAL' ? '' : 'none';
+    else if(modo === 'inop') el.style.display = s === 'INOPERANTE' ? '' : 'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+{% endblock %}

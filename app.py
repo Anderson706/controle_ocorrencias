@@ -13,11 +13,6 @@ from io import BytesIO
 from datetime import datetime
 from functools import wraps
 import oracledb
-from docx.shared import Cm, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, send_file, current_app
@@ -29,28 +24,48 @@ from sqlalchemy import func, case, text
 from datetime import date
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from docx import Document
-from docx.shared import Cm, Inches, Pt, RGBColor
-from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment as XLAlignment
-from openpyxl.utils import get_column_letter as _xl_col_letter
 from PIL import Image as _PILImage
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm as rcm
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
-from reportlab.lib.utils import ImageReader
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer,
-    Image as RLImage, Table, TableStyle, PageBreak
-)
+# ── Importações pesadas — carregadas só na primeira chamada ───────────────────
+def _import_docx():
+    """Lazy-load python-docx no namespace global (no-op após a primeira chamada)."""
+    global Document, Cm, Inches, Pt, RGBColor
+    global WD_ALIGN_PARAGRAPH, WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+    global OxmlElement, qn
+    from docx import Document
+    from docx.shared import Cm, Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    globals()['_import_docx'] = lambda: None
+
+
+def _import_openpyxl():
+    """Lazy-load openpyxl no namespace global (no-op após a primeira chamada)."""
+    global Workbook, Font, PatternFill, XLAlignment, _xl_col_letter
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment as XLAlignment
+    from openpyxl.utils import get_column_letter as _xl_col_letter
+    globals()['_import_openpyxl'] = lambda: None
+
+
+def _import_reportlab():
+    """Lazy-load reportlab no namespace global (no-op após a primeira chamada)."""
+    global colors, A4, getSampleStyleSheet, ParagraphStyle, rcm
+    global TA_CENTER, TA_RIGHT, ImageReader
+    global SimpleDocTemplate, Paragraph, Spacer, RLImage, Table, TableStyle, PageBreak
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import cm as rcm
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer,
+        Image as RLImage, Table, TableStyle, PageBreak
+    )
+    globals()['_import_reportlab'] = lambda: None
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
@@ -72,14 +87,43 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB
 app.config["SESSION_COOKIE_HTTPONLY"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 10,
-    "max_overflow": 20,
-    "pool_recycle": 900,
-    "pool_pre_ping": False,
-    "pool_timeout": 20,
+    "pool_size":    3,      # app desktop single-user — pool menor = conexão mais rápida
+    "max_overflow": 3,
+    "pool_recycle": 1800,   # recicla conexão a cada 30 min
+    "pool_pre_ping": True,  # detecta conexões mortas antes de usar
+    "pool_timeout": 30,
 }
 
 db = SQLAlchemy(app)
+
+# =========================
+# PERFORMANCE — cache de estáticos + gzip
+# =========================
+import gzip as _gzip
+
+@app.after_request
+def _performance_headers(response):
+    # Cache de 1 hora para arquivos estáticos (JS, CSS, imagens)
+    if request.path.startswith('/static/'):
+        response.headers['Cache-Control'] = 'public, max-age=3600, stale-while-revalidate=600'
+        return response
+
+    # Gzip para respostas HTML/JSON (só quando o cliente aceita)
+    if (response.status_code in (200, 201)
+            and not response.direct_passthrough
+            and 'Content-Encoding' not in response.headers
+            and 'gzip' in request.headers.get('Accept-Encoding', '').lower()):
+        ct = response.content_type or ''
+        if any(x in ct for x in ('text/html', 'application/json', 'text/css', 'javascript')):
+            data = response.get_data()
+            if len(data) > 800:          # não comprime respostas muito pequenas
+                compressed = _gzip.compress(data, compresslevel=5)
+                if len(compressed) < len(data):
+                    response.set_data(compressed)
+                    response.headers['Content-Encoding'] = 'gzip'
+                    response.headers['Content-Length']   = len(compressed)
+                    response.headers['Vary'] = 'Accept-Encoding'
+    return response
 
 # =========================
 # LOGGING DE ERROS
@@ -106,7 +150,7 @@ def _erro_500(e):
 # =========================
 # CONTROLE DE VERSÃO
 # =========================
-APP_VERSION = "2.5"
+APP_VERSION = "3.0"
 
 SMTP_HOST     = "smtp.dhl.com"
 SMTP_PORT     = 25
@@ -382,6 +426,322 @@ class ImagemAnaliseInvestigativa(db.Model):
         return raw or ""
 
 
+class NaturezaOcorrencia(db.Model):
+    __tablename__ = "NATUREZAS_OCORRENCIA"
+    id   = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    nome = db.Column(db.String(120), nullable=False, unique=True)
+
+    def __repr__(self):
+        return f"<NaturezaOcorrencia {self.nome}>"
+
+
+_NATUREZAS_PADRAO = [
+    "Acidente", "Agressão", "Armazenamento incorreto", "Assédio",
+    "Ato inseguro", "Avaria de produto", "Colisão", "Condição insegura",
+    "Dano ao Patrimônio", "Desinteligência", "Desvio de conduta",
+    "Desvio de processo", "Falta de volume", "Furto",
+    "Pacote no descarte", "Pacote violado", "Roubo", "Vandalismo",
+]
+
+
+def _get_naturezas():
+    """Retorna lista de nomes ordenados da tabela NATUREZAS_OCORRENCIA.
+    Fallback para _NATUREZAS_PADRAO se a tabela ainda não existir."""
+    try:
+        return [n.nome for n in NaturezaOcorrencia.query.order_by(NaturezaOcorrencia.nome).all()]
+    except Exception:
+        return sorted(_NATUREZAS_PADRAO)
+
+
+# =========================
+# CHECKLIST DE CÂMERAS — MODELS
+# =========================
+
+class Camera(db.Model):
+    __tablename__ = "CAMERAS"
+    id        = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    site      = db.Column(db.String(100), nullable=False, index=True)
+    numero    = db.Column(db.String(50),  nullable=False)   # identificador: "CAM-001", "01", etc.
+    nome      = db.Column(db.String(120), nullable=True)    # nome amigável opcional
+    ativo     = db.Column(db.Integer,     default=1)        # 1=ativa  0=desativada
+    criado_em = db.Column(db.DateTime,    default=datetime.utcnow)
+
+
+class ChecklistCamera(db.Model):
+    __tablename__ = "CHECKLIST_CAMERAS"
+    id              = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    site            = db.Column(db.String(100), nullable=False)
+    data_checklist  = db.Column(db.String(10),  nullable=False)   # YYYY-MM-DD
+    hora_checklist  = db.Column(db.String(5))                     # HH:MM
+    operador        = db.Column(db.String(120))
+    total           = db.Column(db.Integer, default=0)
+    funcionais      = db.Column(db.Integer, default=0)
+    inoperantes     = db.Column(db.Integer, default=0)
+    tratativa       = db.Column(db.Text)
+    anexo_nome      = db.Column(db.String(255))
+    anexo_dados     = db.Column(db.LargeBinary)
+    criado_em       = db.Column(db.DateTime, default=datetime.utcnow)
+    itens           = db.relationship("ChecklistCameraItem", backref="checklist",
+                                      lazy="dynamic", cascade="all, delete-orphan")
+
+
+class ChecklistCameraItem(db.Model):
+    __tablename__ = "CHECKLIST_CAMERA_ITEM"
+    id           = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    checklist_id = db.Column(db.Integer, db.ForeignKey("CHECKLIST_CAMERAS.id"), nullable=False)
+    camera_id    = db.Column(db.Integer, db.ForeignKey("CAMERAS.id"), nullable=False)
+    status       = db.Column(db.String(20), nullable=False, default="FUNCIONAL")
+    motivo       = db.Column(db.Text)
+    camera       = db.relationship("Camera")
+
+
+# =========================
+# CHECKLIST DE CÂMERAS — PDF
+# =========================
+
+def _gerar_pdf_checklist_cameras(chk_id):
+    """Gera PDF profissional do checklist de câmeras.
+    Suporta 1000+ câmeras com layout compacto multi-coluna."""
+    _import_reportlab()
+
+    chk    = ChecklistCamera.query.get_or_404(chk_id)
+    itens  = chk.itens.order_by(ChecklistCameraItem.id).all()
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=1.5*rcm, rightMargin=1.5*rcm,
+        topMargin=2*rcm, bottomMargin=2*rcm,
+        title=f"Checklist Câmeras — {chk.site} — {chk.data_checklist}",
+    )
+
+    W, H = A4
+    usable_w = W - 3*rcm   # ~174mm
+
+    # ── paleta ──────────────────────────────────────────────────────────────
+    C_RED    = colors.HexColor("#d40511")
+    C_DARK   = colors.HexColor("#1f2937")
+    C_GREEN  = colors.HexColor("#16a34a")
+    C_AMBER  = colors.HexColor("#d97706")
+    C_YELW   = colors.HexColor("#ffcc00")
+    C_BGRED  = colors.HexColor("#fee2e2")
+    C_BGGRN  = colors.HexColor("#dcfce7")
+    C_BGLT   = colors.HexColor("#f8fafc")
+    C_LINE   = colors.HexColor("#e5e7eb")
+
+    styles = getSampleStyleSheet()
+    sN = ParagraphStyle("N",  fontName="Helvetica",      fontSize=8,  leading=10, textColor=C_DARK)
+    sB = ParagraphStyle("B",  fontName="Helvetica-Bold", fontSize=8,  leading=10, textColor=C_DARK)
+    sR = ParagraphStyle("R",  fontName="Helvetica-Bold", fontSize=8,  leading=10, textColor=C_RED)
+    sG = ParagraphStyle("G",  fontName="Helvetica-Bold", fontSize=8,  leading=10, textColor=C_GREEN)
+    sSm= ParagraphStyle("Sm", fontName="Helvetica",      fontSize=7,  leading=9,  textColor=colors.HexColor("#6b7280"))
+    sIt= ParagraphStyle("It", fontName="Helvetica-Oblique", fontSize=7, leading=9, textColor=colors.HexColor("#6b7280"))
+
+    story = []
+
+    # ═══════════════════════════════════════════════════════════════
+    # CABEÇALHO / CAPA
+    # ═══════════════════════════════════════════════════════════════
+    pct_func = round(chk.funcionais / chk.total * 100, 1) if chk.total else 0
+    pct_inop = round(chk.inoperantes / chk.total * 100, 1) if chk.total else 0
+
+    hdr_data = [[
+        Paragraph("<b><font color='#d40511' size=14>CHECKLIST DE CÂMERAS</font></b><br/>"
+                  f"<font size=9 color='#6b7280'>{chk.site} &nbsp;|&nbsp; "
+                  f"{chk.data_checklist} &nbsp;|&nbsp; {chk.hora_checklist or ''}</font>", styles["Normal"]),
+        Paragraph(f"<b>Operador:</b> {chk.operador or '—'}", sN),
+    ]]
+    hdr_tbl = Table(hdr_data, colWidths=[usable_w*0.65, usable_w*0.35])
+    hdr_tbl.setStyle(TableStyle([
+        ("BACKGROUND",  (0,0), (-1,-1), C_DARK),
+        ("TEXTCOLOR",   (0,0), (-1,-1), colors.white),
+        ("PADDING",     (0,0), (-1,-1), 10),
+        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
+        ("ROUNDEDCORNERS", [6,6,6,6]),
+    ]))
+    story.append(hdr_tbl)
+    story.append(Spacer(1, 0.4*rcm))
+
+    # ── KPI Summary bar ──────────────────────────────────────────────────────
+    kpi_data = [[
+        Paragraph(f"<b>{chk.total}</b><br/><font size=7 color='#6b7280'>Total</font>", sB),
+        Paragraph(f"<b><font color='#16a34a'>{chk.funcionais}</font></b><br/>"
+                  f"<font size=7 color='#6b7280'>Funcionais ({pct_func}%)</font>", sB),
+        Paragraph(f"<b><font color='#d40511'>{chk.inoperantes}</font></b><br/>"
+                  f"<font size=7 color='#6b7280'>Inoperantes ({pct_inop}%)</font>", sB),
+        Paragraph(f"<b><font color='{'#16a34a' if pct_func>=90 else '#d97706' if pct_func>=70 else '#d40511'}'>"
+                  f"{'Ótimo' if pct_func>=90 else 'Atenção' if pct_func>=70 else 'Crítico'}</font></b><br/>"
+                  f"<font size=7 color='#6b7280'>Status Geral</font>", sB),
+    ]]
+    kpi_tbl = Table(kpi_data, colWidths=[usable_w/4]*4)
+    kpi_tbl.setStyle(TableStyle([
+        ("BACKGROUND",  (0,0), (-1,-1), C_BGLT),
+        ("BOX",         (0,0), (-1,-1), 0.5, C_LINE),
+        ("INNERGRID",   (0,0), (-1,-1), 0.5, C_LINE),
+        ("ALIGN",       (0,0), (-1,-1), "CENTER"),
+        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
+        ("PADDING",     (0,0), (-1,-1), 8),
+    ]))
+    story.append(kpi_tbl)
+    story.append(Spacer(1, 0.35*rcm))
+
+    # ── Seção de inoperantes (com motivo) ────────────────────────────────────
+    inoperantes = [i for i in itens if i.status == "INOPERANTE"]
+    if inoperantes:
+        story.append(Paragraph(
+            "<b><font color='#d40511'>▸ CÂMERAS INOPERANTES</font></b>",
+            ParagraphStyle("SI", fontName="Helvetica-Bold", fontSize=9, leading=12,
+                           textColor=C_RED, spaceBefore=4, spaceAfter=4)
+        ))
+        inop_rows = [[
+            Paragraph("<b>Câmera</b>", sB),
+            Paragraph("<b>Nome</b>", sB),
+            Paragraph("<b>Motivo / Observação</b>", sB),
+        ]]
+        for item in inoperantes:
+            cam = item.camera
+            inop_rows.append([
+                Paragraph(cam.numero, sR),
+                Paragraph(cam.nome or "—", sSm),
+                Paragraph(item.motivo or "—", sIt),
+            ])
+        inop_tbl = Table(inop_rows,
+                         colWidths=[usable_w*0.14, usable_w*0.24, usable_w*0.62],
+                         repeatRows=1)
+        inop_tbl.setStyle(TableStyle([
+            ("BACKGROUND",  (0,0), (-1,0),  C_RED),
+            ("TEXTCOLOR",   (0,0), (-1,0),  colors.white),
+            ("BACKGROUND",  (0,1), (-1,-1), C_BGRED),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [C_BGRED, colors.HexColor("#fff5f5")]),
+            ("BOX",         (0,0), (-1,-1), 0.5, C_RED),
+            ("INNERGRID",   (0,0), (-1,-1), 0.3, colors.HexColor("#fecaca")),
+            ("ALIGN",       (0,0), (-1,-1), "LEFT"),
+            ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
+            ("PADDING",     (0,0), (-1,-1), 5),
+            ("WORDWRAP",    (2,1), (2,-1),  True),
+        ]))
+        story.append(inop_tbl)
+        story.append(Spacer(1, 0.35*rcm))
+
+    # ── Tratativa ────────────────────────────────────────────────────────────
+    if chk.tratativa:
+        story.append(Paragraph(
+            "<b><font color='#1f2937'>▸ TRATATIVA / PLANO DE AÇÃO</font></b>",
+            ParagraphStyle("ST", fontName="Helvetica-Bold", fontSize=9, leading=12,
+                           textColor=C_DARK, spaceBefore=4, spaceAfter=4)
+        ))
+        trat_data = [[Paragraph(chk.tratativa, sN)]]
+        trat_tbl  = Table(trat_data, colWidths=[usable_w])
+        trat_tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,-1), C_BGLT),
+            ("BOX",        (0,0), (-1,-1), 0.5, C_LINE),
+            ("PADDING",    (0,0), (-1,-1), 8),
+        ]))
+        story.append(trat_tbl)
+        story.append(Spacer(1, 0.35*rcm))
+
+    if chk.anexo_nome:
+        story.append(Paragraph(f"📎 Anexo: {chk.anexo_nome}", sSm))
+        story.append(Spacer(1, 0.2*rcm))
+
+    # ═══════════════════════════════════════════════════════════════
+    # LISTAGEM COMPLETA — layout 3 colunas (câmera por câmera)
+    # ═══════════════════════════════════════════════════════════════
+    story.append(PageBreak())
+    story.append(Paragraph(
+        "<b><font color='#1f2937'>▸ LISTAGEM COMPLETA DAS CÂMERAS</font></b>",
+        ParagraphStyle("SL", fontName="Helvetica-Bold", fontSize=9, leading=12,
+                       textColor=C_DARK, spaceBefore=0, spaceAfter=6)
+    ))
+
+    # Cabeçalho da tabela multi-coluna (3 câmeras por linha)
+    COLS = 3
+    # colWidths por bloco: Num(18mm) | Nome(30mm) | Status(17mm) = 65mm  × 3 = 195mm → ajusta
+    bw_num  = usable_w * 0.11
+    bw_nome = usable_w * 0.21
+    bw_st   = usable_w * 0.13
+    col_ws  = ([bw_num, bw_nome, bw_st] * COLS)
+
+    cam_hdr = (
+        [Paragraph("<b>Câm.</b>", sB), Paragraph("<b>Nome</b>", sB), Paragraph("<b>Status</b>", sB)] * COLS
+    )
+    cam_rows = [cam_hdr]
+
+    chunk = []
+    for item in itens:
+        cam   = item.camera
+        s_par = Paragraph("● FUNCIONAL" if item.status == "FUNCIONAL" else "● INOP.", sG if item.status == "FUNCIONAL" else sR)
+        chunk.append([
+            Paragraph(cam.numero, sN),
+            Paragraph(cam.nome or "—", sSm),
+            s_par,
+        ])
+        if len(chunk) == COLS:
+            cam_rows.append([c for cell in chunk for c in cell])
+            chunk = []
+
+    if chunk:  # última linha incompleta → preenche células vazias
+        while len(chunk) < COLS:
+            chunk.append([Paragraph("", sN), Paragraph("", sN), Paragraph("", sN)])
+        cam_rows.append([c for cell in chunk for c in cell])
+
+    cam_tbl = Table(cam_rows, colWidths=col_ws, repeatRows=1)
+
+    # estilos base
+    ts = [
+        ("BACKGROUND",     (0,0), (-1,0),  C_DARK),
+        ("TEXTCOLOR",      (0,0), (-1,0),  colors.white),
+        ("FONT",           (0,0), (-1,0),  "Helvetica-Bold", 7),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, C_BGLT]),
+        ("BOX",            (0,0), (-1,-1), 0.4, C_LINE),
+        ("INNERGRID",      (0,0), (-1,-1), 0.3, C_LINE),
+        ("ALIGN",          (0,0), (-1,-1), "LEFT"),
+        ("VALIGN",         (0,0), (-1,-1), "MIDDLE"),
+        ("PADDING",        (0,0), (-1,-1), 4),
+        ("FONTSIZE",       (0,1), (-1,-1), 7),
+    ]
+
+    # destacar linhas com câmera INOPERANTE — vermelho suave
+    for row_idx, item in enumerate(itens, start=1):
+        if item.status == "INOPERANTE":
+            # cada item ocupa 1/COLS de uma linha — localiza a linha e coluna correta
+            tbl_row = (row_idx - 1) // COLS + 1
+            col_off = ((row_idx - 1) % COLS) * 3
+            ts.append(("BACKGROUND", (col_off, tbl_row), (col_off+2, tbl_row), C_BGRED))
+
+    cam_tbl.setStyle(TableStyle(ts))
+    story.append(cam_tbl)
+
+    # ── rodapé de assinatura ─────────────────────────────────────────────────
+    story.append(Spacer(1, 0.8*rcm))
+    sig_data = [[
+        Paragraph(f"<b>Operador:</b> {chk.operador or '—'}", sN),
+        Paragraph("Assinatura: ______________________________", sN),
+        Paragraph(f"<b>Data/Hora:</b> {chk.data_checklist} {chk.hora_checklist or ''}", sN),
+    ]]
+    sig_tbl = Table(sig_data, colWidths=[usable_w*0.34, usable_w*0.4, usable_w*0.26])
+    sig_tbl.setStyle(TableStyle([
+        ("BOX",     (0,0), (-1,-1), 0.5, C_LINE),
+        ("INNERGRID",(0,0),(-1,-1), 0.5, C_LINE),
+        ("PADDING", (0,0), (-1,-1), 8),
+        ("VALIGN",  (0,0), (-1,-1), "MIDDLE"),
+    ]))
+    story.append(sig_tbl)
+
+    def _footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(colors.HexColor("#9ca3af"))
+        canvas.drawString(1.5*rcm, 1.2*rcm, f"DHL Security — CCTV Control Panel — Checklist: {chk.site} / {chk.data_checklist}")
+        canvas.drawRightString(W - 1.5*rcm, 1.2*rcm, f"Pág. {doc.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    buf.seek(0)
+    return buf
+
+
 class ANC(db.Model):
     __tablename__ = "ancs"
 
@@ -586,6 +946,7 @@ def _desenhar_lgpd(canvas, x_ini, y_ini, font_size=5.5, leading=7.5):
 
 def gerar_pdf_anc_bytes(anc):
     """Gera PDF do ANC no formato oficial DHL Security."""
+    _import_reportlab()
     buffer  = BytesIO()
     BLACK   = colors.black
     YELLOW  = colors.HexColor("#FFCC00")
@@ -806,6 +1167,7 @@ def gerar_pdf_anc_bytes(anc):
 
 def gerar_docx_de_registro(registro):
     """Gera DOCX a partir dos campos salvos no banco (sem imagens)."""
+    _import_docx()
     doc = Document()
     for sec in doc.sections:
         sec.left_margin  = Cm(1.7)
@@ -980,6 +1342,7 @@ def gerar_docx_de_registro(registro):
 
 def gerar_pdf_analise_bytes(form_data, evidencias_bytes):
     """PDF corporativo DHL da análise investigativa."""
+    _import_reportlab()
     buffer = BytesIO()
 
     DHL_RED    = colors.HexColor("#D40511")
@@ -1213,6 +1576,200 @@ def perfil_required(*perfis):
             return func(*args, **kwargs)
         return wrapper
     return decorator
+
+
+# =========================
+# CHECKLIST DE CÂMERAS — ROTAS
+# =========================
+
+@app.route("/cameras")
+@login_required
+def cameras_index():
+    site = session.get("user_site") or ""
+    cameras = Camera.query.filter_by(site=site).order_by(Camera.ativo.desc(), Camera.numero).all()
+    checklists = (ChecklistCamera.query
+                  .filter_by(site=site)
+                  .order_by(ChecklistCamera.criado_em.desc())
+                  .limit(50).all())
+    ativas   = sum(1 for c in cameras if c.ativo)
+    inativas = sum(1 for c in cameras if not c.ativo)
+    return render_template("cameras.html",
+        cameras=cameras, checklists=checklists,
+        ativas=ativas, inativas=inativas, site=site)
+
+
+@app.route("/cameras/cadastrar", methods=["GET", "POST"])
+@login_required
+def cameras_cadastrar():
+    site = session.get("user_site") or ""
+    if request.method == "POST":
+        modo = request.form.get("modo", "individual")
+        criados = 0
+        erros   = []
+        if modo == "lote":
+            rng     = (request.form.get("range_lote") or "").strip()
+            prefixo = (request.form.get("prefixo_lote") or "CAM").strip()
+            try:
+                partes = rng.split("-")
+                ini, fim = int(partes[0]), int(partes[1])
+                pad = max(len(partes[0]), len(partes[1]))
+                for n in range(ini, fim + 1):
+                    num = f"{prefixo}-{str(n).zfill(pad)}"
+                    if not Camera.query.filter_by(site=site, numero=num).first():
+                        db.session.add(Camera(site=site, numero=num))
+                        criados += 1
+                db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                flash(f"Erro ao criar lote: {exc}", "danger")
+                return redirect(url_for("cameras_cadastrar"))
+        else:
+            numeros = request.form.getlist("numero[]")
+            nomes   = request.form.getlist("nome[]")
+            for num, nome in zip(numeros, nomes):
+                num  = (num or "").strip()
+                nome = (nome or "").strip() or None
+                if not num:
+                    continue
+                if Camera.query.filter_by(site=site, numero=num).first():
+                    erros.append(f"{num} já existe")
+                    continue
+                db.session.add(Camera(site=site, numero=num, nome=nome))
+                criados += 1
+            try:
+                db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                flash(f"Erro ao salvar: {exc}", "danger")
+                return redirect(url_for("cameras_cadastrar"))
+
+        flash(f"✓ {criados} câmera(s) cadastrada(s) com sucesso!", "success")
+        if erros:
+            flash(f"⚠️ {len(erros)} câmera(s) ignorada(s) (já existiam): {', '.join(erros[:5])}", "warning")
+        return redirect(url_for("cameras_index"))
+
+    return render_template("cameras_cadastro.html", site=site)
+
+
+@app.route("/cameras/<int:cam_id>/toggle", methods=["POST"])
+@login_required
+def cameras_toggle(cam_id):
+    site = session.get("user_site") or ""
+    cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
+    cam.ativo = 0 if cam.ativo else 1
+    db.session.commit()
+    flash(f"Câmera {cam.numero} {'ativada' if cam.ativo else 'desativada'}.", "success")
+    return redirect(url_for("cameras_index"))
+
+
+@app.route("/cameras/<int:cam_id>/editar", methods=["POST"])
+@login_required
+def cameras_editar(cam_id):
+    site = session.get("user_site") or ""
+    cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
+    cam.numero = (request.form.get("numero") or cam.numero).strip()
+    cam.nome   = (request.form.get("nome") or "").strip() or None
+    db.session.commit()
+    flash(f"Câmera {cam.numero} atualizada.", "success")
+    return redirect(url_for("cameras_index"))
+
+
+@app.route("/cameras/checklist/novo")
+@login_required
+def cameras_checklist_novo():
+    site    = session.get("user_site") or ""
+    cameras = Camera.query.filter_by(site=site, ativo=1).order_by(Camera.numero).all()
+    if not cameras:
+        flash("Nenhuma câmera ativa cadastrada para este site. Cadastre câmeras primeiro.", "warning")
+        return redirect(url_for("cameras_index"))
+    agora = datetime.now()
+    return render_template("cameras_checklist.html",
+        cameras=cameras, site=site,
+        data_hoje=agora.strftime("%Y-%m-%d"),
+        hora_agora=agora.strftime("%H:%M"),
+        operador=session.get("user_nome", ""))
+
+
+@app.route("/cameras/checklist/salvar", methods=["POST"])
+@login_required
+def cameras_checklist_salvar():
+    site           = session.get("user_site") or ""
+    cameras_ativas = Camera.query.filter_by(site=site, ativo=1).all()
+    data      = (request.form.get("data_checklist") or "").strip()
+    hora      = (request.form.get("hora_checklist") or "").strip()
+    operador  = (request.form.get("operador") or "").strip()
+    tratativa = (request.form.get("tratativa") or "").strip()
+    total       = len(cameras_ativas)
+    inoperantes = 0
+    itens_dados = []
+    for cam in cameras_ativas:
+        status = request.form.get(f"status_{cam.id}", "FUNCIONAL")
+        motivo = (request.form.get(f"motivo_{cam.id}") or "").strip() if status == "INOPERANTE" else ""
+        if status == "INOPERANTE":
+            inoperantes += 1
+        itens_dados.append((cam.id, status, motivo))
+    funcionais  = total - inoperantes
+    anexo_nome  = None
+    anexo_dados = None
+    f = request.files.get("anexo")
+    if f and f.filename:
+        from werkzeug.utils import secure_filename
+        anexo_nome  = secure_filename(f.filename)
+        anexo_dados = f.read()
+    chk = ChecklistCamera(
+        site=site, data_checklist=data, hora_checklist=hora,
+        operador=operador, tratativa=tratativa,
+        total=total, funcionais=funcionais, inoperantes=inoperantes,
+        anexo_nome=anexo_nome, anexo_dados=anexo_dados,
+    )
+    try:
+        db.session.add(chk)
+        db.session.flush()
+        for cam_id_item, status, motivo in itens_dados:
+            db.session.add(ChecklistCameraItem(
+                checklist_id=chk.id, camera_id=cam_id_item,
+                status=status, motivo=motivo or None
+            ))
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"Erro ao salvar checklist: {exc}", "danger")
+        return redirect(url_for("cameras_checklist_novo"))
+    flash("✓ Checklist salvo com sucesso!", "success")
+    return redirect(url_for("cameras_checklist_ver", chk_id=chk.id))
+
+
+@app.route("/cameras/checklist/<int:chk_id>")
+@login_required
+def cameras_checklist_ver(chk_id):
+    site = session.get("user_site") or ""
+    chk  = ChecklistCamera.query.filter_by(id=chk_id, site=site).first_or_404()
+    itens       = chk.itens.order_by(ChecklistCameraItem.id).all()
+    inoperantes = [i for i in itens if i.status == "INOPERANTE"]
+    return render_template("cameras_checklist_ver.html",
+        chk=chk, itens=itens, inoperantes=inoperantes, site=site)
+
+
+@app.route("/cameras/checklist/<int:chk_id>/pdf")
+@login_required
+def cameras_checklist_pdf(chk_id):
+    site = session.get("user_site") or ""
+    ChecklistCamera.query.filter_by(id=chk_id, site=site).first_or_404()
+    buf  = _gerar_pdf_checklist_cameras(chk_id)
+    nome = f"checklist_cameras_{chk_id}.pdf"
+    return send_file(buf, as_attachment=True, download_name=nome, mimetype="application/pdf")
+
+
+@app.route("/cameras/checklist/<int:chk_id>/anexo")
+@login_required
+def cameras_checklist_anexo(chk_id):
+    site = session.get("user_site") or ""
+    chk  = ChecklistCamera.query.filter_by(id=chk_id, site=site).first_or_404()
+    if not chk.anexo_dados:
+        flash("Sem anexo.", "warning")
+        return redirect(url_for("cameras_checklist_ver", chk_id=chk_id))
+    return send_file(BytesIO(chk.anexo_dados), as_attachment=True,
+                     download_name=chk.anexo_nome or "anexo")
 
 
 def normalizar_status(valor):
@@ -2090,6 +2647,7 @@ def anc():
         modo_edicao=modo_edicao, registro_edicao=registro_edicao,
         agora=datetime.now().strftime("%Y-%m-%dT%H:%M"),
         hora_atual=datetime.now().strftime("%H:%M"),
+        naturezas=_get_naturezas(),
     )
 
 
@@ -2159,9 +2717,39 @@ def excluir_anc(anc_id):
     return redirect(url_for("anc"))
 
 
+@app.route("/nova-anc")
+@login_required
+def nova_anc():
+    is_admin     = (session.get("user_perfil") or "").upper() == "ADMIN"
+    site_usuario = session.get("user_site") or None
+    hora_atual   = datetime.now().strftime("%H:%M")
+
+    registro_edicao = None
+    modo_edicao     = False
+    editar_id = request.args.get("editar", type=int)
+    if editar_id:
+        registro_edicao = ANC.query.get_or_404(editar_id)
+        _can_edit = is_admin or registro_edicao.criado_por == session.get("user_nome", "")
+        _is_closed = (registro_edicao.status or "").upper() == "CONCLUÍDO"
+        if not _can_edit:
+            flash("Você não tem permissão para editar esta ANC.", "danger")
+            return redirect(url_for("anc"))
+        if _is_closed:
+            flash("Esta ANC já foi concluída e não pode ser editada.", "warning")
+            return redirect(url_for("anc"))
+        modo_edicao = True
+
+    return render_template("nova_anc.html",
+        site_usuario=site_usuario, hora_atual=hora_atual,
+        registro_edicao=registro_edicao, modo_edicao=modo_edicao,
+        naturezas=_get_naturezas(),
+    )
+
+
 @app.route("/exportar/anc/excel")
 @login_required
 def exportar_anc_excel():
+    _import_openpyxl()
     is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
     site_usuario = session.get("user_site") or None
 
@@ -2977,6 +3565,30 @@ def ocorrencias():
         todos_sites=todos_sites,
         todos_operadores=todos_operadores,
         usuarios_site=usuarios_site,
+        naturezas=_get_naturezas(),
+    )
+
+
+@app.route("/nova-investigacao")
+@login_required
+def nova_investigacao():
+    site_usuario = session.get("user_site") or None
+    agora      = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    hora_atual = datetime.now().strftime("%H:%M")
+    _sites_form = _sites_do_usuario()
+    if _sites_form:
+        usuarios_site = (
+            Usuario.query
+            .filter(Usuario.site.in_(_sites_form), Usuario.is_active == True)
+            .order_by(Usuario.nome)
+            .all()
+        )
+    else:
+        usuarios_site = Usuario.query.filter_by(is_active=True).order_by(Usuario.nome).all()
+    return render_template("nova_investigacao.html",
+        site_usuario=site_usuario, agora=agora,
+        hora_atual=hora_atual, usuarios_site=usuarios_site,
+        naturezas=_get_naturezas(),
     )
 
 
@@ -3320,6 +3932,7 @@ def dashboard():
 @app.route("/exportar/excel")
 @login_required
 def exportar_excel():
+    _import_openpyxl()
     query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
     registros, _ = aplicar_filtros(query)
 
@@ -3375,6 +3988,7 @@ def exportar_excel():
 @app.route("/exportar/pdf")
 @login_required
 def exportar_pdf():
+    _import_reportlab()
     query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
     registros, _ = aplicar_filtros(query)
 
@@ -3439,6 +4053,7 @@ def exportar_pdf():
 
 def gerar_pdf_ocorrencia_bytes(oc):
     """Gera PDF individual de uma Ocorrência — layout corporativo DHL Security."""
+    _import_reportlab()
     buffer   = BytesIO()
     DHL_RED  = colors.HexColor("#D40511")
     DHL_YEL  = colors.HexColor("#FFCC00")
@@ -3985,12 +4600,28 @@ def sh_index():
             Usuario.id != user_id, Usuario.is_active == True
         ).order_by(Usuario.nome.asc()).all()
 
-    sites_db = SiteSH.query.order_by(SiteSH.nome_site.asc()).all()
+    sites_db = SiteCompleto.query.order_by(SiteCompleto.nome_do_site.asc()).all()
     return render_template("sh_registrar.html",
         resumo=_sh_resumo(), ultima_ocorrencia=ultima_oc, ocorrencias=ocs,
         filtros=filtros, hoje=_date_cls.today().strftime("%Y-%m-%d"),
         proximo_id_previsto=ultimo_id+1, usuarios_mesmo_site=usuarios_site,
         sites=sites_db)
+
+
+@app.route("/shift-handover/controle")
+@login_required
+def sh_controle():
+    q, filtros = _sh_get_filtros()
+    _clobs = (
+        defer(OcorrenciaTurno.imagem_1), defer(OcorrenciaTurno.imagem_2),
+        defer(OcorrenciaTurno.imagem_3), defer(OcorrenciaTurno.imagem_4),
+        defer(OcorrenciaTurno.assinatura_saida), defer(OcorrenciaTurno.assinatura_entrada),
+        defer(OcorrenciaTurno.ressalva), defer(OcorrenciaTurno.anexo_entrada),
+    )
+    ocs_db = q.options(*_clobs).limit(200).all()
+    ocs    = [o.to_dict() for o in ocs_db]
+    return render_template("sh_controle.html",
+        resumo=_sh_resumo(), ocorrencias=ocs, filtros=filtros)
 
 
 @app.route("/shift-handover/<int:oc_id>/detalhe")
@@ -4153,7 +4784,7 @@ def sh_editar(oc_id):
             db.session.rollback()
             logging.error(f"[SH editar] {e}")
             flash(f"Erro ao atualizar: {e}", "danger")
-    sites_db      = SiteSH.query.order_by(SiteSH.nome_site.asc()).all()
+    sites_db      = SiteCompleto.query.order_by(SiteCompleto.nome_do_site.asc()).all()
     user_site     = session.get("user_site", "")
     user_id       = session.get("user_id")
     usuarios_site = Usuario.query.filter(
@@ -4474,6 +5105,7 @@ def sh_dashboard():
 @app.route("/shift-handover/excel")
 @login_required
 def sh_excel():
+    _import_openpyxl()
     q, _ = _sh_get_filtros()
     rows = q.all()
     wb = Workbook()
@@ -4508,7 +5140,8 @@ def sh_excel():
 # ADMIN — HELPERS DE E-MAIL
 # =========================
 def _enviar_email_credenciais(nome, email, senha):
-    """Envia e-mail com credenciais de acesso ao novo usuário."""
+    """Envia e-mail com credenciais de acesso ao novo usuário.
+    Retorna True se o envio foi bem-sucedido, False caso contrário."""
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "DHL Security — Suas credenciais de acesso"
@@ -4538,13 +5171,17 @@ def _enviar_email_credenciais(nome, email, senha):
 </div></body></html>"""
         msg.attach(MIMEText(html, "html", "utf-8"))
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.sendmail(EMAIL_FROM, [email, EMAIL_BCC], msg.as_string())
-    except Exception:
-        pass
+            s.login(EMAIL_FROM, EMAIL_PASSWORD)
+            s.send_message(msg, to_addrs=[email, EMAIL_BCC])
+        return True
+    except Exception as exc:
+        logging.error(f"Erro ao enviar e-mail de credenciais para {email}: {exc}")
+        return False
 
 
 def _enviar_email_rejeicao(nome, email, motivo):
-    """Envia e-mail informando rejeição da solicitação de cadastro."""
+    """Envia e-mail informando rejeição da solicitação de cadastro.
+    Retorna True se o envio foi bem-sucedido, False caso contrário."""
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "DHL Security — Solicitação de cadastro"
@@ -4570,9 +5207,12 @@ def _enviar_email_rejeicao(nome, email, motivo):
 </div></body></html>"""
         msg.attach(MIMEText(html, "html", "utf-8"))
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.sendmail(EMAIL_FROM, [email, EMAIL_BCC], msg.as_string())
-    except Exception:
-        pass
+            s.login(EMAIL_FROM, EMAIL_PASSWORD)
+            s.send_message(msg, to_addrs=[email, EMAIL_BCC])
+        return True
+    except Exception as exc:
+        logging.error(f"Erro ao enviar e-mail de rejeição para {email}: {exc}")
+        return False
 
 
 # =========================
@@ -4963,8 +5603,10 @@ def admin_aprovar_solicitacao(sid):
         flash("Erro ao criar usuário.", "danger")
         return redirect(url_for("admin_solicitacoes"))
 
-    _enviar_email_credenciais(nome, email, senha_temp)
+    email_ok = _enviar_email_credenciais(nome, email, senha_temp)
     flash(f"Solicitação aprovada! Usuário criado. Senha temporária: {senha_temp}", "success")
+    if not email_ok:
+        flash(f"⚠️ Não foi possível enviar o e-mail de credenciais para {email}. Informe a senha manualmente.", "warning")
     return redirect(url_for("admin_solicitacoes"))
 
 
@@ -4976,8 +5618,10 @@ def admin_rejeitar_solicitacao(sid):
     motivo = (request.form.get("motivo") or "").strip()
     sol.status = "REJEITADO"
     db.session.commit()
-    _enviar_email_rejeicao(sol.nome, sol.email, motivo)
+    email_ok = _enviar_email_rejeicao(sol.nome, sol.email, motivo)
     flash(f"Solicitação de {sol.nome} rejeitada.", "success")
+    if not email_ok:
+        flash(f"⚠️ Não foi possível enviar o e-mail de rejeição para {sol.email}.", "warning")
     return redirect(url_for("admin_solicitacoes"))
 
 
@@ -4989,55 +5633,106 @@ setup_chaves(db)
 app.register_blueprint(chaves_bp, url_prefix='/chaves')
 
 # =========================
+# GESTÃO DE ARMÁRIOS — Blueprint
+# =========================
+from armarios_blueprint import armarios_bp, setup_armarios
+setup_armarios(db)
+app.register_blueprint(armarios_bp, url_prefix='/armarios')
+
+# =========================
 # INIT DB
 # =========================
+# Garante que todas as tabelas existem antes do Flask aceitar requests.
+# Rápido se as tabelas já existem (só consulta metadata do Oracle).
 with app.app_context():
     try:
         db.create_all()
-        # Migração: adiciona FOTO_PERFIL se ainda não existir
-        db.session.execute(db.text(
-            "ALTER TABLE USERS_LIVRO ADD (FOTO_PERFIL CLOB)"
-        ))
+    except Exception:
+        pass  # banco indisponível no momento — continuará via _init_db background
+
+    # Popula NATUREZAS_OCORRENCIA com os valores padrão (idempotente)
+    try:
+        existentes = {n.nome for n in NaturezaOcorrencia.query.all()}
+        for nome in _NATUREZAS_PADRAO:
+            if nome not in existentes:
+                db.session.add(NaturezaOcorrencia(nome=nome))
         db.session.commit()
     except Exception:
-        db.session.rollback()  # coluna já existe ou banco indisponível — OK
+        db.session.rollback()
 
-    # Migração: novas colunas da tabela ocorrencias_turno
-    for _col_sql in [
-        "ALTER TABLE ocorrencias_turno ADD (RESSALVA CLOB)",
-        "ALTER TABLE ocorrencias_turno ADD (TEM_RESSALVA VARCHAR2(1))",
-        "ALTER TABLE ocorrencias_turno ADD (ANEXO_ENTRADA CLOB)",
-        "ALTER TABLE ocorrencias_turno ADD (ANEXO_ENTRADA_NOME VARCHAR2(255))",
-        # LGPD
-        "ALTER TABLE USERS_LIVRO ADD (LGPD_ACEITO VARCHAR2(3))",
-        "ALTER TABLE USERS_LIVRO ADD (LGPD_ACEITO_EM DATE)",
-        # Solicitações de cadastro
-        "CREATE TABLE SOLICITACOES_CADASTRO (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, NOME VARCHAR2(120) NOT NULL, EMAIL VARCHAR2(120) NOT NULL, SITE VARCHAR2(128), STATUS VARCHAR2(20) DEFAULT 'PENDENTE', CRIADO_EM DATE DEFAULT SYSDATE)",
-        # Novos campos — Ocorrências
-        "ALTER TABLE OCORRENCIAS ADD (BOLETIM_OCORRENCIA NUMBER(1) DEFAULT 0)",
-        "ALTER TABLE OCORRENCIAS ADD (CUSTO VARCHAR2(50))",
-        # Novos campos — ANCs
-        "ALTER TABLE ANCS ADD (VALOR VARCHAR2(50))",
-        # Novos campos — Análises Investigativas
-        "ALTER TABLE ANALISES_INVESTIGATIVAS ADD (VALOR VARCHAR2(50))",
-        # Tabela de configuração do sistema (criada se não existir)
-        "CREATE TABLE SISTEMA_CONFIG (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, VERSAO_EXIGIDA VARCHAR2(20), DOWNLOAD_URL VARCHAR2(500), EXE_BLOB BLOB)",
-        # Linha inicial da configuração (ignorada se já existir dados)
-        "INSERT INTO SISTEMA_CONFIG (VERSAO_EXIGIDA) SELECT '2.5' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM SISTEMA_CONFIG)",
-        # URL de atualização remota (legado — mantida para compatibilidade)
-        "ALTER TABLE SISTEMA_CONFIG ADD (DOWNLOAD_URL VARCHAR2(500))",
-        # EXE publicado diretamente no banco para atualização automática
-        "ALTER TABLE SISTEMA_CONFIG ADD (EXE_BLOB BLOB)",
-        # Vínculos de site para usuários OVERHEAD
-        "CREATE TABLE USUARIO_SITES (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, USUARIO_ID NUMBER NOT NULL, SITE_NOME VARCHAR2(128) NOT NULL)",
+    # Migrations críticas para módulo de armários — executadas de forma síncrona
+    # para garantir que as colunas existam antes de qualquer request ser atendido.
+    for _sql in [
+        "ALTER TABLE ARMARIO ADD (ASSINATURA_ATRIBUICAO CLOB)",
+        "ALTER TABLE ARMARIO ADD (ATRIBUIDO_POR VARCHAR2(150))",
+        "ALTER TABLE ARMARIO_CHAVE_RESERVA ADD (ASSINATURA CLOB)",
+        "CREATE SEQUENCE armario_id_seq START WITH 1 INCREMENT BY 1",
+        "CREATE SEQUENCE arm_chave_id_seq START WITH 1 INCREMENT BY 1",
     ]:
         try:
-            db.session.execute(db.text(_col_sql))
+            db.session.execute(db.text(_sql))
             db.session.commit()
         except Exception:
             db.session.rollback()
 
+
+def _init_db():
+    """Aplica migrações de schema (ALTER TABLE).
+    Chamado em thread background pelo launcher após o Flask subir.
+    Todas as operações são idempotentes (try/except ignora erros de 'já existe').
+    """
+    with app.app_context():
+        try:
+            db.create_all()  # idempotente — só cria o que falta
+            db.session.execute(db.text(
+                "ALTER TABLE USERS_LIVRO ADD (FOTO_PERFIL CLOB)"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        for _col_sql in [
+            # Sequences das tabelas de chaves (criam o gerador de ID no Oracle)
+            "CREATE SEQUENCE clav_chave_id_seq START WITH 1 INCREMENT BY 1",
+            "CREATE SEQUENCE clav_retirada_id_seq START WITH 1 INCREMENT BY 1",
+            # Sequences das tabelas de armários
+            "CREATE SEQUENCE armario_id_seq START WITH 1 INCREMENT BY 1",
+            "CREATE SEQUENCE arm_chave_id_seq START WITH 1 INCREMENT BY 1",
+            # Colunas de assinatura e operador na atribuição de armários
+            "ALTER TABLE armario ADD (assinatura_atribuicao CLOB)",
+            "ALTER TABLE armario ADD (atribuido_por VARCHAR2(150))",
+            # Coluna de assinatura na chave reserva de armários
+            "ALTER TABLE armario_chave_reserva ADD (assinatura CLOB)",
+            "ALTER TABLE ocorrencias_turno ADD (RESSALVA CLOB)",
+            "ALTER TABLE ocorrencias_turno ADD (TEM_RESSALVA VARCHAR2(1))",
+            "ALTER TABLE ocorrencias_turno ADD (ANEXO_ENTRADA CLOB)",
+            "ALTER TABLE ocorrencias_turno ADD (ANEXO_ENTRADA_NOME VARCHAR2(255))",
+            "ALTER TABLE USERS_LIVRO ADD (LGPD_ACEITO VARCHAR2(3))",
+            "ALTER TABLE USERS_LIVRO ADD (LGPD_ACEITO_EM DATE)",
+            "CREATE TABLE SOLICITACOES_CADASTRO (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, NOME VARCHAR2(120) NOT NULL, EMAIL VARCHAR2(120) NOT NULL, SITE VARCHAR2(128), STATUS VARCHAR2(20) DEFAULT 'PENDENTE', CRIADO_EM DATE DEFAULT SYSDATE)",
+            "ALTER TABLE OCORRENCIAS ADD (BOLETIM_OCORRENCIA NUMBER(1) DEFAULT 0)",
+            "ALTER TABLE OCORRENCIAS ADD (CUSTO VARCHAR2(50))",
+            "ALTER TABLE ANCS ADD (VALOR VARCHAR2(50))",
+            "ALTER TABLE ANALISES_INVESTIGATIVAS ADD (VALOR VARCHAR2(50))",
+            "CREATE TABLE SISTEMA_CONFIG (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, VERSAO_EXIGIDA VARCHAR2(20), DOWNLOAD_URL VARCHAR2(500), EXE_BLOB BLOB)",
+            "INSERT INTO SISTEMA_CONFIG (VERSAO_EXIGIDA) SELECT '3.0' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM SISTEMA_CONFIG)",
+            "UPDATE SISTEMA_CONFIG SET VERSAO_EXIGIDA = '3.0'",
+            "ALTER TABLE SISTEMA_CONFIG ADD (DOWNLOAD_URL VARCHAR2(500))",
+            "ALTER TABLE SISTEMA_CONFIG ADD (EXE_BLOB BLOB)",
+            "CREATE TABLE USUARIO_SITES (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, USUARIO_ID NUMBER NOT NULL, SITE_NOME VARCHAR2(128) NOT NULL)",
+            "ALTER TABLE CLAVICULARIO_RETIRADA ADD (NOME_RETIRADOR VARCHAR2(150))",
+            "ALTER TABLE CLAVICULARIO_RETIRADA ADD (RESPONSAVEL_ENTREGA VARCHAR2(150))",
+            "ALTER TABLE CLAVICULARIO_RETIRADA ADD (ASSINATURA CLOB)",
+        ]:
+            try:
+                db.session.execute(db.text(_col_sql))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+
 if __name__ == "__main__":
+    _init_db()
     app.run(debug=True)
 
 

@@ -1,0 +1,282 @@
+{% extends "base_app.html" %}
+{% block page_title %}Controle Shift Handover | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🔄 Controle — Shift Handover{% endblock %}
+{% block topbar_subtitle %}Histórico e acompanhamento de passagens de turno{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('sh_index') }}" class="btn btn-red btn-sm">+ Nova Passagem</a>
+  <a href="{{ url_for('sh_excel') }}" class="btn btn-soft btn-sm" hx-boost="false">📊 Exportar Excel</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:24px; }
+  .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px 20px; box-shadow:var(--shadow); border-left:6px solid var(--dhl-yellow); display:flex; flex-direction:column; gap:6px; position:relative; overflow:hidden; }
+  .kpi-card::after{ content:""; position:absolute; right:-16px; top:-16px; width:72px; height:72px; border-radius:50%; background:rgba(255,204,0,.12); }
+  .kpi-card.red{ border-left-color:var(--dhl-red); }
+  .kpi-card.red::after{ background:rgba(212,5,17,.08); }
+  .kpi-card.green{ border-left-color:#22c55e; }
+  .kpi-card.green::after{ background:rgba(34,197,94,.08); }
+  .kpi-card.blue{ border-left-color:#3b82f6; }
+  .kpi-card.blue::after{ background:rgba(59,130,246,.08); }
+  .kpi-card.amber{ border-left-color:#f59e0b; }
+  .kpi-label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; position:relative; z-index:1; }
+  .kpi-value{ font-size:34px; font-weight:900; color:var(--dhl-red); line-height:1; position:relative; z-index:1; }
+  .kpi-card.green .kpi-value{ color:#16a34a; }
+  .kpi-card.blue .kpi-value{ color:#2563eb; }
+  .kpi-card.amber .kpi-value{ color:#d97706; }
+
+  .filter-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px 24px; box-shadow:var(--shadow); margin-bottom:20px; }
+  .filter-title{ font-size:14px; font-weight:900; color:var(--dhl-black); margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+  .filter-title span{ width:4px; height:18px; background:var(--dhl-red); border-radius:2px; display:inline-block; }
+  .filter-row{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+  .filter-group{ display:flex; flex-direction:column; gap:4px; min-width:140px; flex:1; }
+  .filter-group label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .filter-group input,.filter-group select{ border:1.5px solid var(--line); border-radius:10px; padding:9px 11px; font-size:12px; font-family:inherit; outline:none; transition:.15s; }
+  .filter-group input:focus,.filter-group select:focus{ border-color:var(--dhl-red); }
+  .filter-actions{ display:flex; gap:8px; }
+
+  .table-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .table-card-hdr{ padding:16px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  .table-card-title{ font-size:15px; font-weight:900; color:var(--dhl-black); display:flex; align-items:center; gap:8px; }
+  .table-card-title span{ width:4px; height:20px; background:var(--dhl-red); border-radius:2px; display:inline-block; }
+  .table-chip{ background:#fff8db; color:#7a5a00; border:1px solid #f5d66f; border-radius:999px; padding:5px 12px; font-size:11px; font-weight:800; text-transform:uppercase; }
+
+  .badge-ok{ background:var(--ok-bg); color:var(--ok-text); border:1px solid #b7e1c6; }
+  .badge-warn{ background:var(--warn-bg); color:var(--warn-text); border:1px solid #f4d58d; }
+  .badge-muted{ background:var(--neutral-bg); color:var(--neutral-text); border:1px solid #d8dde6; }
+  .row-finalizado{ background:#f5fbf7 !important; }
+
+  .btn-yellow{ background:var(--dhl-yellow); color:#111; font-weight:900; }
+
+  .pager{ display:flex; align-items:center; justify-content:center; gap:10px; padding:14px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .pager-btn{ border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 16px; font-size:12px; font-weight:800; cursor:pointer; color:var(--text); transition:.15s; font-family:inherit; }
+  .pager-btn:hover:not(:disabled){ background:var(--dhl-red); color:#fff; border-color:var(--dhl-red); }
+  .pager-btn:disabled{ opacity:.35; cursor:default; }
+  .pager-info{ font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap; }
+
+  .sh-modal{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:99999; display:none; align-items:center; justify-content:center; padding:20px; }
+  .sh-modal.active{ display:flex; }
+  .sh-modal-box{ background:#fff; border-radius:22px; max-width:720px; width:100%; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.28); overflow:hidden; animation:slideUp .22s ease; }
+  .sh-modal-head{ padding:18px 24px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+  .sh-modal-head h3{ margin:0; font-size:17px; font-weight:900; color:var(--dhl-red); }
+  .sh-modal-close{ border:none; background:none; font-size:22px; cursor:pointer; color:var(--muted); padding:4px 8px; border-radius:8px; line-height:1; }
+  .sh-modal-close:hover{ background:var(--line); }
+  .sh-modal-body{ padding:20px 24px; overflow-y:auto; flex:1; }
+  .sh-modal-foot{ padding:14px 24px; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:#fafafa; flex-shrink:0; }
+  .info-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .info-box{ background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .info-box strong{ display:block; font-size:11px; color:var(--muted); font-weight:800; text-transform:uppercase; letter-spacing:.3px; margin-bottom:3px; }
+  .info-val{ font-size:13px; font-weight:700; color:var(--dhl-black); }
+  .info-box.full{ grid-column:1/-1; }
+  .text-block{ background:#f8fafc; border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:13px; line-height:1.55; white-space:pre-wrap; word-wrap:break-word; }
+  .sig-pair{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+  .sig-card{ border:1px solid #ead37a; background:#fffdf5; border-radius:14px; padding:12px; }
+  .sig-card h4{ margin:0 0 8px; font-size:13px; color:#5f4800; font-weight:900; }
+  .sig-preview img{ max-width:100%; max-height:90px; display:block; margin:0 auto; border-radius:8px; }
+  .sig-pending{ color:var(--dhl-red); font-weight:800; font-size:12px; text-align:center; margin:12px 0; }
+  .sig-line{ margin-top:10px; height:1px; background:#5f6368; }
+  .sig-label{ margin-top:5px; font-size:11px; color:var(--muted); font-weight:700; }
+  .img-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:10px; }
+  .img-item img{ width:100%; height:120px; object-fit:cover; border-radius:10px; border:1px solid var(--line); display:block; }
+  .section-label{ font-size:12px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin:14px 0 8px; }
+  @media(max-width:700px){ .kpi-grid{ grid-template-columns:1fr 1fr; } .info-grid{ grid-template-columns:1fr; } .sig-pair{ grid-template-columns:1fr; } }
+</style>
+
+<!-- KPI Cards -->
+<div class="kpi-grid">
+  <div class="kpi-card"><div class="kpi-label">Registros Hoje</div><div class="kpi-value">{{ resumo.ocorrencias_dia }}</div></div>
+  <div class="kpi-card amber"><div class="kpi-label">Pendências em Aberto</div><div class="kpi-value">{{ resumo.pendencias_abertas }}</div></div>
+  <div class="kpi-card blue"><div class="kpi-label">Turnos Registrados Hoje</div><div class="kpi-value">{{ resumo.turnos_registrados }}</div></div>
+  <div class="kpi-card red"><div class="kpi-label">Ocorrências Críticas</div><div class="kpi-value">{{ resumo.ocorrencias_criticas }}</div></div>
+  <div class="kpi-card green"><div class="kpi-label">Finalizadas</div><div class="kpi-value">{{ ocorrencias | selectattr('status','equalto','FINALIZADO') | list | length }}</div></div>
+</div>
+
+<!-- Filtros -->
+<div class="filter-card">
+  <div class="filter-title"><span></span> Filtros</div>
+  <form method="GET" action="{{ url_for('sh_controle') }}">
+    <div class="filter-row">
+      <div class="filter-group"><label>Data Inicial</label><input type="date" name="data_inicial" value="{{ filtros['data_inicial'] }}"></div>
+      <div class="filter-group"><label>Data Final</label><input type="date" name="data_final" value="{{ filtros['data_final'] }}"></div>
+      <div class="filter-group">
+        <label>Turno</label>
+        <select name="turno">
+          <option value="">Todos</option>
+          <option value="TURNO A" {% if filtros['turno']=='TURNO A' %}selected{% endif %}>TURNO A</option>
+          <option value="TURNO B" {% if filtros['turno']=='TURNO B' %}selected{% endif %}>TURNO B</option>
+          <option value="TURNO C" {% if filtros['turno']=='TURNO C' %}selected{% endif %}>TURNO C</option>
+          <option value="ADM" {% if filtros['turno']=='ADM' %}selected{% endif %}>ADM</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Status</label>
+        <select name="status">
+          <option value="">Todos</option>
+          <option value="EM ABERTO" {% if filtros['status']=='EM ABERTO' %}selected{% endif %}>EM ABERTO</option>
+          <option value="EM ACOMPANHAMENTO" {% if filtros['status']=='EM ACOMPANHAMENTO' %}selected{% endif %}>EM ACOMPANHAMENTO</option>
+          <option value="FINALIZADO" {% if filtros['status']=='FINALIZADO' %}selected{% endif %}>FINALIZADO</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Prioridade</label>
+        <select name="prioridade">
+          <option value="">Todas</option>
+          <option value="BAIXA" {% if filtros.get('prioridade')=='BAIXA' %}selected{% endif %}>BAIXA</option>
+          <option value="MEDIA" {% if filtros.get('prioridade')=='MEDIA' %}selected{% endif %}>MÉDIA</option>
+          <option value="ALTA" {% if filtros.get('prioridade')=='ALTA' %}selected{% endif %}>ALTA</option>
+          <option value="CRITICA" {% if filtros.get('prioridade')=='CRITICA' %}selected{% endif %}>CRÍTICA</option>
+        </select>
+      </div>
+      <div class="filter-actions">
+        <button type="submit" class="btn btn-yellow">Filtrar</button>
+        <a href="{{ url_for('sh_controle') }}" class="btn btn-dark">Limpar</a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Tabela -->
+<div class="table-card">
+  <div class="table-card-hdr">
+    <div class="table-card-title"><span></span> Histórico de Passagens</div>
+    <span class="table-chip">{{ ocorrencias|length }} registros</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Data</th><th>Site</th><th>Turno</th><th>Tipo</th><th>Prioridade</th><th>Status</th><th>Resp. Saída</th><th>Resp. Entrada</th><th style="text-align:right;">Ações</th></tr>
+      </thead>
+      <tbody>
+        {% for r in ocorrencias %}
+        <tr class="{{ 'row-finalizado' if r.status=='FINALIZADO' else '' }}">
+          <td style="font-weight:900;color:var(--dhl-red);">#{{ r.id }}</td>
+          <td style="white-space:nowrap;">{{ r.data_ocorrencia }}</td>
+          <td>{{ r.site }}</td>
+          <td><span class="badge badge-muted">{{ r.turno }}</span></td>
+          <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.tipo_ocorrencia }}</td>
+          <td>
+            {% if r.prioridade=='CRITICA' %}<span class="badge badge-danger">{{ r.prioridade }}</span>
+            {% elif r.prioridade=='ALTA' %}<span class="badge badge-warn">{{ r.prioridade }}</span>
+            {% else %}<span class="badge badge-muted">{{ r.prioridade or '—' }}</span>{% endif %}
+          </td>
+          <td>
+            {% if r.status=='FINALIZADO' %}<span class="badge badge-ok">{{ r.status }}</span>
+            {% elif r.status=='EM ACOMPANHAMENTO' %}<span class="badge badge-warn">{{ r.status }}</span>
+            {% else %}<span class="badge badge-danger">{{ r.status }}</span>{% endif %}
+          </td>
+          <td>{{ r.responsavel_saida }}</td>
+          <td>{{ r.responsavel_entrada }}</td>
+          <td style="text-align:right;">
+            <button type="button" class="btn btn-yellow btn-sm" onclick="abrirModal({{ r.id }})">Detalhes</button>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">Nenhum registro encontrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="pager">
+    <button class="pager-btn" id="pager-prev" onclick="pagerPrev()">‹ Anterior</button>
+    <span class="pager-info" id="pager-info">—</span>
+    <button class="pager-btn" id="pager-next" onclick="pagerNext()">Próxima ›</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block modals %}
+<div class="sh-modal" id="modalDetalhe">
+  <div class="sh-modal-box">
+    <div class="sh-modal-head">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <h3 id="m-titulo">Passagem</h3>
+        <span id="m-badge" class="badge badge-muted"></span>
+      </div>
+      <button class="sh-modal-close" onclick="fecharModal()">&times;</button>
+    </div>
+    <div class="sh-modal-body" id="m-body">
+      <div style="text-align:center;padding:40px;color:var(--muted);">Carregando...</div>
+    </div>
+    <div class="sh-modal-foot">
+      <div id="m-actions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      <button class="btn btn-dark btn-sm" onclick="fecharModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+const _ROWS=[]; document.querySelectorAll('tbody tr').forEach(r=>_ROWS.push(r));
+const PER=20; let _page=0;
+function _render(){
+  const total=_ROWS.length, pages=Math.max(1,Math.ceil(total/PER));
+  _ROWS.forEach((r,i)=>{ r.style.display=(i>=_page*PER&&i<(_page+1)*PER)?'':'none'; });
+  document.getElementById('pager-info').textContent=total?`Página ${_page+1} de ${pages} (${total} registros)`:'0 registros';
+  document.getElementById('pager-prev').disabled=_page===0;
+  document.getElementById('pager-next').disabled=_page>=pages-1;
+}
+function pagerPrev(){ if(_page>0){_page--;_render();} }
+function pagerNext(){ const p=Math.ceil(_ROWS.length/PER); if(_page<p-1){_page++;_render();} }
+_render();
+
+const _USER_NOME={{ session.get('user_nome','')|tojson }};
+const _USER_PERF={{ session.get('user_perfil','')|tojson }};
+const _IS_ADMIN=['ADMIN','Admin','admin'].includes(_USER_PERF);
+
+function _statusClass(s){ return s==='FINALIZADO'?'badge-ok':s==='EM ACOMPANHAMENTO'?'badge-warn':'badge-danger'; }
+function _prioClass(p){ return p==='CRITICA'?'badge-danger':p==='ALTA'?'badge-warn':'badge-muted'; }
+function _sigHtml(src,nome,label){
+  return `<div class="sig-card"><h4>${label}</h4>${src?`<div class="sig-preview"><img src="${src}"></div>`:`<div class="sig-pending">Pendente</div>`}<div class="sig-line"></div><div class="sig-label">${nome}</div></div>`;
+}
+function _imgsHtml(d){
+  const imgs=[d.imagem_1,d.imagem_2,d.imagem_3,d.imagem_4].filter(Boolean);
+  if(!imgs.length) return '';
+  return `<div class="section-label">Imagens</div><div class="img-grid">${imgs.map(s=>`<div class="img-item"><img src="${s}"></div>`).join('')}</div>`;
+}
+
+function abrirModal(id){
+  document.getElementById('modalDetalhe').classList.add('active');
+  document.getElementById('m-titulo').textContent='Passagem #'+id;
+  document.getElementById('m-badge').className='badge badge-muted';
+  document.getElementById('m-badge').textContent='';
+  document.getElementById('m-actions').innerHTML='';
+  document.getElementById('m-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted);">Carregando...</div>';
+  fetch('/shift-handover/'+id+'/detalhe').then(r=>r.json()).then(d=>{
+    const badge=document.getElementById('m-badge');
+    badge.className='badge '+_statusClass(d.status); badge.textContent=d.status;
+    document.getElementById('m-body').innerHTML=
+      `<div class="info-grid">
+        <div class="info-box"><strong>Data</strong><div class="info-val">${d.data_ocorrencia||'—'}</div></div>
+        <div class="info-box"><strong>Hora</strong><div class="info-val">${d.data_hora_registro||'—'}</div></div>
+        <div class="info-box"><strong>Site</strong><div class="info-val">${d.site||'—'}</div></div>
+        <div class="info-box"><strong>Turno</strong><div class="info-val">${d.turno||'—'}</div></div>
+        <div class="info-box"><strong>Setor</strong><div class="info-val">${d.setor||'—'}</div></div>
+        <div class="info-box"><strong>Tipo</strong><div class="info-val">${d.tipo_ocorrencia||'—'}</div></div>
+        <div class="info-box"><strong>Prioridade</strong><div class="info-val"><span class="badge ${_prioClass(d.prioridade)}">${d.prioridade||'—'}</span></div></div>
+        <div class="info-box"><strong>Status</strong><div class="info-val"><span class="badge ${_statusClass(d.status)}">${d.status||'—'}</span></div></div>
+        <div class="info-box"><strong>Resp. Saída</strong><div class="info-val">${d.responsavel_saida||'—'}</div></div>
+        <div class="info-box"><strong>Resp. Entrada</strong><div class="info-val">${d.responsavel_entrada||'—'}</div></div>
+      </div>
+      <div class="section-label">Efetivo</div><div class="text-block">${d.efetivo||'—'}</div>
+      <div class="section-label">Descrição</div><div class="text-block">${d.descricao||'—'}</div>
+      <div class="section-label">Ações Tomadas</div><div class="text-block">${d.acoes_tomadas||'—'}</div>
+      <div class="section-label">Pendências</div><div class="text-block">${d.pendencias||'—'}</div>
+      <div class="section-label">Assinaturas</div>
+      <div class="sig-pair">${_sigHtml(d.assinatura_saida,d.responsavel_saida,'Responsável Saída')}${_sigHtml(d.assinatura_entrada,d.responsavel_entrada,'Responsável Entrada')}</div>
+      ${_imgsHtml(d)}`;
+    const acts=document.getElementById('m-actions');
+    if(d.pdf_url) acts.innerHTML+=`<a href="${d.pdf_url}" class="btn btn-dark btn-sm" data-filename="passagem-${id}.pdf">PDF</a>`;
+    if(!d.assinatura_entrada&&d.responsavel_entrada===_USER_NOME) acts.innerHTML+=`<a href="/shift-handover/${id}/assinar" class="btn btn-yellow btn-sm">Assinar Recebimento</a>`;
+    if(!d.assinatura_entrada&&d.criado_por===_USER_NOME) acts.innerHTML+=`<a href="/shift-handover/${id}/editar" class="btn btn-soft btn-sm">Editar</a>`;
+    if(d.status!=='FINALIZADO'&&d.assinatura_entrada&&d.responsavel_entrada===_USER_NOME){
+      const fForm=document.createElement('form'); fForm.method='POST'; fForm.action=`/shift-handover/${id}/fechar`;
+      fForm.innerHTML='<button type="submit" class="btn btn-green btn-sm">Finalizar</button>'; acts.appendChild(fForm);
+    }
+  }).catch(()=>{ document.getElementById('m-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--danger-text);">Erro ao carregar detalhes.</div>'; });
+}
+
+function fecharModal(){ document.getElementById('modalDetalhe').classList.remove('active'); }
+document.getElementById('modalDetalhe').addEventListener('click',function(e){ if(e.target===this) fecharModal(); });
+</script>
+{% endblock %}

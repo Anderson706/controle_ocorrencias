@@ -1,400 +1,401 @@
 <!doctype html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8">
-  <title>Login | CCTV Control Panel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+ <meta charset="utf-8">
+ <title>Login | CCTV Control Panel</title>
+ <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <style>
-    :root{
-      --dhl-yellow:#ffcc00;
-      --dhl-red:#d40511;
-      --dhl-red-dark:#b1030d;
-      --dhl-black:#1f1f1f;
-      --line:#e5e7eb;
-      --text:#1f2937;
-      --muted:#6b7280;
-      --bg:#f3f5f7;
-      --card:#ffffff;
-      --shadow:0 12px 30px rgba(0,0,0,.12);
-      --sidebar:#161a1d;
-      --sidebar-2:#20262b;
-    }
+ <style>
+ :root{
+ --dhl-yellow:#ffcc00;
+ --dhl-red:#d40511;
+ --dhl-red-dark:#b1030d;
+ --dhl-black:#1f1f1f;
+ --line:#e5e7eb;
+ --text:#1f2937;
+ --muted:#6b7280;
+ --bg:#f3f5f7;
+ --card:#ffffff;
+ --shadow:0 12px 30px rgba(0,0,0,.12);
+ --sidebar:#161a1d;
+ --sidebar-2:#20262b;
+ }
 
-    *{ box-sizing:border-box; }
+ *{ box-sizing:border-box; }
 
-    html,body{
-      margin:0; padding:0; min-height:100vh;
-      font-family:Arial,Helvetica,sans-serif;
-      background:var(--bg); color:var(--text);
-    }
+ html,body{
+ margin:0; padding:0; min-height:100vh;
+ font-family:Arial,Helvetica,sans-serif;
+ background:var(--bg); color:var(--text);
+ }
 
-    a{ text-decoration:none; }
+ a{ text-decoration:none; }
 
-    /* ── Loading ── */
-    #loading-overlay{
-      position:fixed; inset:0; background:rgba(15,23,42,.6);
-      z-index:99999; display:none; align-items:center;
-      justify-content:center; flex-direction:column;
-      backdrop-filter:blur(3px);
-    }
-    #loading-overlay.show{ display:flex; }
-    .spinner{
-      border:5px solid rgba(255,255,255,.25);
-      border-radius:50%;
-      border-top:5px solid var(--dhl-yellow);
-      width:48px; height:48px;
-      animation:spin .75s linear infinite;
-    }
-    @keyframes spin{ to{ transform:rotate(360deg); } }
-    #loading-overlay p{ margin:18px 0 0; font-size:14px; font-weight:800; color:#fff; letter-spacing:.3px; }
+ /* ── Loading ── */
+ #loading-overlay{
+ position:fixed; inset:0; background:rgba(15,23,42,.6);
+ z-index:99999; display:none; align-items:center;
+ justify-content:center; flex-direction:column;
+ backdrop-filter:blur(3px);
+ }
+ #loading-overlay.show{ display:flex; }
+ .spinner{
+ border:5px solid rgba(255,255,255,.25);
+ border-radius:50%;
+ border-top:5px solid var(--dhl-yellow);
+ width:48px; height:48px;
+ animation:spin .75s linear infinite;
+ }
+ @keyframes spin{ to{ transform:rotate(360deg); } }
+ #loading-overlay p{ margin:18px 0 0; font-size:14px; font-weight:800; color:#fff; letter-spacing:.3px; }
 
-    /* ── Page layout ── */
-    .page{ min-height:100vh; display:flex; }
+ /* ── Page layout ── */
+ .page{ min-height:100vh; display:flex; }
 
-    .left-panel{
-      width:320px;
-      background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
-      color:#fff; padding:26px 22px;
-      display:flex; flex-direction:column; justify-content:space-between;
-      box-shadow:6px 0 22px rgba(0,0,0,.12); flex-shrink:0;
-    }
-    .brand-top{ display:flex; flex-direction:column; gap:10px; }
-    .logo-box{ display:flex; align-items:center; gap:12px; }
-    .logo-side{ height:21px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
-    .brand-badge{
-      display:inline-flex; align-items:center; justify-content:center;
-      width:max-content; padding:7px 12px; border-radius:999px;
-      background:var(--dhl-yellow); color:#111;
-      font-size:11px; font-weight:900; letter-spacing:.5px;
-    }
-    .brand-title{ font-size:26px; font-weight:900; line-height:1.15; letter-spacing:.3px; }
-    .brand-sub{ color:rgba(255,255,255,.74); font-size:13px; line-height:1.6; max-width:240px; }
-    .side-footer{ font-size:12px; color:rgba(255,255,255,.55); line-height:1.5; }
+ .left-panel{
+ width:320px;
+ background:linear-gradient(180deg,var(--sidebar),var(--sidebar-2));
+ color:#fff; padding:26px 22px;
+ display:flex; flex-direction:column; justify-content:space-between;
+ box-shadow:6px 0 22px rgba(0,0,0,.12); flex-shrink:0;
+ }
+ .brand-top{ display:flex; flex-direction:column; gap:10px; }
+ .logo-box{ display:flex; align-items:center; gap:12px; }
+ .logo-side{ height:21px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+ .brand-badge{
+ display:inline-flex; align-items:center; justify-content:center;
+ width:max-content; padding:7px 12px; border-radius:999px;
+ background:var(--dhl-yellow); color:#111;
+ font-size:11px; font-weight:900; letter-spacing:.5px;
+ }
+ .brand-title{ font-size:26px; font-weight:900; line-height:1.15; letter-spacing:.3px; }
+ .brand-sub{ color:rgba(255,255,255,.74); font-size:13px; line-height:1.6; max-width:240px; }
+ .side-footer{ font-size:12px; color:rgba(255,255,255,.55); line-height:1.5; }
 
-    .content{ flex:1; display:flex; align-items:center; justify-content:center; padding:32px; }
-    .login-wrap{ width:100%; max-width:1380px; margin:0 auto; }
-    .login-card{
-      width:100%; min-height:calc(100vh - 64px);
-      background:var(--card); border-radius:22px; padding:42px;
-      box-shadow:var(--shadow); border:1px solid var(--line);
-      display:grid; grid-template-columns:1.1fr .9fr; gap:42px;
-      align-items:center; position:relative; overflow:hidden;
-    }
-    .login-card::before{
-      content:""; position:absolute; inset:0;
-      background:
-        radial-gradient(circle at 85% 15%, rgba(255,204,0,.10), transparent 18%),
-        radial-gradient(circle at 12% 88%, rgba(212,5,17,.05), transparent 22%);
-      pointer-events:none;
-    }
+ .content{ flex:1; display:flex; align-items:center; justify-content:center; padding:32px; }
+ .login-wrap{ width:100%; max-width:1380px; margin:0 auto; }
+ .login-card{
+ width:100%; min-height:calc(100vh - 64px);
+ background:var(--card); border-radius:22px; padding:42px;
+ box-shadow:var(--shadow); border:1px solid var(--line);
+ display:grid; grid-template-columns:1.1fr .9fr; gap:42px;
+ align-items:center; position:relative; overflow:hidden;
+ }
+ .login-card::before{
+ content:""; position:absolute; inset:0;
+ background:
+ radial-gradient(circle at 85% 15%, rgba(255,204,0,.10), transparent 18%),
+ radial-gradient(circle at 12% 88%, rgba(212,5,17,.05), transparent 22%);
+ pointer-events:none;
+ }
 
-    /* ── Info left panel ── */
-    .left{ position:relative; z-index:1; padding-right:20px; }
-    .login-badge{
-      display:inline-block; margin-bottom:14px; padding:8px 14px;
-      border-radius:999px; background:#fff4db; color:#9a6700;
-      font-weight:800; font-size:12px; letter-spacing:.4px;
-    }
-    .title{ font-size:42px; color:var(--dhl-red); font-weight:900; margin-bottom:10px; line-height:1.1; }
-    .subtitle{ color:var(--muted); font-size:16px; line-height:1.7; max-width:620px; margin-bottom:26px; }
-    .info-grid{ display:grid; grid-template-columns:repeat(2, minmax(180px,1fr)); gap:14px; max-width:700px; }
-    .info-card{
-      background:linear-gradient(180deg,#fff,#fcfcfd);
-      border:1px solid var(--line); border-radius:16px; padding:16px;
-      box-shadow:0 8px 18px rgba(15,23,42,.05);
-    }
-    .info-card strong{ display:block; margin-bottom:8px; color:var(--dhl-black); font-size:13px; text-transform:uppercase; letter-spacing:.4px; }
-    .info-card span{ color:var(--muted); font-size:13px; line-height:1.55; display:block; }
+ /* ── Info left panel ── */
+ .left{ position:relative; z-index:1; padding-right:20px; }
+ .login-badge{
+ display:inline-block; margin-bottom:14px; padding:8px 14px;
+ border-radius:999px; background:#fff4db; color:#9a6700;
+ font-weight:800; font-size:12px; letter-spacing:.4px;
+ }
+ .title{ font-size:42px; color:var(--dhl-red); font-weight:900; margin-bottom:10px; line-height:1.1; }
+ .subtitle{ color:var(--muted); font-size:16px; line-height:1.7; max-width:620px; margin-bottom:26px; }
+ .info-grid{ display:grid; grid-template-columns:repeat(2, minmax(180px,1fr)); gap:14px; max-width:700px; }
+ .info-card{
+ background:#fff;
+ border:1px solid var(--line); border-radius:16px; padding:16px;
+ box-shadow:0 8px 18px rgba(15,23,42,.05);
+ }
+ .info-card strong{ display:block; margin-bottom:8px; color:var(--dhl-black); font-size:13px; text-transform:uppercase; letter-spacing:.4px; }
+ .info-card span{ color:var(--muted); font-size:13px; line-height:1.55; display:block; }
 
-    /* ── Form box ── */
-    .form-box{
-      position:relative; z-index:1; width:100%; max-width:460px;
-      justify-self:end; background:#fff; border:1px solid var(--line);
-      border-radius:20px; padding:28px 24px 22px;
-      box-shadow:0 10px 24px rgba(15,23,42,.08);
-    }
-    .form-head{ margin-bottom:20px; }
-    .form-head h2{ margin:0 0 6px; font-size:24px; color:var(--dhl-black); font-weight:900; }
-    .form-head p{ margin:0; font-size:13px; color:var(--muted); line-height:1.5; }
+ /* ── Form box ── */
+ .form-box{
+ position:relative; z-index:1; width:100%; max-width:460px;
+ justify-self:end; background:#fff; border:1px solid var(--line);
+ border-radius:20px; padding:28px 24px 22px;
+ box-shadow:0 10px 24px rgba(15,23,42,.08);
+ }
+ .form-head{ margin-bottom:20px; }
+ .form-head h2{ margin:0 0 6px; font-size:24px; color:var(--dhl-black); font-weight:900; }
+ .form-head p{ margin:0; font-size:13px; color:var(--muted); line-height:1.5; }
 
-    .field{ margin-bottom:16px; }
-    label{ display:block; margin-bottom:6px; font-weight:800; color:var(--text); font-size:13px; }
-    input[type=email],input[type=password],input[type=text],select{
-      width:100%; padding:14px; border-radius:12px; border:1px solid #d6dae1;
-      font-size:14px; outline:none; font-family:inherit;
-      transition:border-color .18s ease, box-shadow .18s ease;
-      background:#fafbfc;
-    }
-    input:focus,select:focus{
-      border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.10); background:#fff;
-    }
+ .field{ margin-bottom:16px; }
+ label{ display:block; margin-bottom:6px; font-weight:800; color:var(--text); font-size:13px; }
+ input[type=email],input[type=password],input[type=text],select{
+ width:100%; padding:14px; border-radius:12px; border:1px solid #d6dae1;
+ font-size:14px; outline:none; font-family:inherit;
+ transition:border-color .18s ease, box-shadow .18s ease;
+ background:#fafbfc;
+ }
+ input:focus,select:focus{
+ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.10); background:#fff;
+ }
 
-    .btn-login{
-      width:100%; padding:14px; border:none; border-radius:12px;
-      font-weight:800; cursor:pointer; margin-top:4px;
-      display:flex; align-items:center; justify-content:center; gap:8px;
-      transition:.18s ease; font-size:14px; font-family:inherit;
-      background:linear-gradient(180deg,var(--dhl-yellow),#f1be00); color:#111;
-    }
-    .btn-login:hover{ transform:translateY(-1px); box-shadow:0 6px 16px rgba(255,204,0,.3); }
+ .btn-login{
+ width:100%; padding:14px; border:none; border-radius:12px;
+ font-weight:800; cursor:pointer; margin-top:4px;
+ display:flex; align-items:center; justify-content:center; gap:8px;
+ transition:.18s ease; font-size:14px; font-family:inherit;
+ background:linear-gradient(180deg,var(--dhl-yellow),#f1be00); color:#111;
+ }
+ .btn-login:hover{ transform:translateY(-1px); box-shadow:0 6px 16px rgba(255,204,0,.3); }
 
-    /* ── Links row abaixo dos campos ── */
-    .form-links{
-      display:flex; align-items:center; justify-content:space-between;
-      margin-top:14px; gap:8px;
-    }
-    .link-forgot{
-      font-size:13px; color:var(--muted); font-weight:700;
-      transition:.15s;
-    }
-    .link-forgot:hover{ color:var(--dhl-red); }
-    .link-register{
-      font-size:13px; color:var(--dhl-red); font-weight:800;
-      display:inline-flex; align-items:center; gap:5px; cursor:pointer;
-      background:none; border:none; font-family:inherit; padding:0;
-      transition:.15s;
-    }
-    .link-register:hover{ color:var(--dhl-red-dark); }
+ /* ── Links row abaixo dos campos ── */
+ .form-links{
+ display:flex; align-items:center; justify-content:space-between;
+ margin-top:14px; gap:8px;
+ }
+ .link-forgot{
+ font-size:13px; color:var(--muted); font-weight:700;
+ transition:.15s;
+ }
+ .link-forgot:hover{ color:var(--dhl-red); }
+ .link-register{
+ font-size:13px; color:var(--dhl-red); font-weight:800;
+ display:inline-flex; align-items:center; gap:5px; cursor:pointer;
+ background:none; border:none; font-family:inherit; padding:0;
+ transition:.15s;
+ }
+ .link-register:hover{ color:var(--dhl-red-dark); }
 
-    /* ── Flash ── */
-    .flash-wrap{ margin-bottom:16px; }
-    .flash{ margin-bottom:8px; padding:11px 14px; border-radius:11px; font-weight:700; border:1px solid transparent; font-size:13px; }
-    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
-    .flash.danger { background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
-    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+ /* ── Flash ── */
+ .flash-wrap{ margin-bottom:16px; }
+ .flash{ margin-bottom:8px; padding:11px 14px; border-radius:11px; font-weight:700; border:1px solid transparent; font-size:13px; }
+ .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+ .flash.danger { background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+ .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
 
-    /* ── Modal solicitar cadastro ── */
-    .modal-overlay{
-      display:none; position:fixed; inset:0;
-      background:rgba(15,23,42,.55); backdrop-filter:blur(4px);
-      z-index:9000; align-items:center; justify-content:center; padding:20px;
-    }
-    .modal-overlay.open{ display:flex; animation:fadeIn .18s ease; }
-    @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+ /* ── Modal solicitar cadastro ── */
+ .modal-overlay{
+ display:none; position:fixed; inset:0;
+ background:rgba(15,23,42,.55); backdrop-filter:blur(4px);
+ z-index:9000; align-items:center; justify-content:center; padding:20px;
+ }
+ .modal-overlay.open{ display:flex; animation:fadeIn .18s ease; }
+ @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
 
-    .modal-box{
-      background:#fff; border-radius:20px; padding:0;
-      max-width:420px; width:100%;
-      box-shadow:0 24px 60px rgba(0,0,0,.22);
-      animation:slideUp .2s ease; overflow:hidden;
-    }
-    @keyframes slideUp{ from{transform:translateY(18px);opacity:0} to{transform:translateY(0);opacity:1} }
+ .modal-box{
+ background:#fff; border-radius:20px; padding:0;
+ max-width:420px; width:100%;
+ box-shadow:0 24px 60px rgba(0,0,0,.22);
+ animation:slideUp .2s ease; overflow:hidden;
+ }
+ @keyframes slideUp{ from{transform:translateY(18px);opacity:0} to{transform:translateY(0);opacity:1} }
 
-    .modal-header{
-      background:linear-gradient(135deg,#1f2937,#111827);
-      padding:20px 24px; color:#fff;
-      display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
-    }
-    .modal-header h3{ margin:0 0 4px; font-size:18px; font-weight:900; }
-    .modal-header p{ margin:0; font-size:12px; color:rgba(255,255,255,.7); line-height:1.5; }
-    .modal-close{
-      background:rgba(255,255,255,.1); border:none; color:#fff;
-      width:28px; height:28px; border-radius:50%; cursor:pointer;
-      font-size:16px; display:flex; align-items:center; justify-content:center;
-      flex-shrink:0; transition:.15s; margin-top:2px;
-    }
-    .modal-close:hover{ background:rgba(255,255,255,.22); }
+ .modal-header{
+ background:#1f2937;
+ padding:20px 24px; color:#fff;
+ display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+ }
+ .modal-header h3{ margin:0 0 4px; font-size:18px; font-weight:900; }
+ .modal-header p{ margin:0; font-size:12px; color:rgba(255,255,255,.7); line-height:1.5; }
+ .modal-close{
+ background:rgba(255,255,255,.1); border:none; color:#fff;
+ width:28px; height:28px; border-radius:50%; cursor:pointer;
+ font-size:16px; display:flex; align-items:center; justify-content:center;
+ flex-shrink:0; transition:.15s; margin-top:2px;
+ }
+ .modal-close:hover{ background:rgba(255,255,255,.22); }
 
-    .modal-body{ padding:22px 24px 8px; }
-    .modal-body .field{ margin-bottom:14px; }
-    .modal-body label{ font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px; }
-    .modal-body input,.modal-body select{ padding:11px 13px; font-size:13px; border-radius:10px; }
+ .modal-body{ padding:22px 24px 8px; }
+ .modal-body .field{ margin-bottom:14px; }
+ .modal-body label{ font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px; }
+ .modal-body input,.modal-body select{ padding:11px 13px; font-size:13px; border-radius:10px; }
 
-    .modal-footer{ padding:14px 24px 22px; display:flex; flex-direction:column; gap:10px; }
-    .btn-modal-submit{
-      width:100%; padding:12px; border:none; border-radius:11px;
-      font-weight:800; font-size:14px; cursor:pointer; font-family:inherit;
-      background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
-      color:#fff; transition:.18s;
-    }
-    .btn-modal-submit:hover{ transform:translateY(-1px); box-shadow:0 6px 16px rgba(212,5,17,.25); }
-    .btn-modal-cancel{
-      width:100%; padding:10px; border:1px solid #d1d5db; border-radius:11px;
-      background:#fff; color:#374151; font-weight:700; font-size:13px;
-      cursor:pointer; font-family:inherit; transition:.15s;
-    }
-    .btn-modal-cancel:hover{ background:#f3f4f6; border-color:#9ca3af; }
+ .modal-footer{ padding:14px 24px 22px; display:flex; flex-direction:column; gap:10px; }
+ .btn-modal-submit{
+ width:100%; padding:12px; border:none; border-radius:11px;
+ font-weight:800; font-size:14px; cursor:pointer; font-family:inherit;
+ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark));
+ color:#fff; transition:.18s;
+ }
+ .btn-modal-submit:hover{ transform:translateY(-1px); box-shadow:0 6px 16px rgba(212,5,17,.25); }
+ .btn-modal-cancel{
+ width:100%; padding:10px; border:1px solid #d1d5db; border-radius:11px;
+ background:#fff; color:#374151; font-weight:700; font-size:13px;
+ cursor:pointer; font-family:inherit; transition:.15s;
+ }
+ .btn-modal-cancel:hover{ background:#f3f4f6; border-color:#9ca3af; }
 
-    .modal-note{ padding:0 24px 18px; font-size:11px; color:var(--muted); line-height:1.55; text-align:center; }
+ .modal-note{ padding:0 24px 18px; font-size:11px; color:var(--muted); line-height:1.55; text-align:center; }
 
-    /* ── Responsive ── */
-    @media(max-width:1100px){
-      .page{ flex-direction:column; }
-      .left-panel{ width:100%; box-shadow:none; }
-      .content{ padding:20px; }
-      .login-card{ grid-template-columns:1fr; min-height:auto; padding:28px; }
-      .left{ padding-right:0; }
-      .form-box{ max-width:100%; justify-self:stretch; }
-    }
-    @media(max-width:700px){
-      .title{ font-size:32px; }
-      .info-grid{ grid-template-columns:1fr; }
-      .login-card{ padding:20px; }
-      .content{ padding:14px; }
-    }
-  </style>
+ /* ── Responsive ── */
+ @media(max-width:1100px){
+ .page{ flex-direction:column; }
+ .left-panel{ width:100%; box-shadow:none; }
+ .content{ padding:20px; }
+ .login-card{ grid-template-columns:1fr; min-height:auto; padding:28px; }
+ .left{ padding-right:0; }
+ .form-box{ max-width:100%; justify-self:stretch; }
+ }
+ @media(max-width:700px){
+ .title{ font-size:32px; }
+ .info-grid{ grid-template-columns:1fr; }
+ .login-card{ padding:20px; }
+ .content{ padding:14px; }
+ }
+ </style>
 </head>
 <body>
 
 <div id="loading-overlay">
-  <div class="spinner"></div>
-  <p>Processando, aguarde...</p>
+ <div class="spinner"></div>
+ <p>Processando, aguarde...</p>
 </div>
 
 <!-- Modal: Solicitar Cadastro -->
 <div class="modal-overlay" id="modal-cadastro">
-  <div class="modal-box">
-    <div class="modal-header">
-      <div>
-        <h3>✉️ Solicitar Cadastro</h3>
-        <p>Preencha os dados abaixo. O administrador entrará em contato para liberar seu acesso.</p>
-      </div>
-      <button class="modal-close" onclick="fecharModal()" title="Fechar">✕</button>
-    </div>
-    <form method="POST" action="{{ url_for('solicitar_cadastro') }}" id="form-solicitar"
-          onsubmit="document.getElementById('loading-overlay').classList.add('show')">
-      <div class="modal-body">
-        <div class="field">
-          <label for="sol-nome">Nome completo *</label>
-          <input type="text" id="sol-nome" name="nome" placeholder="Seu nome completo" required>
-        </div>
-        <div class="field">
-          <label for="sol-site">Site / Unidade *</label>
-          <select id="sol-site" name="site" required>
-            <option value="">Selecione o site...</option>
-            {% for s in todos_sites %}
-            <option value="{{ s }}">{{ s }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="field">
-          <label for="sol-email">E-mail corporativo *</label>
-          <input type="email" id="sol-email" name="email" placeholder="nome.sobrenome@dhl.com" required>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="submit" class="btn-modal-submit">📨 Enviar solicitação</button>
-        <button type="button" class="btn-modal-cancel" onclick="fecharModal()">Cancelar</button>
-      </div>
-    </form>
-    <div class="modal-note">
-      Sua solicitação será analisada pelo administrador do sistema.<br>
-      O acesso será liberado mediante aprovação.
-    </div>
-  </div>
+ <div class="modal-box">
+ <div class="modal-header">
+ <div>
+ <h3>️ Solicitar Cadastro</h3>
+ <p>Preencha os dados abaixo. O administrador entrará em contato para liberar seu acesso.</p>
+ </div>
+ <button class="modal-close" onclick="fecharModal()" title="Fechar">✕</button>
+ </div>
+ <form method="POST" action="{{ url_for('solicitar_cadastro') }}" id="form-solicitar"
+ onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+ <div class="modal-body">
+ <div class="field">
+ <label for="sol-nome">Nome completo *</label>
+ <input type="text" id="sol-nome" name="nome" placeholder="Seu nome completo" required>
+ </div>
+ <div class="field">
+ <label for="sol-site">Site / Unidade *</label>
+ <select id="sol-site" name="site" required>
+ <option value="">Selecione o site...</option>
+ {% for s in todos_sites %}
+ <option value="{{ s }}">{{ s }}</option>
+ {% endfor %}
+ </select>
+ </div>
+ <div class="field">
+ <label for="sol-email">E-mail corporativo *</label>
+ <input type="email" id="sol-email" name="email" placeholder="nome.sobrenome@dhl.com" required>
+ </div>
+ </div>
+ <div class="modal-footer">
+ <button type="submit" class="btn-modal-submit"> Enviar solicitação</button>
+ <button type="button" class="btn-modal-cancel" onclick="fecharModal()">Cancelar</button>
+ </div>
+ </form>
+ <div class="modal-note">
+ Sua solicitação será analisada pelo administrador do sistema.<br>
+ O acesso será liberado mediante aprovação.
+ </div>
+ </div>
 </div>
 
 <div class="page">
 
-  <aside class="left-panel">
-    <div class="brand-top">
-      <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" style="height:64px;width:auto;object-fit:contain;margin-bottom:6px;">
-      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
-      <div class="brand-sub">
-        Plataforma corporativa de controle operacional e rastreabilidade de ocorrências de segurança.
-      </div>
-    </div>
-    <div class="side-footer">
-      Ambiente interno para registro e acompanhamento de ocorrências operacionais.
-    </div>
-  </aside>
+ <aside class="left-panel">
+ <div class="brand-top">
+ <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" style="height:64px;width:auto;object-fit:contain;margin-bottom:6px;">
+ <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+ <div class="brand-sub">
+ Plataforma corporativa de controle operacional e rastreabilidade de ocorrências de segurança.
+ </div>
+ </div>
+ <div class="side-footer">
+ Ambiente interno para registro e acompanhamento de ocorrências operacionais.
+ </div>
+ </aside>
 
-  <main class="content">
-    <div class="login-wrap">
-      <div class="login-card">
+ <main class="content">
+ <div class="login-wrap">
+ <div class="login-card">
 
-        <div class="left">
+ <div class="left">
 
-          <div class="title">CCTV CONTROL PANEL</div>
-          <div class="subtitle">
-            Sistema corporativo para registro e controle de ocorrências operacionais.
-            Acesse com suas credenciais corporativas para continuar.
-          </div>
-          <div class="info-grid">
-            <div class="info-card">
-              <strong>Controle operacional</strong>
-              <span>Centralize registros, pendências e tratativas em um ambiente único.</span>
-            </div>
-            <div class="info-card">
-              <strong>Rastreabilidade</strong>
-              <span>Mantenha histórico estruturado para acompanhamento e auditoria.</span>
-            </div>
-            <div class="info-card">
-              <strong>Segurança</strong>
-              <span>Acesso com credenciais individuais para maior controle e governança.</span>
-            </div>
-            <div class="info-card">
-              <strong>Padrão Security</strong>
-              <span>Interface alinhada ao ambiente corporativo DHL Security.</span>
-            </div>
-          </div>
-        </div>
+ <div class="title">CCTV CONTROL PANEL</div>
+ <div class="subtitle">
+ Sistema corporativo para registro e controle de ocorrências operacionais.
+ Acesse com suas credenciais corporativas para continuar.
+ </div>
+ <div class="info-grid">
+ <div class="info-card">
+ <strong>Controle operacional</strong>
+ <span>Centralize registros, pendências e tratativas em um ambiente único.</span>
+ </div>
+ <div class="info-card">
+ <strong>Rastreabilidade</strong>
+ <span>Mantenha histórico estruturado para acompanhamento e auditoria.</span>
+ </div>
+ <div class="info-card">
+ <strong>Segurança</strong>
+ <span>Acesso com credenciais individuais para maior controle e governança.</span>
+ </div>
+ <div class="info-card">
+ <strong>Padrão Security</strong>
+ <span>Interface alinhada ao ambiente corporativo DHL Security.</span>
+ </div>
+ </div>
+ </div>
 
-        <div class="form-box">
-          <div class="form-head">
-            <h2>Acessar sistema</h2>
-            <p>Informe suas credenciais corporativas para entrar no painel.</p>
-          </div>
+ <div class="form-box">
+ <div class="form-head">
+ <h2>Acessar sistema</h2>
+ <p>Informe suas credenciais corporativas para entrar no painel.</p>
+ </div>
 
-          {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-              <div class="flash-wrap">
-                {% for category, message in messages %}
-                  <div class="flash {{ category }}">{{ message }}</div>
-                {% endfor %}
-              </div>
-            {% endif %}
-          {% endwith %}
+ {% with messages = get_flashed_messages(with_categories=true) %}
+ {% if messages %}
+ <div class="flash-wrap">
+ {% for category, message in messages %}
+ <div class="flash {{ category }}">{{ message }}</div>
+ {% endfor %}
+ </div>
+ {% endif %}
+ {% endwith %}
 
-          <form method="POST" id="form-login"
-                onsubmit="document.getElementById('loading-overlay').classList.add('show')">
-            <div class="field">
-              <label for="email">E-mail</label>
-              <input type="email" id="email" name="email" placeholder="nome.sobrenome@dhl.com" required autocomplete="username">
-            </div>
-            <div class="field">
-              <label for="password">Senha</label>
-              <input type="password" id="password" name="password" required autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn-login">→ Entrar</button>
-          </form>
+ <form method="POST" id="form-login"
+ onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+ <div class="field">
+ <label for="email">E-mail</label>
+ <input type="email" id="email" name="email" placeholder="nome.sobrenome@dhl.com" required autocomplete="username">
+ </div>
+ <div class="field">
+ <label for="password">Senha</label>
+ <input type="password" id="password" name="password" required autocomplete="current-password">
+ </div>
+ <button type="submit" class="btn-login">→ Entrar</button>
+ </form>
 
-          <!-- Links: esquerda = esqueceu senha | direita = solicitar cadastro -->
-          <div class="form-links">
-            <a href="{{ url_for('esqueci_senha') }}" class="link-forgot">Esqueceu a senha?</a>
-            <button type="button" class="link-register" onclick="abrirModal()">
-              ✉️ Solicitar cadastro
-            </button>
-          </div>
+ <!-- Links: esquerda = esqueceu senha | direita = solicitar cadastro -->
+ <div class="form-links">
+ <a href="{{ url_for('esqueci_senha') }}" class="link-forgot">Esqueceu a senha?</a>
+ <button type="button" class="link-register" onclick="abrirModal()">
+ ️ Solicitar cadastro
+ </button>
+ </div>
 
-        </div>
+ </div>
 
-      </div>
-    </div>
-  </main>
+ </div>
+ </div>
+ </main>
 
 </div>
 
 <script>
-  function abrirModal() {
-    document.getElementById('modal-cadastro').classList.add('open');
-  }
-  function fecharModal() {
-    document.getElementById('modal-cadastro').classList.remove('open');
-    document.getElementById('form-solicitar').reset();
-  }
+ function abrirModal() {
+ document.getElementById('modal-cadastro').classList.add('open');
+ }
+ function fecharModal() {
+ document.getElementById('modal-cadastro').classList.remove('open');
+ document.getElementById('form-solicitar').reset();
+ }
 
-  // Fecha ao clicar no backdrop
-  document.getElementById('modal-cadastro').addEventListener('click', function(e) {
-    if (e.target === this) fecharModal();
-  });
+ // Fecha ao clicar no backdrop
+ document.getElementById('modal-cadastro').addEventListener('click', function(e) {
+ if (e.target === this) fecharModal();
+ });
 
-  // ESC fecha modal
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') fecharModal();
-  });
+ // ESC fecha modal
+ document.addEventListener('keydown', function(e) {
+ if (e.key === 'Escape') fecharModal();
+ });
 </script>
 {% include "_translate.html" %}
+<script src="/static/panel.js"></script>
 </body>
 </html>

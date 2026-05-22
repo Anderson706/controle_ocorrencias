@@ -11,7 +11,7 @@ with open(exe_path, 'rb') as f:
     exe_bytes = f.read()
 
 cur.execute(
-    "UPDATE SISTEMA_CONFIG SET EXE_BLOB = :blob, VERSAO_EXIGIDA = '2.5'",
+    "UPDATE SISTEMA_CONFIG SET EXE_BLOB = :blob, VERSAO_EXIGIDA = '3.0'",
     {'blob': exe_bytes}
 )
 conn.commit()
@@ -22,4 +22,4 @@ print(f'Banco: VERSAO_EXIGIDA={row[0]}  EXE_BLOB={row[1]/1_048_576:.1f} MB')
 
 cur.close()
 conn.close()
-print('v2.5 publicado no banco.')
+print('v3.0 publicado no banco.')

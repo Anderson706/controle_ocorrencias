@@ -1,208 +1,209 @@
 <!doctype html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8">
-  <title>Redefinir senha | CCTV Control Panel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    :root{
-      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
-      --dhl-black:#1f1f1f; --line:#e5e7eb; --text:#1f2937;
-      --muted:#6b7280; --bg:#f3f5f7; --card:#ffffff;
-      --shadow:0 12px 30px rgba(0,0,0,.12);
-    }
-    *{ box-sizing:border-box; }
-    html,body{ margin:0; padding:0; min-height:100vh; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:var(--text); }
-    a{ text-decoration:none; }
+ <meta charset="utf-8">
+ <title>Redefinir senha | CCTV Control Panel</title>
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <style>
+ :root{
+ --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
+ --dhl-black:#1f1f1f; --line:#e5e7eb; --text:#1f2937;
+ --muted:#6b7280; --bg:#f3f5f7; --card:#ffffff;
+ --shadow:0 12px 30px rgba(0,0,0,.12);
+ }
+ *{ box-sizing:border-box; }
+ html,body{ margin:0; padding:0; min-height:100vh; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:var(--text); }
+ a{ text-decoration:none; }
 
-    .page{ min-height:100vh; display:flex; }
+ .page{ min-height:100vh; display:flex; }
 
-    .left-panel{ width:320px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; padding:26px 22px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:6px 0 22px rgba(0,0,0,.12); }
-    .brand-top{ display:flex; flex-direction:column; gap:10px; }
-    .logo-side{ height:21px; width:auto; object-fit:contain; }
-    .brand-badge{ display:inline-flex; align-items:center; padding:7px 12px; border-radius:999px; background:var(--dhl-yellow); color:#111; font-size:11px; font-weight:900; letter-spacing:.5px; width:max-content; }
-    .brand-title{ font-size:26px; font-weight:900; line-height:1.15; }
-    .brand-sub{ color:rgba(255,255,255,.74); font-size:13px; line-height:1.6; max-width:240px; }
-    .side-footer{ font-size:12px; color:rgba(255,255,255,.55); line-height:1.5; }
+ .left-panel{ width:320px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; padding:26px 22px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:6px 0 22px rgba(0,0,0,.12); }
+ .brand-top{ display:flex; flex-direction:column; gap:10px; }
+ .logo-side{ height:21px; width:auto; object-fit:contain; }
+ .brand-badge{ display:inline-flex; align-items:center; padding:7px 12px; border-radius:999px; background:var(--dhl-yellow); color:#111; font-size:11px; font-weight:900; letter-spacing:.5px; width:max-content; }
+ .brand-title{ font-size:26px; font-weight:900; line-height:1.15; }
+ .brand-sub{ color:rgba(255,255,255,.74); font-size:13px; line-height:1.6; max-width:240px; }
+ .side-footer{ font-size:12px; color:rgba(255,255,255,.55); line-height:1.5; }
 
-    .content{ flex:1; display:flex; align-items:center; justify-content:center; padding:32px; }
+ .content{ flex:1; display:flex; align-items:center; justify-content:center; padding:32px; }
 
-    .form-box{ width:100%; max-width:420px; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:32px; box-shadow:var(--shadow); }
+ .form-box{ width:100%; max-width:420px; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:32px; box-shadow:var(--shadow); }
 
-    .form-head{ margin-bottom:22px; }
-    .form-head .icon{ font-size:36px; display:block; margin-bottom:10px; }
-    .form-head h2{ margin:0 0 6px; font-size:22px; font-weight:900; color:var(--dhl-black); }
-    .form-head p{ margin:0; font-size:13px; color:var(--muted); line-height:1.55; }
+ .form-head{ margin-bottom:22px; }
+ .form-head .icon{ font-size:36px; display:block; margin-bottom:10px; }
+ .form-head h2{ margin:0 0 6px; font-size:22px; font-weight:900; color:var(--dhl-black); }
+ .form-head p{ margin:0; font-size:13px; color:var(--muted); line-height:1.55; }
 
-    .field{ margin-bottom:16px; }
-    label{ display:block; margin-bottom:6px; font-weight:800; font-size:13px; color:var(--text); }
-    input{ width:100%; padding:13px 14px; border-radius:12px; border:1px solid #d6dae1; font-size:14px; outline:none; transition:border-color .18s, box-shadow .18s; font-family:inherit; }
-    input:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.10); }
+ .field{ margin-bottom:16px; }
+ label{ display:block; margin-bottom:6px; font-weight:800; font-size:13px; color:var(--text); }
+ input{ width:100%; padding:13px 14px; border-radius:12px; border:1px solid #d6dae1; font-size:14px; outline:none; transition:border-color .18s, box-shadow .18s; font-family:inherit; }
+ input:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.10); }
 
-    /* Campo do código: letras grandes e espaçadas */
-    #codigo{ font-size:22px; font-weight:900; letter-spacing:8px; text-align:center; color:var(--dhl-black); }
+ /* Campo do código: letras grandes e espaçadas */
+ #codigo{ font-size:22px; font-weight:900; letter-spacing:8px; text-align:center; color:var(--dhl-black); }
 
-    .divider{ border:none; border-top:1px solid var(--line); margin:18px 0; }
+ .divider{ border:none; border-top:1px solid var(--line); margin:18px 0; }
 
-    .btn{ width:100%; padding:13px; border:none; border-radius:12px; font-weight:800; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; transition:.18s ease; font-family:inherit; }
-    .btn:hover{ transform:translateY(-1px); }
-    .btn-primary{ background:linear-gradient(180deg,var(--dhl-yellow),#f1be00); color:#111; }
+ .btn{ width:100%; padding:13px; border:none; border-radius:12px; font-weight:800; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px; transition:.18s ease; font-family:inherit; }
+ .btn:hover{ transform:translateY(-1px); }
+ .btn-primary{ background:linear-gradient(180deg,var(--dhl-yellow),#f1be00); color:#111; }
 
-    .hint{ font-size:12px; color:var(--muted); margin-top:6px; line-height:1.5; }
+ .hint{ font-size:12px; color:var(--muted); margin-top:6px; line-height:1.5; }
 
-    .flash-wrap{ margin-bottom:16px; }
-    .flash{ padding:12px 14px; border-radius:12px; font-weight:700; border:1px solid transparent; font-size:13px; margin-bottom:8px; }
-    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
-    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
-    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+ .flash-wrap{ margin-bottom:16px; }
+ .flash{ padding:12px 14px; border-radius:12px; font-weight:700; border:1px solid transparent; font-size:13px; margin-bottom:8px; }
+ .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+ .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+ .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
 
-    .back-link{ display:block; text-align:center; margin-top:16px; font-size:13px; color:var(--muted); font-weight:700; }
-    .back-link a{ color:var(--dhl-red); }
-    .back-link a:hover{ text-decoration:underline; }
+ .back-link{ display:block; text-align:center; margin-top:16px; font-size:13px; color:var(--muted); font-weight:700; }
+ .back-link a{ color:var(--dhl-red); }
+ .back-link a:hover{ text-decoration:underline; }
 
-    /* Indicador de força da senha */
-    .strength-bar{ height:4px; border-radius:4px; background:#e5e7eb; margin-top:8px; overflow:hidden; }
-    .strength-fill{ height:100%; border-radius:4px; width:0; transition:width .3s, background .3s; }
+ /* Indicador de força da senha */
+ .strength-bar{ height:4px; border-radius:4px; background:#e5e7eb; margin-top:8px; overflow:hidden; }
+ .strength-fill{ height:100%; border-radius:4px; width:0; transition:width .3s, background .3s; }
 
-    #loading-overlay{ position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.7); z-index:99999; display:none; align-items:center; justify-content:center; flex-direction:column; color:#fff; }
-    .spinner{ border:5px solid rgba(255,255,255,.3); border-radius:50%; border-top:5px solid var(--dhl-yellow); width:48px; height:48px; animation:spin 1s linear infinite; }
-    @keyframes spin{ to{ transform:rotate(360deg); } }
+ #loading-overlay{ position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.7); z-index:99999; display:none; align-items:center; justify-content:center; flex-direction:column; color:#fff; }
+ .spinner{ border:5px solid rgba(255,255,255,.3); border-radius:50%; border-top:5px solid var(--dhl-yellow); width:48px; height:48px; animation:spin 1s linear infinite; }
+ @keyframes spin{ to{ transform:rotate(360deg); } }
 
-    @media(max-width:900px){ .left-panel{ display:none; } }
-  </style>
+ @media(max-width:900px){ .left-panel{ display:none; } }
+ </style>
 </head>
 <body>
 <div id="loading-overlay"><div class="spinner"></div><p style="margin-top:16px;font-family:sans-serif;">Salvando...</p></div>
 
 <div class="page">
-  <aside class="left-panel">
-    <div class="brand-top">
-      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
-      <div class="brand-sub">Plataforma corporativa de controle operacional e rastreabilidade de ocorrências de segurança.</div>
-    </div>
-    <div class="side-footer">Ambiente interno — DHL Supply Chain</div>
-  </aside>
+ <aside class="left-panel">
+ <div class="brand-top">
+ <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+ <div class="brand-sub">Plataforma corporativa de controle operacional e rastreabilidade de ocorrências de segurança.</div>
+ </div>
+ <div class="side-footer">Ambiente interno — DHL Supply Chain</div>
+ </aside>
 
-  <main class="content">
-    <div class="form-box">
+ <main class="content">
+ <div class="form-box">
 
-      <div class="form-head">
-        <span class="icon">🔒</span>
-        <h2>Nova senha</h2>
-        <p>Digite o código de 6 dígitos recebido no e-mail e escolha uma nova senha.</p>
-      </div>
+ <div class="form-head">
+ <span class="icon"></span>
+ <h2>Nova senha</h2>
+ <p>Digite o código de 6 dígitos recebido no e-mail e escolha uma nova senha.</p>
+ </div>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="flash-wrap">
-            {% for category, message in messages %}
-              <div class="flash {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </div>
-        {% endif %}
-      {% endwith %}
+ {% with messages = get_flashed_messages(with_categories=true) %}
+ {% if messages %}
+ <div class="flash-wrap">
+ {% for category, message in messages %}
+ <div class="flash {{ category }}">{{ message }}</div>
+ {% endfor %}
+ </div>
+ {% endif %}
+ {% endwith %}
 
-      <form method="POST" id="form-redefinir">
-        <div class="field">
-          <label for="codigo">Código recebido no e-mail</label>
-          <input type="text" id="codigo" name="codigo"
-                 placeholder="000000"
-                 maxlength="6" inputmode="numeric"
-                 autocomplete="one-time-code" required autofocus>
-          <div class="hint">6 dígitos numéricos — válido por 15 minutos.</div>
-        </div>
+ <form method="POST" id="form-redefinir">
+ <div class="field">
+ <label for="codigo">Código recebido no e-mail</label>
+ <input type="text" id="codigo" name="codigo"
+ placeholder="000000"
+ maxlength="6" inputmode="numeric"
+ autocomplete="one-time-code" required autofocus>
+ <div class="hint">6 dígitos numéricos — válido por 15 minutos.</div>
+ </div>
 
-        <hr class="divider">
+ <hr class="divider">
 
-        <div class="field">
-          <label for="nova_senha">Nova senha</label>
-          <input type="password" id="nova_senha" name="nova_senha"
-                 placeholder="Mínimo 6 caracteres" minlength="6" required>
-          <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
-          <div class="hint" id="strength-text"></div>
-        </div>
+ <div class="field">
+ <label for="nova_senha">Nova senha</label>
+ <input type="password" id="nova_senha" name="nova_senha"
+ placeholder="Mínimo 6 caracteres" minlength="6" required>
+ <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+ <div class="hint" id="strength-text"></div>
+ </div>
 
-        <div class="field">
-          <label for="confirma_senha">Confirmar nova senha</label>
-          <input type="password" id="confirma_senha" name="confirma_senha"
-                 placeholder="Repita a senha" required>
-          <div class="hint" id="match-hint"></div>
-        </div>
+ <div class="field">
+ <label for="confirma_senha">Confirmar nova senha</label>
+ <input type="password" id="confirma_senha" name="confirma_senha"
+ placeholder="Repita a senha" required>
+ <div class="hint" id="match-hint"></div>
+ </div>
 
-        <button type="submit" class="btn btn-primary">✔ Redefinir senha</button>
-      </form>
+ <button type="submit" class="btn btn-primary">✔ Redefinir senha</button>
+ </form>
 
-      <div class="back-link">
-        <a href="{{ url_for('esqueci_senha') }}">← Solicitar novo código</a>
-        &nbsp;·&nbsp;
-        <a href="{{ url_for('login') }}">Login</a>
-      </div>
+ <div class="back-link">
+ <a href="{{ url_for('esqueci_senha') }}">← Solicitar novo código</a>
+ &nbsp;·&nbsp;
+ <a href="{{ url_for('login') }}">Login</a>
+ </div>
 
-    </div>
-  </main>
+ </div>
+ </main>
 </div>
 
 <script>
 // Força da senha
 document.getElementById('nova_senha').addEventListener('input', function(){
-  var v = this.value;
-  var score = 0;
-  if(v.length >= 6)  score++;
-  if(v.length >= 10) score++;
-  if(/[A-Z]/.test(v)) score++;
-  if(/[0-9]/.test(v)) score++;
-  if(/[^A-Za-z0-9]/.test(v)) score++;
+ var v = this.value;
+ var score = 0;
+ if(v.length >= 6)  score++;
+ if(v.length >= 10) score++;
+ if(/[A-Z]/.test(v)) score++;
+ if(/[0-9]/.test(v)) score++;
+ if(/[^A-Za-z0-9]/.test(v)) score++;
 
-  var fill = document.getElementById('strength-fill');
-  var txt  = document.getElementById('strength-text');
-  var pct  = [0, 20, 40, 65, 85, 100][score];
-  var cor  = ['#e5e7eb','#d40511','#f59e0b','#f59e0b','#16a34a','#16a34a'][score];
-  var msg  = ['','Muito fraca','Fraca','Média','Forte','Muito forte'][score];
-  fill.style.width = pct + '%';
-  fill.style.background = cor;
-  txt.textContent = msg ? ('Força: ' + msg) : '';
-  txt.style.color = cor;
+ var fill = document.getElementById('strength-fill');
+ var txt  = document.getElementById('strength-text');
+ var pct  = [0, 20, 40, 65, 85, 100][score];
+ var cor  = ['#e5e7eb','#d40511','#f59e0b','#f59e0b','#16a34a','#16a34a'][score];
+ var msg  = ['','Muito fraca','Fraca','Média','Forte','Muito forte'][score];
+ fill.style.width = pct + '%';
+ fill.style.background = cor;
+ txt.textContent = msg ? ('Força: ' + msg) : '';
+ txt.style.color = cor;
 });
 
 // Confirmação de senha
 document.getElementById('confirma_senha').addEventListener('input', function(){
-  var hint = document.getElementById('match-hint');
-  if(!this.value){ hint.textContent=''; return; }
-  if(this.value === document.getElementById('nova_senha').value){
-    hint.textContent = '✔ Senhas coincidem';
-    hint.style.color = '#16a34a';
-  } else {
-    hint.textContent = '✘ Senhas não coincidem';
-    hint.style.color = '#d40511';
-  }
+ var hint = document.getElementById('match-hint');
+ if(!this.value){ hint.textContent=''; return; }
+ if(this.value === document.getElementById('nova_senha').value){
+ hint.textContent = '✔ Senhas coincidem';
+ hint.style.color = '#16a34a';
+ } else {
+ hint.textContent = '✘ Senhas não coincidem';
+ hint.style.color = '#d40511';
+ }
 });
 
 // Só permite dígitos no campo código
 document.getElementById('codigo').addEventListener('input', function(){
-  this.value = this.value.replace(/\D/g,'').slice(0,6);
+ this.value = this.value.replace(/\D/g,'').slice(0,6);
 });
 
 // Loading overlay
 document.getElementById('form-redefinir').addEventListener('submit', function(){
-  document.getElementById('loading-overlay').style.display = 'flex';
+ document.getElementById('loading-overlay').style.display = 'flex';
 });
 </script>
 
 <script>
 (function(){
-  var _ov = document.getElementById('loading-overlay');
-  if(!_ov) return;
-  document.addEventListener('click', function(e){
-    var el = e.target;
-    while(el && el.tagName !== 'A') el = el.parentElement;
-    if(!el) return;
-    var href = el.getAttribute('href') || '';
-    if(!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-    if(href.indexOf('exportar') !== -1 || href.indexOf('download') !== -1 || href.indexOf('anexo') !== -1) return;
-    _ov.classList.add('show');
-  }, true);
+ var _ov = document.getElementById('loading-overlay');
+ if(!_ov) return;
+ document.addEventListener('click', function(e){
+ var el = e.target;
+ while(el && el.tagName !== 'A') el = el.parentElement;
+ if(!el) return;
+ var href = el.getAttribute('href') || '';
+ if(!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+ if(href.indexOf('exportar') !== -1 || href.indexOf('download') !== -1 || href.indexOf('anexo') !== -1) return;
+ _ov.classList.add('show');
+ }, true);
 })();
 </script>
 {% include "_translate.html" %}
+<script src="/static/panel.js"></script>
 </body>
 </html>

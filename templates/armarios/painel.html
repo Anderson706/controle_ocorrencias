@@ -1,0 +1,534 @@
+{% extends "base_app.html" %}
+{% block page_title %}Gestão de Armários | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🗄️ Gestão de Armários{% endblock %}
+{% block topbar_subtitle %}Controle de armários e chaves reserva — {{ site }}{% endblock %}
+{% block topbar_actions %}
+  <button type="button" class="btn btn-soft btn-sm" onclick="document.getElementById('filtro-export-arm').classList.toggle('open')">📊 Exportar Relatório</button>
+  <a href="{{ url_for('armarios.chave_reserva') }}" class="btn btn-dark">🔐 Chave Reserva</a>
+  {% if is_admin %}
+  <button class="btn btn-red" onclick="abrirModalLote()">＋ Criar Armários</button>
+  {% endif %}
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .content{ max-width:1100px; margin:0 auto; }
+
+  /* KPI */
+  .grid-4{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+  .kpi{ position:relative; overflow:hidden; min-height:110px; display:flex; flex-direction:column; justify-content:center; gap:6px; border-left:6px solid var(--dhl-yellow); background:#fff; }
+  .kpi::after{ content:""; position:absolute; right:-18px; top:-20px; width:90px; height:90px; border-radius:50%; background:rgba(255,204,0,.13); }
+  .kpi .label{ position:relative; z-index:1; font-size:11px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+  .kpi .value{ position:relative; z-index:1; font-size:36px; font-weight:900; line-height:1; color:var(--dhl-red); }
+  .kpi .sub{ position:relative; z-index:1; font-size:12px; color:var(--muted); }
+
+  /* Filters */
+  .filters{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .filter-field{ display:flex; flex-direction:column; gap:4px; }
+  .filter-field label{ font-size:11px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; }
+  .filter-field select{ padding:9px 12px; border:1px solid #d7dbe1; border-radius:10px; background:#fff; font-size:13px; outline:none; cursor:pointer; }
+
+  /* Section head */
+  .section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .section-title{ margin:0; font-size:18px; font-weight:900; color:#1f1f1f; }
+  .section-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; background:#fff4cc; border:1px solid #efd470; color:#735500; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
+
+  /* Table */
+  .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:14px; background:#fff; }
+  table{ width:100%; border-collapse:collapse; min-width:700px; }
+  th,td{ padding:12px 14px; border-bottom:1px solid #edf1f5; text-align:left; vertical-align:middle; font-size:13px; }
+  th{ background:#fff8db; color:#4b3c00; font-weight:900; position:sticky; top:0; z-index:1; white-space:nowrap; }
+  tbody tr:hover{ background:#fffdf7; }
+  .badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:900; white-space:nowrap; }
+  .badge-ok{ background:var(--success-bg); color:var(--success-text); }
+  .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
+  .badge-warn{ background:var(--warn-bg); color:var(--warn-text); }
+  .badge-blue{ background:#eff6ff; color:#1d4ed8; }
+  .empty{ padding:18px; color:var(--muted); font-size:13px; }
+
+  /* Modal */
+  .modal-status{ padding:10px 16px; border-radius:12px; font-size:14px; font-weight:900; text-align:center; }
+  .modal-status.ocupado{ background:var(--danger-bg); color:var(--danger-text); }
+  .modal-status.livre{ background:var(--success-bg); color:var(--success-text); }
+
+  /* Inline form inside modal */
+  .ifield label{ display:block; margin-bottom:5px; font-size:11px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; }
+  .ifield input{ width:100%; padding:10px 12px; border:1px solid #d7dbe1; border-radius:10px; background:#f9fafb; font-size:13px; outline:none; }
+  .ifield input:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+
+  /* Signature canvas in modal */
+  .modal-sig-wrap{ border:2px dashed #cbd5e1; border-radius:12px; overflow:hidden; background:#fff; cursor:crosshair; }
+  .modal-sig-wrap canvas{ display:block; width:100%; height:130px; touch-action:none; }
+  .termo-box{ background:#fffbf0; border:1px solid #f5d66f; border-radius:10px; padding:12px 14px; font-size:12px; line-height:1.65; color:#374151; max-height:180px; overflow-y:auto; }
+
+  /* Export filter panel */
+  #filtro-export-arm{ display:none; background:#fff; border-bottom:1px solid #e5e7eb; padding:14px 24px; gap:14px; flex-wrap:wrap; align-items:flex-end; }
+  #filtro-export-arm.open{ display:flex !important; }
+
+  @media(max-width:1024px){ .grid-4{ grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:600px){ .grid-4{ grid-template-columns:1fr 1fr; } }
+</style>
+
+<!-- Export filter panel (outside .content so it spans full width) -->
+<div id="filtro-export-arm">
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label style="font-size:11px; font-weight:700; color:#6b7280;">BLOCO</label>
+    <select id="ea-bloco" style="padding:7px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; min-width:120px;">
+      <option value="">Todos</option>
+      {% for b in blocos %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
+    </select>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label style="font-size:11px; font-weight:700; color:#6b7280;">STATUS ARMÁRIO</label>
+    <select id="ea-status" style="padding:7px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; min-width:130px;">
+      <option value="">Todos</option>
+      <option value="LIVRE">Livre</option>
+      <option value="OCUPADO">Ocupado</option>
+    </select>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label style="font-size:11px; font-weight:700; color:#6b7280;">HIST. CHAVE RESERVA — DE</label>
+    <input type="date" id="ea-ini" style="padding:7px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:13px;">
+  </div>
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <label style="font-size:11px; font-weight:700; color:#6b7280;">ATÉ</label>
+    <input type="date" id="ea-fim" style="padding:7px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:13px;">
+  </div>
+  <a id="ea-btn" href="#" hx-boost="false"
+     style="display:inline-flex; align-items:center; gap:6px; padding:8px 18px; background:#16a34a; color:#fff; border-radius:8px; font-size:13px; font-weight:800; text-decoration:none;"
+     onclick="gerarExportArmarios(event)"> Baixar Excel</a>
+  <button type="button" onclick="document.getElementById('filtro-export-arm').classList.remove('open')"
+     style="padding:8px 14px; background:#f3f4f6; border:none; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; color:#374151;">Fechar</button>
+</div>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <h2>Armários — {{ site }}</h2>
+      <p>Controle de atribuição fixa de armários e gestão das chaves reserva. Atualize quando houver desligamentos ou trocas de colaborador.</p>
+    </div>
+    <div class="hero-badges">
+      <span class="hero-badge">📍 {{ site }}</span>
+      <span class="hero-badge">🗄️ {{ total }} armário{{ 's' if total != 1 else '' }}</span>
+      {% if chave_fora > 0 %}<span class="hero-badge" style="background:rgba(255,100,100,.25);">🔐 {{ chave_fora }} chave{{ 's' if chave_fora != 1 else '' }} fora</span>{% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- KPIs -->
+<div class="grid-4">
+  <div class="card kpi" style="border-left-color:#6366f1;">
+    <div class="label">Total de Armários</div>
+    <div class="value" style="color:#4338ca;">{{ total }}</div>
+    <div class="sub">Cadastrados e ativos</div>
+  </div>
+  <div class="card kpi" style="border-left-color:#22c55e;">
+    <div class="label">Livres</div>
+    <div class="value" style="color:#15803d;">{{ livres }}</div>
+    <div class="sub">Sem colaborador atribuído</div>
+  </div>
+  <div class="card kpi" style="border-left-color:#d40511;">
+    <div class="label">Ocupados</div>
+    <div class="value" style="color:#d40511;">{{ ocupados }}</div>
+    <div class="sub">Com colaborador atribuído</div>
+  </div>
+  <div class="card kpi" style="border-left-color:#f59e0b;">
+    <div class="label">Chave Reserva Fora</div>
+    <div class="value" style="color:#b45309;">{{ chave_fora }}</div>
+    <div class="sub">Requerem atenção</div>
+  </div>
+</div>
+
+<!-- Filtros -->
+<div class="card" style="padding:16px 20px;">
+  <form method="GET" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+    <div class="filter-field">
+      <label>Bloco</label>
+      <select name="bloco">
+        <option value="">Todos os blocos</option>
+        {% for b in blocos %}
+        <option value="{{ b }}" {{ 'selected' if bloco_filtro == b else '' }}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-field">
+      <label>Status</label>
+      <select name="status">
+        <option value="">Todos</option>
+        <option value="LIVRE" {{ 'selected' if status_filtro == 'LIVRE' else '' }}>Livre</option>
+        <option value="OCUPADO" {{ 'selected' if status_filtro == 'OCUPADO' else '' }}>Ocupado</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-soft btn-sm">🔍 Filtrar</button>
+    {% if bloco_filtro or status_filtro %}
+    <a href="{{ url_for('armarios.painel') }}" class="btn btn-soft btn-sm">✕ Limpar</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Tabela de Armários -->
+<div>
+  <div class="section-head">
+    <h2 class="section-title">Armários Cadastrados</h2>
+    <span class="section-chip">{{ armarios|length }} resultado{{ 's' if armarios|length != 1 else '' }}</span>
+  </div>
+  {% if armarios %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Nº Armário</th>
+          <th>Bloco</th>
+          <th>Status</th>
+          <th>Colaborador</th>
+          <th>CPF/Matrícula</th>
+          <th>Atribuído em</th>
+          <th>Chave Reserva</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for arm in armarios %}
+        <tr>
+          <td><strong>{{ arm.numero }}</strong></td>
+          <td>{{ arm.bloco or '—' }}</td>
+          <td>
+            {% if arm.status == 'OCUPADO' %}
+            <span class="badge badge-danger">OCUPADO</span>
+            {% else %}
+            <span class="badge badge-ok">LIVRE</span>
+            {% endif %}
+          </td>
+          <td>{{ arm.colaborador_nome or '—' }}</td>
+          <td>{{ arm.colaborador_cpf or '—' }}</td>
+          <td>{{ arm.atribuido_em.strftime('%d/%m/%Y') if arm.atribuido_em else '—' }}</td>
+          <td>
+            {% if arm._chave_ativa %}
+            <span class="badge {{ 'badge-danger' if arm._chave_alerta else 'badge-warn' }}">
+              🔐 {{ arm._chave_tempo }}
+            </span>
+            {% else %}
+            <span class="badge badge-ok">✓ No local</span>
+            {% endif %}
+          </td>
+          <td>
+            <button class="btn btn-soft btn-sm" onclick="verDetalhe({{ arm.id }})">👁 Detalhes</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card">
+    <p class="empty">Nenhum armário encontrado para os filtros selecionados.{% if is_admin %} Use o botão <strong>Criar Armários</strong> para adicionar.{% endif %}</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block modals %}
+<!-- Modal: Detalhes -->
+<div class="modal-overlay" id="modalDetalhe" onclick="fecharModal('modalDetalhe', event)">
+  <div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>🗄️ Detalhes do Armário</h3>
+      <button class="modal-close" onclick="fecharModal('modalDetalhe')">✕</button>
+    </div>
+    <div class="modal-body" id="modalDetalheBody">
+      <p style="color:var(--muted);text-align:center;">Carregando...</p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Atribuir -->
+<div class="modal-overlay" id="modalAtribuir" onclick="fecharModal('modalAtribuir', event)">
+  <div class="modal modal-xl" onclick="event.stopPropagation()" style="max-height:92vh;overflow-y:auto;">
+    <div class="modal-header" style="position:sticky;top:0;z-index:10;">
+      <h3>👤 Atribuir Armário — <span id="atribuirNumero"></span></h3>
+      <button class="modal-close" onclick="fecharModal('modalAtribuir')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" id="formAtribuir" hx-boost="false">
+        <input type="hidden" name="assinatura" id="assinaturaAtribuirInput">
+
+        <p style="font-size:11px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:0 0 10px;">Dados do Colaborador</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+          <div class="ifield" style="flex:2;min-width:160px;">
+            <label>Nome do Colaborador *</label>
+            <input type="text" name="colaborador_nome" placeholder="Nome completo" required>
+          </div>
+          <div class="ifield" style="flex:1;min-width:140px;">
+            <label>CPF / Matrícula *</label>
+            <input type="text" name="colaborador_cpf" placeholder="000.000.000-00" required>
+          </div>
+        </div>
+
+        <p style="font-size:11px;font-weight:900;color:var(--dhl-red);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px;border-bottom:1.5px solid var(--dhl-red);padding-bottom:4px;">📋 Termo de Responsabilidade</p>
+        <div class="termo-box">
+          Recebi um armário pelo qual me responsabilizo, inclusive por sua boa conservação. Estou ciente de que devo avisar a Segurança Patrimonial quando não mais for utilizá-lo.<br><br>
+          Declaro estar ciente que devo utilizar esse armário apenas para a guarda de objetos pessoais de meu uso diário, sendo recomendada a não estocagem de valores, alimentos ou bebidas. Tenho conhecimento também que não poderei trocá-lo por outro sem autorização da área de Segurança Patrimonial. Concordo que o armário seja auditado periodicamente, na minha presença, pela Segurança Patrimonial/RH.<br><br>
+          Comprometo-me em trazer um cadeado de boa qualidade e uma cópia da chave de meu armário ficará sob a tutela da Segurança Patrimonial.<br><br>
+          Declaro ter ciência que em caso de esquecimento de minha chave deverei acionar um integrante da Segurança Patrimonial para devidas providências.
+        </div>
+
+        <p style="font-size:11px;font-weight:900;color:var(--dhl-red);text-transform:uppercase;letter-spacing:.4px;margin:16px 0 8px;border-bottom:1.5px solid var(--dhl-red);padding-bottom:4px;">✍️ Assinatura do Colaborador</p>
+        <div class="modal-sig-wrap" id="sigAtribuirWrap">
+          <canvas id="sigAtribuirCanvas"></canvas>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <button type="button" class="btn btn-soft btn-sm" onclick="limparSigAtribuir()">🗑 Limpar</button>
+          <span style="font-size:12px;color:var(--muted);">Assine no espaço acima com o mouse ou touch.</span>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:18px;">
+          <button type="submit" class="btn btn-red" style="flex:1;">✓ Confirmar Atribuição</button>
+          <button type="button" class="btn btn-soft" onclick="fecharModal('modalAtribuir')" style="flex:1;">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Criar em Lote -->
+{% if is_admin %}
+<div class="modal-overlay" id="modalLote" onclick="fecharModal('modalLote', event)">
+  <div class="modal modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>＋ Criar Armários em Lote</h3>
+      <button class="modal-close" onclick="fecharModal('modalLote')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin:0 0 4px;">Os armários serão nomeados automaticamente no formato <strong>PREFIXO-001</strong>. Números já existentes serão ignorados.</p>
+      <form method="POST" action="{{ url_for('armarios.criar_lote') }}" hx-boost="false" onsubmit="mostrarLoading()">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;gap:14px;flex-wrap:wrap;">
+            <div class="ifield" style="flex:1;min-width:120px;">
+              <label>Prefixo</label>
+              <input type="text" name="prefixo" value="ARM" maxlength="10" placeholder="ARM" required>
+            </div>
+            <div class="ifield" style="flex:1;min-width:120px;">
+              <label>Bloco (opcional)</label>
+              <input type="text" name="bloco" placeholder="Ex: A, B, Térreo">
+            </div>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;">
+            <div class="ifield" style="flex:1;min-width:100px;">
+              <label>Número inicial</label>
+              <input type="number" name="num_inicio" value="1" min="1" required>
+            </div>
+            <div class="ifield" style="flex:1;min-width:100px;">
+              <label>Número final</label>
+              <input type="number" name="num_fim" value="10" min="1" required>
+            </div>
+            <div class="ifield" style="flex:1;min-width:100px;">
+              <label>Dígitos (zeros)</label>
+              <input type="number" name="digitos" value="3" min="1" max="5">
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin:0;background:#f9fafb;padding:10px;border-radius:10px;">
+            Exemplo: Prefixo <strong>ARM</strong>, de <strong>1</strong> a <strong>10</strong>, 3 dígitos → ARM-001 ... ARM-010<br>
+            Máximo de 200 por lote.
+          </p>
+          <div style="display:flex;gap:10px;">
+            <button type="submit" class="btn btn-red" style="flex:1;">Criar Armários</button>
+            <button type="button" class="btn btn-soft" onclick="fecharModal('modalLote')" style="flex:1;">Cancelar</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  function abrirModalLote(){ abrirModal('modalLote'); }
+
+  function mostrarLoading(){
+    var ov = document.getElementById('loading-overlay');
+    if(ov) ov.classList.add('show');
+  }
+
+  function abrirAtribuir(armId, numero){
+    document.getElementById('atribuirNumero').textContent = numero;
+    document.getElementById('formAtribuir').action = "{{ url_for('armarios.atribuir', arm_id=0) }}".replace(/\/0$/, '/' + armId);
+    document.getElementById('formAtribuir').querySelectorAll('input[type=text]').forEach(i => i.value = '');
+    limparSigAtribuir();
+    abrirModal('modalAtribuir');
+    setTimeout(() => {
+      const wrap = document.getElementById('sigAtribuirWrap');
+      const cv   = document.getElementById('sigAtribuirCanvas');
+      if(wrap && cv){ cv.width = wrap.getBoundingClientRect().width; cv.height = 130; }
+    }, 80);
+  }
+
+  /* ── Canvas de assinatura (modal atribuir) ── */
+  (function(){
+    let drawing = false, lastX = 0, lastY = 0, cvInited = false;
+
+    function getCtx(){
+      const cv = document.getElementById('sigAtribuirCanvas');
+      if(!cv) return null;
+      if(!cvInited){ cv.width = cv.offsetWidth || 600; cv.height = 130; cvInited = true; }
+      const ctx = cv.getContext('2d');
+      ctx.strokeStyle = '#111827'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      return ctx;
+    }
+
+    function pos(cv, e){
+      const r = cv.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return { x: src.clientX - r.left, y: src.clientY - r.top };
+    }
+
+    document.addEventListener('mousedown', e => {
+      const cv = document.getElementById('sigAtribuirCanvas');
+      if(!cv || !cv.contains(e.target)) return;
+      drawing = true; const p = pos(cv, e); lastX = p.x; lastY = p.y;
+    });
+    document.addEventListener('mousemove', e => {
+      if(!drawing) return;
+      const cv = document.getElementById('sigAtribuirCanvas');
+      if(!cv) return;
+      const ctx = getCtx(); if(!ctx) return;
+      const p = pos(cv, e);
+      ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y); ctx.stroke();
+      lastX = p.x; lastY = p.y;
+    });
+    document.addEventListener('mouseup', () => { if(drawing){ drawing = false; capturarSigAtribuir(); } });
+
+    document.addEventListener('touchstart', e => {
+      const cv = document.getElementById('sigAtribuirCanvas');
+      if(!cv || !cv.contains(e.target)) return;
+      e.preventDefault(); drawing = true; const p = pos(cv, e); lastX = p.x; lastY = p.y;
+    }, {passive:false});
+    document.addEventListener('touchmove', e => {
+      if(!drawing) return;
+      const cv = document.getElementById('sigAtribuirCanvas');
+      if(!cv || !cv.contains(e.target)) return;
+      e.preventDefault();
+      const ctx = getCtx(); if(!ctx) return;
+      const p = pos(cv, e);
+      ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y); ctx.stroke();
+      lastX = p.x; lastY = p.y;
+    }, {passive:false});
+    document.addEventListener('touchend', () => { if(drawing){ drawing = false; capturarSigAtribuir(); } });
+  })();
+
+  function capturarSigAtribuir(){
+    const cv = document.getElementById('sigAtribuirCanvas');
+    if(cv) document.getElementById('assinaturaAtribuirInput').value = cv.toDataURL('image/png');
+  }
+
+  function limparSigAtribuir(){
+    const cv = document.getElementById('sigAtribuirCanvas');
+    if(cv){ cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); }
+    const inp = document.getElementById('assinaturaAtribuirInput');
+    if(inp) inp.value = '';
+  }
+
+  document.getElementById('formAtribuir').addEventListener('submit', function(e){
+    const nome = this.querySelector('input[name="colaborador_nome"]').value.trim();
+    const cpf  = this.querySelector('input[name="colaborador_cpf"]').value.trim();
+    if(!nome){ e.preventDefault(); alert('Informe o nome do colaborador.'); return; }
+    if(!cpf){  e.preventDefault(); alert('Informe o CPF/matrícula.'); return; }
+    capturarSigAtribuir();
+    mostrarLoading();
+  });
+
+  const IS_ADMIN    = {{ 'true' if is_admin else 'false' }};
+  const URL_ATRIBUIR  = "{{ url_for('armarios.atribuir',  arm_id=0) }}".replace(/\/0$/, '/');
+  const URL_LIBERAR   = "{{ url_for('armarios.liberar',   arm_id=0) }}".replace(/\/0$/, '/');
+  const URL_EXCLUIR   = "{{ url_for('armarios.excluir',   arm_id=0) }}".replace(/\/0$/, '/');
+  const URL_TERMO     = "{{ url_for('armarios.termo_atribuicao', arm_id=0) }}".replace(/\/0$/, '/');
+
+  function verDetalhe(armId){
+    abrirModal('modalDetalhe');
+    document.getElementById('modalDetalheBody').innerHTML = '<p style="color:var(--muted);text-align:center;">Carregando...</p>';
+    fetch("{{ url_for('armarios.detalhe', arm_id=0) }}".replace(/\/0$/, '/' + armId))
+      .then(r => r.json())
+      .then(d => {
+        const stCls = d.status === 'OCUPADO' ? 'ocupado' : 'livre';
+        const stLbl = d.status === 'OCUPADO' ? '🔴 OCUPADO' : '🟢 LIVRE';
+        let html = `
+          <div class="modal-status ${stCls}">${stLbl}</div>
+          <div class="modal-row">
+            <div class="modal-field"><label>Nº Armário</label><span>${d.numero}</span></div>
+            <div class="modal-field"><label>Bloco</label><span>${d.bloco}</span></div>
+          </div>`;
+        if(d.status === 'OCUPADO'){
+          html += `
+          <div class="modal-row">
+            <div class="modal-field"><label>Colaborador</label><span>${d.colaborador_nome}</span></div>
+            <div class="modal-field"><label>CPF/Matrícula</label><span>${d.colaborador_cpf}</span></div>
+          </div>
+          <div class="modal-row">
+            <div class="modal-field"><label>Atribuído em</label><span>${d.atribuido_em}</span></div>
+          </div>`;
+        }
+        html += `<hr style="border:none;border-top:1px solid #e5e7eb;margin:8px 0;"><p style="font-size:12px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin:0 0 6px;">Chave Reserva</p>`;
+        if(d.chave_retirada){
+          html += `
+          <div style="background:var(--danger-bg);border-radius:10px;padding:12px 14px;">
+            <div class="modal-row" style="margin-bottom:8px;">
+              <div class="modal-field"><label>Retirada por</label><span>${d.chave_retirado_por}</span></div>
+              <div class="modal-field"><label>CPF/Matrícula</label><span>${d.chave_cpf}</span></div>
+            </div>
+            <div class="modal-row">
+              <div class="modal-field"><label>Entregue por</label><span>${d.chave_entregue_por}</span></div>
+              <div class="modal-field"><label>Retirada em</label><span>${d.chave_data} (${d.chave_tempo})</span></div>
+            </div>
+          </div>`;
+        } else {
+          html += `<div style="background:var(--success-bg);border-radius:10px;padding:12px 14px;font-weight:800;color:var(--success-text);font-size:13px;">✓ Chave no local — sem retirada ativa</div>`;
+        }
+
+        html += `<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0 10px;"><div style="display:flex;gap:8px;flex-wrap:wrap;">`;
+
+        if(d.status === 'OCUPADO'){
+          html += `<a href="${URL_TERMO}${d.id}" data-filename="termo_armario_${d.numero}.pdf"
+                      style="display:inline-flex;align-items:center;gap:6px;padding:8px 13px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:10px;font-size:12px;font-weight:800;text-decoration:none;cursor:pointer;">📄 Baixar Termo</a>`;
+        }
+
+        if(IS_ADMIN){
+          if(d.status === 'LIVRE'){
+            html += `<button onclick="fecharModal('modalDetalhe');abrirAtribuir(${d.id},'${d.numero}')"
+                       style="padding:8px 13px;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">👤 Atribuir</button>`;
+          } else {
+            html += `<form method="POST" action="${URL_LIBERAR}${d.id}" style="display:inline;" hx-boost="false" onsubmit="mostrarLoading()">
+                       <button type="submit" style="padding:8px 13px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">↩ Liberar</button>
+                     </form>`;
+          }
+          if(d.status === 'LIVRE' && !d.chave_retirada){
+            html += `<form method="POST" action="${URL_EXCLUIR}${d.id}" style="display:inline;" hx-boost="false" onsubmit="mostrarLoading()">
+                       <button type="submit" style="padding:8px 13px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">🗑 Remover</button>
+                     </form>`;
+          }
+        }
+
+        html += `</div>`;
+        document.getElementById('modalDetalheBody').innerHTML = html;
+      })
+      .catch(() => { document.getElementById('modalDetalheBody').innerHTML = '<p style="color:red">Erro ao carregar dados.</p>'; });
+  }
+
+  function gerarExportArmarios(e){
+    e.preventDefault();
+    var bloco  = document.getElementById('ea-bloco').value;
+    var status = document.getElementById('ea-status').value;
+    var ini    = document.getElementById('ea-ini').value;
+    var fim    = document.getElementById('ea-fim').value;
+    var url    = "{{ url_for('armarios.exportar_situacao_excel') }}";
+    var params = [];
+    if(bloco)  params.push('bloco='    + encodeURIComponent(bloco));
+    if(status) params.push('status='   + encodeURIComponent(status));
+    if(ini)    params.push('data_ini=' + encodeURIComponent(ini));
+    if(fim)    params.push('data_fim=' + encodeURIComponent(fim));
+    if(params.length) url += '?' + params.join('&');
+    window.location.href = url;
+  }
+</script>
+{% endblock %}

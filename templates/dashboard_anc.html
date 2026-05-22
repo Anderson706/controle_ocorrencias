@@ -1,462 +1,275 @@
-﻿<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <title>Dashboard · ANC | CCTV Control Panel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    :root{
-      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
-      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
-      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
-      --sidebar:#161a1d; --shadow:0 10px 30px rgba(15,23,42,.08); --radius:18px;
-      --success-bg:#e8f7ee; --success-text:#146c43;
-      --warn-bg:#fff4db;    --warn-text:#9a6700;
-      --danger-bg:#fde8ea;  --danger-text:#b42318;
-      --neutral-bg:#eef1f4; --neutral-text:#425466;
-    }
-    *{ box-sizing:border-box; }
-    html,body{ margin:0; padding:0; min-height:100vh; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:var(--text); }
-    a{ text-decoration:none; }
-    .app-shell{ display:flex; min-height:100vh; width:100%; }
-    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
-    #loading-overlay.show{ display:flex; }
-    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
-    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
-    @keyframes spin{ to{ transform:rotate(360deg); } }
-    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
-    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
-    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
-    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
-    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
-    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
-    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
-    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
-    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
-    .nav-icon{ font-size:15px; flex-shrink:0; }
-    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
-    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
-    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
-    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
-    .sub-link.cur{ color:#ffcc00; font-weight:800; }
-    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
-    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
-    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
-    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
-    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
-    .sp-info{ flex:1; min-width:0; }
-    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
-    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
-    .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
-    .sp-menu.open{ display:block; animation:spIn .15s ease; }
-    @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
-    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
-    .sp-item:hover{ background:#f3f4f6; }
-    .sp-item-red{ color:#d40511; }
-    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
-    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
-    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
-    .topbar{ height:74px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
-    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
-    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
-    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
-    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
-    .topbar-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .btn{ border:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 16px; border-radius:12px; font-weight:800; transition:.18s ease; font-size:13px; text-decoration:none; }
-    .btn:hover{ transform:translateY(-1px); }
-    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; box-shadow:0 8px 18px rgba(212,5,17,.20); }
-    .btn-dark{ background:#20242a; color:#fff; }
-    .content{ padding:24px; }
-    .hero{ position:relative; overflow:hidden; background:linear-gradient(135deg,#92400e,#451a03); color:#fff; border-radius:24px; padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px; }
-    .hero::before{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 85% 18%,rgba(255,204,0,.20),transparent 20%),radial-gradient(circle at 10% 80%,rgba(255,255,255,.06),transparent 20%); pointer-events:none; }
-    .hero-inner{ position:relative; z-index:1; display:flex; justify-content:space-between; gap:20px; align-items:flex-start; flex-wrap:wrap; }
-    .hero h2{ margin:0 0 8px; font-size:28px; font-weight:900; }
-    .hero p{ margin:0; font-size:14px; line-height:1.55; opacity:.9; }
-    .hero-actions{ display:flex; flex-wrap:wrap; gap:10px; }
-    .hero-badge{ background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.16); color:#fff; padding:10px 14px; border-radius:999px; font-size:12px; font-weight:800; white-space:nowrap; }
-    .flash-wrap{ margin-bottom:16px; }
-    .flash{ padding:12px 16px; border-radius:12px; font-weight:700; border:1px solid transparent; font-size:13px; margin-bottom:8px; }
-    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
-    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
-    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
-    .filter-card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:20px; }
-    .filter-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
-    .filter-head h3{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black); }
-    .section-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; background:#fff4cc; border:1px solid #efd470; color:#735500; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
-    .filters{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
-    .filters.has-site{ grid-template-columns:repeat(5, minmax(0,1fr)); }
-    .filters input,.filters select{ width:100%; padding:12px 13px; border:1px solid #d7dbe1; border-radius:12px; background:#f9fafb; font-size:13px; outline:none; transition:border-color .18s; }
-    .filters input:focus,.filters select:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
-    .filter-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
-    .section{ margin-bottom:22px; }
-    .section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
-    .section-title{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
-    .grid-7{ display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:14px; }
-    .grid-2{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; }
-    .grid-3{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; }
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; min-width:0; }
-    .kpi{ position:relative; overflow:hidden; min-height:118px; display:flex; flex-direction:column; justify-content:center; gap:6px; border-left:6px solid var(--dhl-yellow); background:linear-gradient(180deg,#fff,#fffdf8); }
-    .kpi::after{ content:""; position:absolute; right:-18px; top:-20px; width:80px; height:80px; border-radius:50%; background:rgba(255,204,0,.12); }
-    .kpi .label{ position:relative; z-index:1; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
-    .kpi .value{ position:relative; z-index:1; font-size:30px; font-weight:900; line-height:1; color:var(--dhl-red); }
-    .kpi .sub{ position:relative; z-index:1; font-size:11px; color:var(--muted); line-height:1.4; }
-    .panel-title{ margin:0 0 14px; font-size:17px; font-weight:900; color:var(--dhl-black); text-align:center; }
-    .chart-card{ min-height:360px; display:flex; flex-direction:column; }
-    .chart-wrap{ position:relative; width:100%; height:280px; min-height:280px; max-height:280px; }
-    .chart-wrap canvas{ width:100% !important; height:100% !important; }
-    .chart-wrap-tall{ position:relative; width:100%; height:340px; min-height:340px; max-height:340px; }
-    .chart-wrap-tall canvas{ width:100% !important; height:100% !important; }
-    .chart-note{ margin-top:12px; font-size:12px; color:var(--muted); text-align:center; line-height:1.45; }
-    .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:14px; background:#fff; }
-    table{ width:100%; border-collapse:collapse; min-width:700px; }
-    th,td{ padding:11px 13px; border-bottom:1px solid #edf1f5; text-align:left; vertical-align:middle; font-size:13px; }
-    th{ background:linear-gradient(180deg,#fff8db,#ffefab); color:#4b3c00; font-weight:900; position:sticky; top:0; z-index:1; white-space:nowrap; }
-    tbody tr:hover{ background:#fffdf7; }
-    .id-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 10px; border-radius:999px; font-weight:900; color:var(--dhl-red); background:#fff3f4; border:1px solid #ffd5d8; font-size:12px; }
-    .badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:900; white-space:nowrap; }
-    .badge-ok{ background:var(--success-bg); color:var(--success-text); }
-    .badge-warn{ background:var(--warn-bg); color:var(--warn-text); }
-    .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
-    .badge-neutral{ background:var(--neutral-bg); color:var(--neutral-text); }
-    .empty{ padding:18px; color:var(--muted); font-size:13px; }
-    @media(max-width:1200px){ .grid-7{ grid-template-columns:repeat(4,1fr); } }
-    @media(max-width:1100px){ .sidebar{ position:relative; width:100%; height:auto; inset:auto; } .main{ margin-left:0; width:100%; } .app-shell{ flex-direction:column; } .grid-2,.grid-3{ grid-template-columns:repeat(2,1fr); } .filters{ grid-template-columns:repeat(2,1fr); } }
-    @media(max-width:700px){ .content{ padding:16px; } .topbar{ padding:14px 16px; height:auto; flex-direction:column; align-items:flex-start; } .hero h2{ font-size:22px; } .grid-2,.grid-3,.grid-7,.filters{ grid-template-columns:1fr; } }
-  </style>
-</head>
-<body>
-<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+{% extends "base_app.html" %}
+{% block page_title %}Dashboard · ANC | CCTV Control Panel{% endblock %}
 
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+{% block extra_head %}
+<script src="/static/chart.umd.min.js"></script>
+<script src="/static/chartjs-plugin-datalabels.min.js"></script>
+{% endblock %}
+
+{% block topbar_title %}Dashboard · ANC{% endblock %}
+{% block topbar_subtitle %}Visão executiva dos Avisos de Não Conformidade{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('anc') }}" class="btn btn-red">← Controle de ANC</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .hero{ position:relative; overflow:hidden; background:#92400e; color:#fff; border-radius:24px; padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px; }
+  .hero::before{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 85% 18%,rgba(255,204,0,.20),transparent 20%),radial-gradient(circle at 10% 80%,rgba(255,255,255,.06),transparent 20%); pointer-events:none; }
+  .hero-inner{ position:relative; z-index:1; display:flex; justify-content:space-between; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+  .hero h2{ margin:0 0 8px; font-size:28px; font-weight:900; }
+  .hero p{ margin:0; font-size:14px; line-height:1.55; opacity:.9; }
+  .hero-actions{ display:flex; flex-wrap:wrap; gap:10px; }
+  .hero-badge{ background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.16); color:#fff; padding:10px 14px; border-radius:999px; font-size:12px; font-weight:800; white-space:nowrap; }
+
+  .filter-card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:20px; }
+  .filter-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .filter-head h3{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black,#1f1f1f); }
+  .section-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; background:#fff4cc; border:1px solid #efd470; color:#735500; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
+  .filters{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
+  .filters.has-site{ grid-template-columns:repeat(5, minmax(0,1fr)); }
+  .filters input,.filters select{ width:100%; padding:12px 13px; border:1px solid #d7dbe1; border-radius:12px; background:#f9fafb; font-size:13px; outline:none; transition:border-color .18s; }
+  .filters input:focus,.filters select:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+  .filter-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+
+  .section{ margin-bottom:22px; }
+  .section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .section-title{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black,#1f1f1f); }
+
+  .grid-7{ display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:14px; }
+  .grid-4{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; }
+  .grid-3{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; }
+  .grid-2{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; }
+
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; min-width:0; }
+  .kpi{ position:relative; overflow:hidden; min-height:118px; display:flex; flex-direction:column; justify-content:center; gap:6px; border-left:6px solid var(--dhl-yellow); background:#fff; }
+  .kpi::after{ content:""; position:absolute; right:-18px; top:-20px; width:80px; height:80px; border-radius:50%; background:rgba(255,204,0,.12); }
+  .kpi .label{ position:relative; z-index:1; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+  .kpi .value{ position:relative; z-index:1; font-size:30px; font-weight:900; line-height:1; color:var(--dhl-red); }
+  .kpi .sub{ position:relative; z-index:1; font-size:11px; color:var(--muted); line-height:1.4; }
+
+  .panel-title{ margin:0 0 14px; font-size:17px; font-weight:900; color:var(--dhl-black,#1f1f1f); text-align:center; }
+  .chart-card{ min-height:360px; display:flex; flex-direction:column; }
+  .chart-wrap{ position:relative; width:100%; height:280px; min-height:280px; max-height:280px; }
+  .chart-wrap canvas{ width:100% !important; height:100% !important; }
+  .chart-wrap-tall{ position:relative; width:100%; height:340px; min-height:340px; max-height:340px; }
+  .chart-wrap-tall canvas{ width:100% !important; height:100% !important; }
+  .chart-note{ margin-top:12px; font-size:12px; color:var(--muted); text-align:center; line-height:1.45; }
+
+  .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:14px; background:#fff; }
+  table{ width:100%; border-collapse:collapse; min-width:700px; }
+  th,td{ padding:11px 13px; border-bottom:1px solid #edf1f5; text-align:left; vertical-align:middle; font-size:13px; }
+  th{ background:#fff8db; color:#4b3c00; font-weight:900; position:sticky; top:0; z-index:1; white-space:nowrap; }
+  tbody tr:hover{ background:#fffdf7; }
+  .id-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 10px; border-radius:999px; font-weight:900; color:var(--dhl-red); background:#fff3f4; border:1px solid #ffd5d8; font-size:12px; }
+  .empty{ padding:18px; color:var(--muted); font-size:13px; }
+
+  @media(max-width:1200px){ .grid-7{ grid-template-columns:repeat(4,1fr); } }
+  @media(max-width:1100px){ .grid-2,.grid-3,.grid-4{ grid-template-columns:repeat(2,1fr); } .filters{ grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:700px){ .grid-2,.grid-3,.grid-4,.grid-7,.filters{ grid-template-columns:1fr; } .hero h2{ font-size:22px; } }
+</style>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <h2>Painel de Avisos de Não Conformidade</h2>
+      <p>Acompanhamento dos indicadores operacionais das ANCs: volume, gravidade, status, natureza e responsáveis.</p>
     </div>
-    <nav class="main-nav">
-      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
-      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
-      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
-      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
-        <span class="nav-icon">🌐</span><span>Overview</span>
-      </a>
-      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
-        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_oc %}<div class="sub-nav">
-        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
-        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
-        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_an %}<div class="sub-nav">
-        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
-        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
-        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
-        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_anc %}<div class="sub-nav">
-        <a href="{{ url_for('anc') }}" class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle de ANC</a>
-        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
-        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] else '' }}">
-        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<div class="sub-nav">
-        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
-        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
-      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
-        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_chv %}<div class="sub-nav">
-        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
-        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
-        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
-      </div>{% endif %}
-      {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
-      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
-        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_adm %}<div class="sub-nav">
-        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
-        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
-        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
-      </div>{% endif %}
+    <div class="hero-actions">
+      <span class="hero-badge">Business Intelligence</span>
+      <span class="hero-badge">Compliance Control</span>
+    </div>
+  </div>
+</section>
+
+<!-- FILTROS -->
+<div class="filter-card">
+  <div class="filter-head">
+    <h3>Filtros de análise</h3>
+    <span class="section-chip">Consulta dinâmica</span>
+  </div>
+  <form method="GET">
+    <div class="filters{{ ' has-site' if is_admin else '' }}">
+      <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}" title="Data inicial">
+      <input type="date" name="data_final"   value="{{ filtros.data_final  }}" title="Data final">
+      <select name="status">
+        <option value="">Todos os status</option>
+        <option value="ABERTO"       {% if filtros.status == 'ABERTO'       %}selected{% endif %}>ABERTO</option>
+        <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>EM ANDAMENTO</option>
+        <option value="CONCLUÍDO"    {% if filtros.status == 'CONCLUÍDO'    %}selected{% endif %}>CONCLUÍDO</option>
+      </select>
+      <select name="gravidade">
+        <option value="">Todas as gravidades</option>
+        {% for g in todas_gravidades %}
+        <option value="{{ g }}" {% if filtros.gravidade == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+      {% if is_admin %}
+      <select name="site_filtro">
+        <option value="">Todos os sites</option>
+        {% for s in todos_sites_dash %}
+        <option value="{{ s }}" {% if filtros.site_filtro == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
       {% endif %}
-    </nav>
-    <div class="sp-wrap" id="spWrap">
-      <div class="sp-trigger" onclick="spToggle(event)">
-        <div class="sp-avatar">
-          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
-        </div>
-        <div class="sp-info">
-          <span class="sp-name">{{ session.get('user_nome','') }}</span>
-          <span class="sp-role">{{ session.get('user_site','') }}</span>
-        </div>
-        <span class="sp-dots">⋮</span>
-      </div>
-      <div class="sp-menu" id="spMenu">
-        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
-        <hr class="sp-sep">
-        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
-      </div>
     </div>
-  </aside>
-
-  <main class="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
-        <div>
-          <h1>Dashboard · ANC</h1>
-          <p>Visão executiva dos Avisos de Não Conformidade</p>
-        </div>
-      </div>
-      <div class="topbar-right">
-        <a href="{{ url_for('anc') }}" class="btn btn-red">← Controle de ANC</a>
-      </div>
-    </header>
-
-    <div class="content">
-
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}<div class="flash-wrap">{% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}</div>{% endif %}
-      {% endwith %}
-
-      <!-- HERO -->
-      <section class="hero">
-        <div class="hero-inner">
-          <div>
-            <h2>Painel de Avisos de Não Conformidade</h2>
-            <p>Acompanhamento dos indicadores operacionais das ANCs: volume, gravidade, status, natureza e responsáveis.</p>
-          </div>
-          <div class="hero-actions">
-            <span class="hero-badge">Business Intelligence</span>
-            <span class="hero-badge">Compliance Control</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- FILTROS -->
-      <div class="filter-card">
-        <div class="filter-head">
-          <h3>Filtros de análise</h3>
-          <span class="section-chip">Consulta dinâmica</span>
-        </div>
-        <form method="GET">
-          <div class="filters{{ ' has-site' if is_admin else '' }}">
-            <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}" title="Data inicial">
-            <input type="date" name="data_final"   value="{{ filtros.data_final   }}" title="Data final">
-            <select name="status">
-              <option value="">Todos os status</option>
-              <option value="ABERTO"       {% if filtros.status == 'ABERTO'       %}selected{% endif %}>ABERTO</option>
-              <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>EM ANDAMENTO</option>
-              <option value="CONCLUÍDO"    {% if filtros.status == 'CONCLUÍDO'    %}selected{% endif %}>CONCLUÍDO</option>
-            </select>
-            <select name="gravidade">
-              <option value="">Todas as gravidades</option>
-              {% for g in todas_gravidades %}
-              <option value="{{ g }}" {% if filtros.gravidade == g %}selected{% endif %}>{{ g }}</option>
-              {% endfor %}
-            </select>
-            {% if is_admin %}
-            <select name="site_filtro">
-              <option value="">Todos os sites</option>
-              {% for s in todos_sites_dash %}
-              <option value="{{ s }}" {% if filtros.site_filtro == s %}selected{% endif %}>{{ s }}</option>
-              {% endfor %}
-            </select>
-            {% endif %}
-          </div>
-          <div class="filter-actions">
-            <button class="btn btn-red" type="submit">Aplicar filtros</button>
-            <a class="btn btn-dark" href="{{ url_for('dashboard_anc') }}">Limpar</a>
-          </div>
-        </form>
-      </div>
-
-      <!-- KPIs -->
-      <section class="section">
-        <div class="section-head">
-          <h2 class="section-title">Indicadores principais</h2>
-          <span class="section-chip">KPI Overview</span>
-        </div>
-        <div class="grid-7">
-          <div class="card kpi">
-            <div class="label">Total</div>
-            <div class="value">{{ resumo.total }}</div>
-            <div class="sub">ANCs no período</div>
-          </div>
-          <div class="card kpi" style="border-left-color:#d40511;">
-            <div class="label">Abertos</div>
-            <div class="value" style="color:#d40511;">{{ resumo.abertos }}</div>
-            <div class="sub">Aguardando ação</div>
-          </div>
-          <div class="card kpi" style="border-left-color:#f59e0b;">
-            <div class="label">Em andamento</div>
-            <div class="value" style="color:#b45309;">{{ resumo.andamento }}</div>
-            <div class="sub">Em tratativa</div>
-          </div>
-          <div class="card kpi" style="border-left-color:#22c55e;">
-            <div class="label">Concluídos</div>
-            <div class="value" style="color:#15803d;">{{ resumo.concluidos }}</div>
-            <div class="sub">Finalizados</div>
-          </div>
-          <div class="card kpi" style="border-left-color:#ef4444;">
-            <div class="label">Críticos</div>
-            <div class="value" style="color:#dc2626;">{{ resumo.criticos }}</div>
-            <div class="sub">Gravidade crítica</div>
-          </div>
-          <div class="card kpi" style="border-left-color:#22c55e;">
-            <div class="label">Taxa Resolução</div>
-            <div class="value" style="color:#22c55e;">{{ resumo.taxa_resolucao }}%</div>
-            <div class="sub">Concluídos / total</div>
-          </div>
-          <div class="card kpi" style="border-left-color:#0ea5e9;">
-            <div class="label">Este mês</div>
-            <div class="value" style="color:#0369a1;">{{ resumo.registros_mes }}</div>
-            <div class="sub">No mês corrente</div>
-          </div>
-        </div>
-
-        <!-- KPI financeiro -->
-        {% if resumo.valor_total != '—' %}
-        <div class="grid-4" style="margin-top:12px;">
-          <div class="card kpi" style="border-left-color:#7c3aed;">
-            <div class="label">💰 Valor estimado total</div>
-            <div class="value" style="font-size:17px; color:#6d28d9; line-height:1.3; padding-top:2px;">{{ resumo.valor_total }}</div>
-            <div class="sub">Soma dos valores declarados</div>
-          </div>
-        </div>
-        {% endif %}
-      </section>
-
-      <!-- GRÁFICOS -->
-      <section class="section">
-        <div class="section-head">
-          <h2 class="section-title">Painel gráfico</h2>
-          <span class="section-chip">Analytics View</span>
-        </div>
-
-        <!-- Linha 1: Status + Gravidade -->
-        <div class="grid-2" style="margin-bottom:16px;">
-          <div class="card chart-card">
-            <h3 class="panel-title">ANCs por Status</h3>
-            <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
-            <div class="chart-note">
-              <span style="color:#d40511;font-weight:800;">● Aberto</span>&nbsp;&nbsp;
-              <span style="color:#f59e0b;font-weight:800;">● Em andamento</span>&nbsp;&nbsp;
-              <span style="color:#22c55e;font-weight:800;">● Concluído</span>
-            </div>
-          </div>
-          <div class="card chart-card">
-            <h3 class="panel-title">ANCs por Gravidade</h3>
-            <div class="chart-wrap"><canvas id="chartGravidade"></canvas></div>
-            <div class="chart-note">Distribuição por nível de gravidade.</div>
-          </div>
-        </div>
-
-        <!-- Linha 2: Natureza (largura total) -->
-        <div class="card chart-card" style="min-height:400px; margin-bottom:16px;">
-          <h3 class="panel-title">ANCs por Natureza</h3>
-          <div class="chart-wrap-tall"><canvas id="chartNatureza"></canvas></div>
-          <div class="chart-note">Volume por tipo de não conformidade · ordem crescente.</div>
-        </div>
-
-        <!-- Linha 3: Setor + Criador -->
-        <div class="grid-2">
-          <div class="card chart-card">
-            <h3 class="panel-title">ANCs por Setor</h3>
-            <div class="chart-wrap"><canvas id="chartSetor"></canvas></div>
-            <div class="chart-note">Distribuição por setor · ordem crescente.</div>
-          </div>
-          <div class="card chart-card">
-            <h3 class="panel-title">ANCs por Criador</h3>
-            <div class="chart-wrap"><canvas id="chartCriador"></canvas></div>
-            <div class="chart-note">Quantidade de ANCs abertas por usuário.</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- TABELA RECENTES -->
-      <section class="section">
-        <div class="section-head">
-          <h2 class="section-title">Últimas ANCs</h2>
-          <span class="section-chip">Resumo recente</span>
-        </div>
-        <div class="card">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nº ANC</th>
-                  <th>Data</th>
-                  <th>Natureza</th>
-                  <th>Setor</th>
-                  <th>Gravidade</th>
-                  <th>Responsável</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for r in recentes %}
-                <tr>
-                  <td><span class="id-badge">{{ r.numero_anc or ('#' ~ r.id) }}</span></td>
-                  <td style="white-space:nowrap;">{{ r.data_nc or '-' }}</td>
-                  <td>{{ r.natureza or '-' }}</td>
-                  <td>{{ r.setor or '-' }}</td>
-                  <td>
-                    {% set _g = (r.gravidade or '')|upper %}
-                    {% if _g == 'CRÍTICA' %}
-                      <span class="badge badge-danger">{{ r.gravidade }}</span>
-                    {% elif _g == 'ALTA' %}
-                      <span class="badge badge-danger">{{ r.gravidade }}</span>
-                    {% elif _g == 'MÉDIA' %}
-                      <span class="badge badge-warn">{{ r.gravidade }}</span>
-                    {% else %}
-                      <span class="badge badge-neutral">{{ r.gravidade or '-' }}</span>
-                    {% endif %}
-                  </td>
-                  <td>{{ r.responsavel or r.gestor_responsavel or '-' }}</td>
-                  <td>
-                    {% set _s = (r.status or '')|upper %}
-                    {% if _s == 'CONCLUÍDO' %}
-                      <span class="badge badge-ok">{{ r.status }}</span>
-                    {% elif _s == 'EM ANDAMENTO' %}
-                      <span class="badge badge-warn">{{ r.status }}</span>
-                    {% else %}
-                      <span class="badge badge-danger">{{ r.status or 'ABERTO' }}</span>
-                    {% endif %}
-                  </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7" class="empty">Sem registros para o período selecionado.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
+    <div class="filter-actions">
+      <button class="btn btn-red" type="submit">Aplicar filtros</button>
+      <a class="btn btn-dark" href="{{ url_for('dashboard_anc') }}">Limpar</a>
     </div>
-    <footer class="app-footer">
-      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
-      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
-    </footer>
-  </main>
+  </form>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<!-- KPIs -->
+<section class="section">
+  <div class="section-head">
+    <h2 class="section-title">Indicadores principais</h2>
+    <span class="section-chip">KPI Overview</span>
+  </div>
+  <div class="grid-7">
+    <div class="card kpi">
+      <div class="label">Total</div>
+      <div class="value">{{ resumo.total }}</div>
+      <div class="sub">ANCs no período</div>
+    </div>
+    <div class="card kpi" style="border-left-color:#d40511;">
+      <div class="label">Abertos</div>
+      <div class="value" style="color:#d40511;">{{ resumo.abertos }}</div>
+      <div class="sub">Aguardando ação</div>
+    </div>
+    <div class="card kpi" style="border-left-color:#f59e0b;">
+      <div class="label">Em andamento</div>
+      <div class="value" style="color:#b45309;">{{ resumo.andamento }}</div>
+      <div class="sub">Em tratativa</div>
+    </div>
+    <div class="card kpi" style="border-left-color:#22c55e;">
+      <div class="label">Concluídos</div>
+      <div class="value" style="color:#15803d;">{{ resumo.concluidos }}</div>
+      <div class="sub">Finalizados</div>
+    </div>
+    <div class="card kpi" style="border-left-color:#ef4444;">
+      <div class="label">Críticos</div>
+      <div class="value" style="color:#dc2626;">{{ resumo.criticos }}</div>
+      <div class="sub">Gravidade crítica</div>
+    </div>
+    <div class="card kpi" style="border-left-color:#22c55e;">
+      <div class="label">Taxa Resolução</div>
+      <div class="value" style="color:#22c55e;">{{ resumo.taxa_resolucao }}%</div>
+      <div class="sub">Concluídos / total</div>
+    </div>
+    <div class="card kpi" style="border-left-color:#0ea5e9;">
+      <div class="label">Este mês</div>
+      <div class="value" style="color:#0369a1;">{{ resumo.registros_mes }}</div>
+      <div class="sub">No mês corrente</div>
+    </div>
+  </div>
+
+  {% if resumo.valor_total != '—' %}
+  <div class="grid-4" style="margin-top:12px;">
+    <div class="card kpi" style="border-left-color:#7c3aed;">
+      <div class="label"> Valor estimado total</div>
+      <div class="value" style="font-size:17px; color:#6d28d9; line-height:1.3; padding-top:2px;">{{ resumo.valor_total }}</div>
+      <div class="sub">Soma dos valores declarados</div>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<!-- GRÁFICOS -->
+<section class="section">
+  <div class="section-head">
+    <h2 class="section-title">Painel gráfico</h2>
+    <span class="section-chip">Analytics View</span>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card chart-card">
+      <h3 class="panel-title">ANCs por Status</h3>
+      <div class="chart-wrap"><canvas id="chartStatus"></canvas></div>
+      <div class="chart-note">
+        <span style="color:#d40511;font-weight:800;">● Aberto</span>&nbsp;&nbsp;
+        <span style="color:#f59e0b;font-weight:800;">● Em andamento</span>&nbsp;&nbsp;
+        <span style="color:#22c55e;font-weight:800;">● Concluído</span>
+      </div>
+    </div>
+    <div class="card chart-card">
+      <h3 class="panel-title">ANCs por Gravidade</h3>
+      <div class="chart-wrap"><canvas id="chartGravidade"></canvas></div>
+      <div class="chart-note">Distribuição por nível de gravidade.</div>
+    </div>
+  </div>
+
+  <div class="card chart-card" style="min-height:400px; margin-bottom:16px;">
+    <h3 class="panel-title">ANCs por Natureza</h3>
+    <div class="chart-wrap-tall"><canvas id="chartNatureza"></canvas></div>
+    <div class="chart-note">Volume por tipo de não conformidade · ordem crescente.</div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card chart-card">
+      <h3 class="panel-title">ANCs por Setor</h3>
+      <div class="chart-wrap"><canvas id="chartSetor"></canvas></div>
+      <div class="chart-note">Distribuição por setor · ordem crescente.</div>
+    </div>
+    <div class="card chart-card">
+      <h3 class="panel-title">ANCs por Criador</h3>
+      <div class="chart-wrap"><canvas id="chartCriador"></canvas></div>
+      <div class="chart-note">Quantidade de ANCs abertas por usuário.</div>
+    </div>
+  </div>
+</section>
+
+<!-- TABELA RECENTES -->
+<section class="section">
+  <div class="section-head">
+    <h2 class="section-title">Últimas ANCs</h2>
+    <span class="section-chip">Resumo recente</span>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Nº ANC</th><th>Data</th><th>Natureza</th><th>Setor</th><th>Gravidade</th><th>Responsável</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for r in recentes %}
+          <tr>
+            <td><span class="id-badge">{{ r.numero_anc or ('#' ~ r.id) }}</span></td>
+            <td style="white-space:nowrap;">{{ r.data_nc or '-' }}</td>
+            <td>{{ r.natureza or '-' }}</td>
+            <td>{{ r.setor or '-' }}</td>
+            <td>
+              {% set _g = (r.gravidade or '')|upper %}
+              {% if _g in ('CRÍTICA','ALTA') %}<span class="badge badge-danger">{{ r.gravidade }}</span>
+              {% elif _g == 'MÉDIA' %}<span class="badge badge-warn">{{ r.gravidade }}</span>
+              {% else %}<span class="badge badge-neutral">{{ r.gravidade or '-' }}</span>
+              {% endif %}
+            </td>
+            <td>{{ r.responsavel or r.gestor_responsavel or '-' }}</td>
+            <td>
+              {% set _s = (r.status or '')|upper %}
+              {% if _s == 'CONCLUÍDO' %}<span class="badge badge-ok">{{ r.status }}</span>
+              {% elif _s == 'EM ANDAMENTO' %}<span class="badge badge-warn">{{ r.status }}</span>
+              {% else %}<span class="badge badge-danger">{{ r.status or 'ABERTO' }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="empty">Sem registros para o período selecionado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block page_scripts %}
 <script>
-  Chart.register(ChartDataLabels);
+(function poll(){
+  if(typeof Chart==='undefined'||typeof ChartDataLabels==='undefined'){ return setTimeout(poll,30); }
+  try { Chart.register(ChartDataLabels); } catch(e) {}
   Chart.defaults.font.family = "Arial, Helvetica, sans-serif";
 
   const dhlLegend = {
@@ -493,7 +306,9 @@
     }
   };
 
-  /* ── Status (rosca) ── */
+  // Destrói instâncias anteriores
+  document.querySelectorAll('canvas').forEach(function(c){ var ch=Chart.getChart(c); if(ch) ch.destroy(); });
+
   const STATUS_COLORS = { 'ABERTO':'#d40511', 'EM ANDAMENTO':'#f59e0b', 'CONCLUÍDO':'#22c55e' };
   const _lStatus = {{ labels_status|tojson }};
   const _vStatus = {{ valores_status|tojson }};
@@ -505,7 +320,6 @@
     options:doughnutOptions
   });
 
-  /* ── Gravidade (barras coloridas por nível) ── */
   const GRAV_COLORS = { 'BAIXA':'#22c55e', 'MÉDIA':'#f59e0b', 'ALTA':'#ef4444', 'CRÍTICA':'#7f1d1d' };
   const _lGrav = {{ labels_grav|tojson }};
   const _vGrav = {{ valores_grav|tojson }};
@@ -517,43 +331,23 @@
     options: barOptions
   });
 
-  /* ── Natureza (barras vermelhas, largura total) ── */
   new Chart(document.getElementById('chartNatureza'), {
     type:'bar',
     data:{ labels:{{ labels_natureza|tojson }}, datasets:[{ label:'ANCs', data:{{ valores_natureza|tojson }}, backgroundColor:'#d40511', hoverBackgroundColor:'#b1030d', borderRadius:8, maxBarThickness:60 }] },
     options: barOptions
   });
 
-  /* ── Setor (barras amarelas) ── */
   new Chart(document.getElementById('chartSetor'), {
     type:'bar',
     data:{ labels:{{ labels_setor|tojson }}, datasets:[{ label:'ANCs', data:{{ valores_setor|tojson }}, backgroundColor:'#ffcc00', hoverBackgroundColor:'#e6b800', borderRadius:8, maxBarThickness:52 }] },
     options: barOptions
   });
 
-  /* ── Criador (barras cinza escuro) ── */
   new Chart(document.getElementById('chartCriador'), {
     type:'bar',
     data:{ labels:{{ labels_criador|tojson }}, datasets:[{ label:'ANCs', data:{{ valores_criador|tojson }}, backgroundColor:'#1f2937', hoverBackgroundColor:'#374151', borderRadius:8, maxBarThickness:52 }] },
     options: barOptions
   });
-</script>
-<script>
-(function(){
-  var ov=document.getElementById('loading-overlay');
-  document.querySelectorAll('form').forEach(function(f){ f.addEventListener('submit',function(){ ov.classList.add('show'); }); });
-  document.querySelectorAll('a[href]').forEach(function(a){
-    var h=a.getAttribute('href')||'';
-    if(h.startsWith('#')||h.startsWith('javascript:')||a.target==='_blank') return;
-    if(h.indexOf('exportar')!==-1||h.indexOf('download')!==-1) return;
-    a.addEventListener('click',function(e){ if(e.ctrlKey||e.metaKey||e.shiftKey) return; ov.classList.add('show'); });
-  });
 })();
 </script>
-<script>
-function spToggle(e){ e.stopPropagation(); document.getElementById('spMenu').classList.toggle('open'); }
-document.addEventListener('click', function(){ var m=document.getElementById('spMenu'); if(m) m.classList.remove('open'); });
-</script>
-{% include "_translate.html" %}
-</body>
-</html>
+{% endblock %}

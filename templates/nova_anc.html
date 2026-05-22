@@ -1,0 +1,232 @@
+{% extends "base_app.html" %}
+{% block page_title %}{{ 'Editar ANC' if modo_edicao else 'Nova ANC' }} | CCTV Control Panel{% endblock %}
+{% block topbar_title %}⚠️ {{ 'Editar ANC' if modo_edicao else 'Nova ANC' }}{% endblock %}
+{% block topbar_subtitle %}{{ 'Edite os campos para atualizar o ANC' if modo_edicao else 'Registre um novo Aviso de Não Conformidade' }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('anc') }}" class="btn btn-soft btn-sm">← Controle</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .content{ max-width:900px; margin:0 auto; }
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:18px 24px; display:flex; align-items:center; gap:12px; }
+  .form-card-hdr-bar{ width:6px; height:28px; background:#ffcc00; border-radius:3px; flex-shrink:0; }
+  .form-card-hdr-title{ color:#fff; font-size:16px; font-weight:900; }
+  .form-card-hdr-sub{ color:rgba(255,255,255,.7); font-size:12px; margin-top:2px; }
+  .form-card-body{ padding:24px; }
+  .sec-hdr{ background:linear-gradient(90deg,var(--dhl-red),var(--dhl-red-dark)); color:#ffcc00; font-size:12px; font-weight:900; letter-spacing:.8px; text-transform:uppercase; padding:9px 16px; border-radius:10px; margin:20px 0 14px; }
+  .sec-hdr:first-child{ margin-top:0; }
+  .spacer{ height:14px; }
+  .form-actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
+  .field.full{ flex:none; width:100%; }
+</style>
+
+<section class="hero">
+  <div class="hero-inner">
+    <h2>{{ 'Editar' if modo_edicao else 'Novo' }} Aviso de Não Conformidade</h2>
+    <p>{% if modo_edicao %}Edite os campos abaixo para atualizar o ANC.{% else %}Preencha os campos abaixo para registrar um novo ANC.{% endif %} Todos os campos marcados com * são obrigatórios.</p>
+  </div>
+</section>
+
+<div class="form-card">
+  <div class="form-card-hdr">
+    <div class="form-card-hdr-bar"></div>
+    <div>
+      <div class="form-card-hdr-title">{% if modo_edicao %}✏️ EDITAR AVISO DE NÃO CONFORMIDADE{% else %}⚠️ NOVO AVISO DE NÃO CONFORMIDADE{% endif %}</div>
+      <div class="form-card-hdr-sub">Preencha todos os campos obrigatórios (*)</div>
+    </div>
+  </div>
+  <div class="form-card-body">
+    <form method="POST" action="{{ url_for('anc') }}" enctype="multipart/form-data">
+      {% if modo_edicao %}<input type="hidden" name="anc_id" value="{{ registro_edicao.id }}">{% endif %}
+
+      <div class="sec-hdr">📅 Identificação do Incidente</div>
+      <div class="row">
+        <div class="field">
+          <label>Data *</label>
+          <input type="date" name="data_nc" required value="{{ registro_edicao.data_nc or '' if modo_edicao else '' }}">
+        </div>
+        <div class="field">
+          <label>Hora *</label>
+          <input type="time" name="hora_nc" required value="{{ registro_edicao.hora_nc or hora_atual if modo_edicao else hora_atual }}">
+        </div>
+        <div class="field">
+          <label>Site</label>
+          <input type="text" name="site" readonly value="{{ registro_edicao.site if modo_edicao else (site_usuario or '') }}">
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <div class="field">
+          <label>Setor *</label>
+          <select name="setor" required>
+            <option value="">Selecione...</option>
+            {% for s in ['Sorter','Docas','Inbound','Outbound','Portaria','Condomínio','Adm','Sala RF','Armários','Manutenção'] %}
+            <option value="{{ s }}">{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Tipo de Ocorrência *</label>
+          <select name="tipo_ocorrencia" required>
+            <option value="">Selecione...</option>
+            <option value="Corretivo">Corretivo</option>
+            <option value="Preventivo">Preventivo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Turno *</label>
+          <select name="turno" required>
+            <option value="">Selecione...</option>
+            <option value="TURNO A">TURNO A</option>
+            <option value="TURNO B">TURNO B</option>
+            <option value="TURNO C">TURNO C</option>
+            <option value="ADM">ADM</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sec-hdr">🏷️ Classificação</div>
+      <div class="row">
+        <div class="field">
+          <label>Gravidade *</label>
+          <select name="gravidade" required>
+            <option value="">Selecione...</option>
+            <option value="BAIXA">BAIXA</option>
+            <option value="MÉDIA">MÉDIA</option>
+            <option value="ALTA">ALTA</option>
+            <option value="CRÍTICA">CRÍTICA</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Natureza *</label>
+          <select name="natureza" required>
+            <option value="">Selecione...</option>
+            {% for n in naturezas %}
+            <option value="{{ n }}" {{ 'selected' if modo_edicao and registro_edicao.natureza == n }}>{{ n }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Local *</label>
+          <input type="text" name="local" required placeholder="Ex: Portaria, Sorter, Docas..." value="{{ registro_edicao.local or '' if modo_edicao else '' }}">
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="row">
+        <div class="field">
+          <label>Gestor Responsável *</label>
+          <input type="text" name="responsavel" required placeholder="Nome do gestor" value="{{ registro_edicao.responsavel or '' if modo_edicao else '' }}">
+        </div>
+        <div class="field">
+          <label>Pessoas Envolvidas</label>
+          <input type="text" name="envolvido" placeholder="Nome(s) do(s) envolvido(s)" value="{{ registro_edicao.envolvido or '' if modo_edicao else '' }}">
+        </div>
+      </div>
+
+      <div class="sec-hdr">👤 Responsabilidade</div>
+      <div class="row">
+        <div class="field">
+          <label>Responsável pelo Levantamento *</label>
+          <input type="text" name="gestor_responsavel" required placeholder="Nome do responsável" value="{{ registro_edicao.gestor_responsavel or '' if modo_edicao else '' }}">
+        </div>
+        <div class="field">
+          <label>Cargo</label>
+          <input type="text" name="cargo" placeholder="Ex: Analista, Supervisor..." value="{{ registro_edicao.cargo or '' if modo_edicao else '' }}">
+        </div>
+        <div class="field">
+          <label>Plano de Ação</label>
+          <select name="status">
+            <option value="ABERTO">ABERTO</option>
+            <option value="EM ANDAMENTO" selected>EM ANDAMENTO</option>
+            <option value="CONCLUÍDO">CONCLUÍDO</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sec-hdr">🔎 Investigação</div>
+      <div class="row">
+        <div class="field">
+          <label>Início da Investigação</label>
+          <input type="datetime-local" name="inicio_investigacao" value="{{ registro_edicao.inicio_investigacao or '' if modo_edicao else '' }}">
+        </div>
+        <div class="field">
+          <label>Fim da Investigação</label>
+          <input type="datetime-local" name="fim_investigacao" value="{{ registro_edicao.fim_investigacao or '' if modo_edicao else '' }}">
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <p style="font-size:11px; color:var(--muted); margin:0;">Preencha apenas se houver investigação em andamento ou concluída.</p>
+
+      <div class="sec-hdr">💰 Valor</div>
+      <div class="row">
+        <div class="field">
+          <label>Valor estimado da ocorrência</label>
+          <input type="text" name="valor" placeholder="Ex: R$ 2.000,00" value="{{ registro_edicao.valor or '' if modo_edicao else '' }}">
+        </div>
+        <div class="field">
+          <label>Número de Série</label>
+          <input type="text" name="numero_serie" placeholder="Nº de série / referência">
+        </div>
+      </div>
+
+      <div class="sec-hdr">📝 Descrição</div>
+      <div class="field full">
+        <label>Descrição dos Fatos *</label>
+        <textarea name="descricao" required placeholder="Descreva detalhadamente os fatos, contexto e observações relevantes..." style="min-height:120px;">{{ registro_edicao.descricao or '' if modo_edicao else '' }}</textarea>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="field full">
+        <label>Ação Corretiva / Plano de Ação</label>
+        <textarea name="acao_corretiva" placeholder="Descreva as ações corretivas ou preventivas adotadas..."></textarea>
+      </div>
+
+      <div class="sec-hdr">📷 Evidências</div>
+      <div class="row">
+        <div class="field">
+          <label>Imagem 1</label>
+          <input type="file" name="imagem_1" accept="image/*">
+        </div>
+        <div class="field">
+          <label>Imagem 2</label>
+          <input type="file" name="imagem_2" accept="image/*">
+        </div>
+        <div class="field">
+          <label>Imagem 3</label>
+          <input type="file" name="imagem_3" accept="image/*">
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-red" onclick="document.getElementById('loading-overlay').classList.add('show')">✓ {{ 'Atualizar ANC' if modo_edicao else 'Salvar ANC' }}</button>
+        <a href="{{ url_for('anc') }}" class="btn btn-soft">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{% if modo_edicao and registro_edicao %}
+<script>
+(function(){
+  var r = {
+    setor:           {{ registro_edicao.setor           | tojson }},
+    tipo_ocorrencia: {{ registro_edicao.tipo_ocorrencia | tojson }},
+    turno:           {{ registro_edicao.turno           | tojson }},
+    gravidade:       {{ registro_edicao.gravidade       | tojson }},
+    natureza:        {{ registro_edicao.natureza        | tojson }},
+    status:          {{ registro_edicao.status          | tojson }},
+  };
+  Object.keys(r).forEach(function(name){
+    var el = document.querySelector('[name="' + name + '"]');
+    if(el && r[name]) el.value = r[name];
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

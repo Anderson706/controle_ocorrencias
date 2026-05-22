@@ -1,0 +1,233 @@
+{% extends "base_app.html" %}
+{% block page_title %}Novo Checklist | CCTV Control Panel{% endblock %}
+{% block topbar_title %}📷 Novo Checklist de Câmeras{% endblock %}
+{% block topbar_subtitle %}{{ site }} — {{ cameras|length }} câmera(s) ativa(s){% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('cameras_index') }}" class="btn btn-soft btn-sm">← Controle</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .chk-form-card{ background:#fff; border:1px solid var(--line); border-radius:14px;
+                  box-shadow:var(--shadow); overflow:hidden; }
+  .chk-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:16px 22px;
+            display:flex; align-items:center; gap:12px; }
+  .chk-hdr-bar{ width:5px; height:24px; background:#ffcc00; border-radius:3px; }
+  .chk-hdr-title{ color:#fff; font-size:15px; font-weight:900; }
+  .chk-hdr-sub{ color:rgba(255,255,255,.7); font-size:12px; margin-top:2px; }
+
+  .sec-hdr{ background:linear-gradient(90deg,var(--dhl-red),var(--dhl-red-dark));
+            color:#ffcc00; font-size:11px; font-weight:900; letter-spacing:.8px;
+            text-transform:uppercase; padding:8px 16px; border-radius:8px; margin:18px 0 12px; }
+  .sec-hdr:first-child{ margin-top:0; }
+
+  /* ── Toolbar de câmeras ── */
+  .cam-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .cam-search{ flex:1; min-width:200px; padding:8px 12px; border:1px solid var(--line);
+               border-radius:9px; font-size:13px; font-family:inherit; outline:none; }
+  .cam-search:focus{ border-color:var(--dhl-red); }
+  .cam-counter{ font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap; }
+  .cam-counter span{ color:var(--dhl-red); font-weight:900; }
+
+  /* ── Grid de câmeras ── */
+  .cam-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:8px; }
+
+  .cam-item{
+    border:2px solid var(--line); border-radius:10px; padding:10px 12px;
+    display:flex; flex-direction:column; gap:6px; transition:border-color .15s;
+    background:#fff; cursor:default;
+  }
+  .cam-item.is-inop{ border-color:#fca5a5; background:#fff5f5; }
+  .cam-item-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .cam-id{ font-size:12px; font-weight:900; color:var(--text); white-space:nowrap; overflow:hidden;
+           text-overflow:ellipsis; flex:1; }
+  .cam-name{ font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden;
+             text-overflow:ellipsis; max-width:120px; }
+
+  /* Toggle FUNCIONAL / INOPERANTE */
+  .cam-toggle{ display:flex; gap:4px; flex-shrink:0; }
+  .cam-toggle label{
+    padding:4px 12px; border-radius:7px; font-size:11px; font-weight:800;
+    cursor:pointer; border:1.5px solid #d1d5db; background:#f9fafb; color:#6b7280;
+    transition:background .12s, border-color .12s, color .12s; user-select:none;
+  }
+  .cam-toggle label:hover{ border-color:#9ca3af; background:#f3f4f6; color:#374151; }
+  input.r-func:checked + label{ background:#dcfce7; border-color:#86efac; color:#166534; }
+  input.r-inop:checked + label{ background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
+  input.r-func, input.r-inop{ display:none; }
+
+  /* Textarea do motivo */
+  .cam-motivo{ display:none; }
+  .cam-motivo.show{ display:block; }
+  .cam-motivo textarea{
+    width:100%; padding:7px 10px; border:1px solid #fca5a5; border-radius:7px;
+    font-size:12px; font-family:inherit; resize:vertical; min-height:52px; outline:none;
+    background:#fff5f5;
+  }
+  .cam-motivo textarea:focus{ border-color:#ef4444; }
+
+  /* Tratativa section */
+  .tratativa-card{ background:#f8fafc; border:1px solid var(--line); border-radius:12px;
+                   padding:20px 22px; margin-top:20px; }
+
+  /* barra sticky de ações */
+  .sticky-bar{
+    position:sticky; bottom:0; background:#fff; border-top:2px solid var(--line);
+    padding:12px 24px; display:flex; align-items:center; justify-content:space-between;
+    gap:12px; flex-wrap:wrap; z-index:100; margin-top:20px;
+  }
+  .sticky-counters{ display:flex; gap:16px; font-size:13px; font-weight:700; }
+  .cnt-func{ color:#16a34a; }
+  .cnt-inop{ color:#d40511; }
+</style>
+
+<form method="POST" action="{{ url_for('cameras_checklist_salvar') }}" id="form-chk"
+      enctype="multipart/form-data" hx-boost="false">
+
+<div class="chk-form-card">
+  <div class="chk-hdr">
+    <div class="chk-hdr-bar"></div>
+    <div>
+      <div class="chk-hdr-title">📷 CHECKLIST DE CÂMERAS — {{ site }}</div>
+      <div class="chk-hdr-sub">{{ cameras|length }} câmera(s) ativa(s) | Preencha o status de cada câmera</div>
+    </div>
+  </div>
+
+  <div style="padding:22px">
+
+    <!-- Identificação -->
+    <div class="sec-hdr">📅 Identificação</div>
+    <div class="row">
+      <div class="field">
+        <label>Data *</label>
+        <input type="date" name="data_checklist" required value="{{ data_hoje }}">
+      </div>
+      <div class="field">
+        <label>Hora *</label>
+        <input type="time" name="hora_checklist" required value="{{ hora_agora }}">
+      </div>
+      <div class="field">
+        <label>Operador *</label>
+        <input type="text" name="operador" required value="{{ operador }}" placeholder="Nome do operador">
+      </div>
+    </div>
+
+    <!-- Câmeras -->
+    <div class="sec-hdr">📷 Status das Câmeras</div>
+
+    <div class="cam-toolbar">
+      <input type="text" class="cam-search" id="cam-search"
+             placeholder="🔍 Filtrar câmera por número ou nome..."
+             oninput="filtrarCams(this.value)">
+      <button type="button" class="btn btn-soft btn-sm" onclick="marcarTodasFuncional()">✓ Todas Funcionais</button>
+      <div class="cam-counter">
+        Inoperantes: <span id="cnt-inop">0</span> / {{ cameras|length }}
+      </div>
+    </div>
+
+    <div class="cam-grid" id="cam-grid">
+      {% for cam in cameras %}
+      <div class="cam-item" id="ci-{{ cam.id }}"
+           data-search="{{ cam.numero|lower }} {{ (cam.nome or '')|lower }}">
+        <div class="cam-item-top">
+          <div>
+            <div class="cam-id">{{ cam.numero }}</div>
+            {% if cam.nome %}<div class="cam-name" title="{{ cam.nome }}">{{ cam.nome }}</div>{% endif %}
+          </div>
+          <div class="cam-toggle">
+            <input type="radio" class="r-func" id="f-{{ cam.id }}"
+                   name="status_{{ cam.id }}" value="FUNCIONAL" checked
+                   onchange="toggleMotivo({{ cam.id }}, false)">
+            <label for="f-{{ cam.id }}">✓ Funcional</label>
+            <input type="radio" class="r-inop" id="i-{{ cam.id }}"
+                   name="status_{{ cam.id }}" value="INOPERANTE"
+                   onchange="toggleMotivo({{ cam.id }}, true)">
+            <label for="i-{{ cam.id }}">✕ Inoperante</label>
+          </div>
+        </div>
+        <div class="cam-motivo" id="m-{{ cam.id }}">
+          <textarea name="motivo_{{ cam.id }}"
+                    placeholder="Descreva o motivo da inoperância..."></textarea>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Tratativa -->
+    <div class="sec-hdr">📝 Tratativa</div>
+    <div class="tratativa-card">
+      <div class="field" style="margin-bottom:14px">
+        <label>Descrição da Tratativa / Plano de Ação</label>
+        <textarea name="tratativa" rows="4"
+                  placeholder="Descreva as ações tomadas, plano de correção, prazo de resolução..."></textarea>
+      </div>
+      <div class="field">
+        <label>Anexo (imagem, PDF, relatório...)</label>
+        <input type="file" name="anexo" accept="image/*,.pdf,.docx,.xlsx">
+      </div>
+    </div>
+
+    <!-- Sticky bar -->
+    <div class="sticky-bar">
+      <div class="sticky-counters">
+        <span class="cnt-func">✓ Funcionais: <strong id="cnt-func">{{ cameras|length }}</strong></span>
+        <span class="cnt-inop">✕ Inoperantes: <strong id="cnt-inop-bar">0</strong></span>
+      </div>
+      <div style="display:flex;gap:10px">
+        <a href="{{ url_for('cameras_index') }}" class="btn btn-soft btn-sm">Cancelar</a>
+        <button type="submit" class="btn btn-red"
+                onclick="document.getElementById('loading-overlay').classList.add('show')">
+          ✓ Salvar Checklist
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+</form>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+var _total = {{ cameras|length }};
+var _inop  = 0;
+
+function toggleMotivo(id, mostrar){
+  var el  = document.getElementById('m-' + id);
+  var ci  = document.getElementById('ci-' + id);
+  el.classList.toggle('show', mostrar);
+  ci.classList.toggle('is-inop', mostrar);
+  if(!mostrar){
+    var ta = el.querySelector('textarea');
+    if(ta) ta.value = '';
+  }
+  // atualizar contador
+  _inop = document.querySelectorAll('input.r-inop:checked').length;
+  document.getElementById('cnt-inop').textContent     = _inop;
+  document.getElementById('cnt-inop-bar').textContent = _inop;
+  document.getElementById('cnt-func').textContent     = _total - _inop;
+}
+
+function marcarTodasFuncional(){
+  document.querySelectorAll('input.r-func').forEach(r => {
+    r.checked = true;
+    var id = r.id.replace('f-', '');
+    var el = document.getElementById('m-' + id);
+    var ci = document.getElementById('ci-' + id);
+    if(el){ el.classList.remove('show'); var ta = el.querySelector('textarea'); if(ta) ta.value=''; }
+    if(ci) ci.classList.remove('is-inop');
+  });
+  _inop = 0;
+  document.getElementById('cnt-inop').textContent     = 0;
+  document.getElementById('cnt-inop-bar').textContent = 0;
+  document.getElementById('cnt-func').textContent     = _total;
+}
+
+function filtrarCams(q){
+  q = q.toLowerCase().trim();
+  document.querySelectorAll('#cam-grid .cam-item').forEach(el => {
+    el.style.display = !q || el.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

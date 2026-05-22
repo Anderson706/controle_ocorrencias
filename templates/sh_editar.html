@@ -1,448 +1,235 @@
-﻿<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <title>Editar Passagem #{{ oc.id }} | Shift Handover</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    :root{
-      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
-      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
-      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
-      --sidebar:#161a1d; --sidebar-2:#20262b;
-      --shadow:0 10px 30px rgba(15,23,42,.08); --radius:18px;
-    }
-    *{ box-sizing:border-box; }
-    html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
-    a{ text-decoration:none; }
+{% extends "base_app.html" %}
+{% block page_title %}Editar Passagem #{{ oc.id }} | Shift Handover{% endblock %}
 
-    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
-    #loading-overlay.show{ display:flex; }
-    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
-    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
-    @keyframes spin{ to{ transform:rotate(360deg); } }
-    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; }
+{% block topbar_title %}Editar Passagem #{{ oc.id }}{% endblock %}
+{% block topbar_subtitle %}{{ oc.turno }} — {{ oc.site }} | Criado por {{ oc.criado_por }}{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('sh_index') }}" class="btn btn-dark btn-sm">← Voltar</a>
+{% endblock %}
 
-    .app-shell{ display:flex; min-height:100vh; width:100%; }
-    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
-    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
-    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
-    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
-    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
-    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
-    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
-    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
-    .nav-icon{ font-size:15px; flex-shrink:0; }
-    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
-    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
-    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
-    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
-    .sub-link.cur{ color:#ffcc00; font-weight:800; }
-    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
-    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
-    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
-    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
-    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
-    .sp-info{ flex:1; min-width:0; }
-    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
-    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
-    .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
-    .sp-menu.open{ display:block; animation:spIn .15s ease; }
-    @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
-    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
-    .sp-item:hover{ background:#f3f4f6; }
-    .sp-item-red{ color:#d40511; }
-    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
+{% block page_content %}
+<style>
+  .content-narrow{ max-width:900px; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); margin-bottom:20px; }
 
-    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
-    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
-    .topbar{ height:74px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
-    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
-    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
-    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
-    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
-    .topbar-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+  .field{ display:flex; flex-direction:column; gap:6px; flex:1; min-width:200px; }
+  .field label{ font-size:13px; color:var(--muted); font-weight:800; }
+  .field input,.field select,.field textarea{ width:100%; border:1px solid #d6dae1; background:#fff; border-radius:12px; padding:12px 14px; font-size:14px; outline:none; font-family:Arial,Helvetica,sans-serif; transition:border-color .18s; }
+  .field input:focus,.field select:focus,.field textarea:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+  .field textarea{ min-height:100px; resize:vertical; }
+  .readonly-field{ background:#f3f4f6 !important; color:#6b7280; font-weight:700; }
+  .small{ font-size:12px; color:var(--muted); line-height:1.45; }
+  .spacer{ height:12px; }
+  .section-title{ margin-bottom:14px; }
+  .section-title h3{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black,#1f1f1f); }
 
-    .content{ padding:24px; max-width:900px; }
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); margin-bottom:20px; }
-    .flash{ margin-bottom:14px; padding:12px 14px; border-radius:12px; font-weight:700; border:1px solid transparent; }
-    .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
-    .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
-    .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+  .btn-sm{ padding:6px 12px; font-size:12px; border-radius:8px; }
+  .btn-primary{ background:#ffcc00; color:#2b2b2b; }
+  .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; box-shadow:0 6px 16px rgba(212,5,17,.2); }
+  .btn-dark{ background:#3e434a; color:#fff; }
+  .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
 
-    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
-    .field{ display:flex; flex-direction:column; gap:6px; flex:1; min-width:200px; }
-    .field label{ font-size:13px; color:var(--muted); font-weight:800; }
-    .field input,.field select,.field textarea{ width:100%; border:1px solid #d6dae1; background:#fff; border-radius:12px; padding:12px 14px; font-size:14px; outline:none; font-family:Arial,Helvetica,sans-serif; transition:border-color .18s; }
-    .field input:focus,.field select:focus,.field textarea:focus{ border-color:#d40511; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
-    .field textarea{ min-height:100px; resize:vertical; }
-    .readonly-field{ background:#f3f4f6 !important; color:#6b7280; font-weight:700; }
-    .small{ font-size:12px; color:var(--muted); line-height:1.45; }
-    .spacer{ height:12px; }
-    .section-title{ margin-bottom:14px; }
-    .section-title h3{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black); }
+  .signature-card{ border:1px solid #ead37a; background:#fffdf5; border-radius:16px; padding:14px; }
+  .signature-card h4{ margin:0 0 10px; font-size:14px; color:#5f4800; font-weight:900; }
+  .signature-pad{ width:100%; max-width:100%; height:160px; background:#fff; border:2px dashed #d6b64c; border-radius:12px; display:block; cursor:crosshair; touch-action:none; }
+  .signature-toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+  .signature-preview{ margin-top:10px; padding:10px; border:1px solid #e5e7eb; border-radius:12px; background:#fff; }
+  .signature-preview img{ max-width:100%; max-height:110px; display:block; margin:0 auto; }
 
-    .btn{ border:none; border-radius:12px; padding:11px 16px; cursor:pointer; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:.18s; font-size:13px; }
-    .btn:hover{ transform:translateY(-1px); }
-    .btn-sm{ padding:6px 12px; font-size:12px; border-radius:8px; }
-    .btn-primary{ background:linear-gradient(180deg,#ffcc00,#f1be00); color:#2b2b2b; }
-    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; box-shadow:0 6px 16px rgba(212,5,17,.2); }
-    .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
-    .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  .upload-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .upload-item{ border:1px solid #e5e7eb; border-radius:12px; padding:10px; background:#fff; }
+  .upload-item label{ display:block; margin-bottom:6px; font-size:12px; color:#6b7280; font-weight:800; }
+  .upload-item input[type="file"]{ width:100%; border:1px solid #d6dae1; border-radius:10px; padding:8px; background:#fff; }
+  .preview-item{ border:1px solid #e5e7eb; border-radius:10px; background:#fff; padding:8px; }
+  .preview-item img{ width:100%; height:110px; object-fit:cover; border-radius:8px; display:block; }
+  .preview-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px; }
+  .note-box{ background:#fff8d0; border:1px solid #f0d66a; border-radius:12px; padding:12px 14px; margin-bottom:18px; font-size:13px; color:#5c4500; font-weight:700; display:flex; align-items:center; gap:10px; }
+</style>
 
-    .signature-card{ border:1px solid #ead37a; background:linear-gradient(180deg,#fffdf5,#fff8db); border-radius:16px; padding:14px; }
-    .signature-card h4{ margin:0 0 10px; font-size:14px; color:#5f4800; font-weight:900; }
-    .signature-pad{ width:100%; max-width:100%; height:160px; background:#fff; border:2px dashed #d6b64c; border-radius:12px; display:block; cursor:crosshair; touch-action:none; }
-    .signature-toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:8px; }
-    .signature-preview{ margin-top:10px; padding:10px; border:1px solid #e5e7eb; border-radius:12px; background:#fff; }
-    .signature-preview img{ max-width:100%; max-height:110px; display:block; margin:0 auto; }
+<div class="content-narrow">
+  <div class="note-box">️ Esta edição só é permitida antes do recebedor assinar. Campos em cinza são somente leitura.</div>
 
-    .upload-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-    .upload-item{ border:1px solid #e5e7eb; border-radius:12px; padding:10px; background:#fff; }
-    .upload-item label{ display:block; margin-bottom:6px; font-size:12px; color:#6b7280; font-weight:800; }
-    .upload-item input[type="file"]{ width:100%; border:1px solid #d6dae1; border-radius:10px; padding:8px; background:#fff; }
-    .preview-item{ border:1px solid #e5e7eb; border-radius:10px; background:#fff; padding:8px; }
-    .preview-item img{ width:100%; height:110px; object-fit:cover; border-radius:8px; display:block; }
-    .preview-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px; }
-    .note-box{ background:#fff8d0; border:1px solid #f0d66a; border-radius:12px; padding:12px 14px; margin-bottom:18px; font-size:13px; color:#5c4500; font-weight:700; display:flex; align-items:center; gap:10px; }
-  </style>
-</head>
-<body>
-<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+  <div class="card">
+    <div class="section-title"><h3>Dados da passagem</h3></div>
+    <form method="POST" action="{{ url_for('sh_editar', oc_id=oc.id) }}" enctype="multipart/form-data" id="edit-form">
 
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
-    </div>
-    <nav class="main-nav">
-      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
-      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise','editar_analise'] -%}
-      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
-      {%- set sec_sh  = request.endpoint in ['sh_index','sh_dashboard','sh_assinar','sh_editar'] -%}
-      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
-        <span class="nav-icon">🌐</span><span>Overview</span>
-      </a>
-      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
-        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_oc %}<div class="sub-nav">
-        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
-        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
-        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_an %}<div class="sub-nav">
-        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
-        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise','editar_analise'] else '' }}">Controle de Análises</a>
-        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
-        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_anc %}<div class="sub-nav">
-        <a href="{{ url_for('anc') }}" class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle de ANC</a>
-        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
-        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if sec_sh else '' }}">
-        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if sec_sh %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_sh %}<div class="sub-nav">
-        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint in ['sh_index','sh_editar'] else '' }}">Registrar Passagem</a>
-        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
-      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
-        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_chv %}<div class="sub-nav">
-        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
-        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
-        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
-      </div>{% endif %}
-      {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
-      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
-        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_adm %}<div class="sub-nav">
-        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
-        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
-        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
-      </div>{% endif %}
-      {% endif %}
-    </nav>
-    <div class="sp-wrap" id="spWrap">
-      <div class="sp-trigger" onclick="spToggle(event)">
-        <div class="sp-avatar">
-          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
+      <div class="row">
+        <div class="field">
+          <label>Data</label>
+          <input type="date" name="data_ocorrencia" value="{{ data_oc_val }}" required>
         </div>
-        <div class="sp-info">
-          <span class="sp-name">{{ session.get('user_nome','') }}</span>
-          <span class="sp-role">{{ session.get('user_site','') }}</span>
+        <div class="field">
+          <label>Data/Hora</label>
+          <input type="datetime-local" name="data_hora_registro" value="{{ data_hr_val }}" required>
         </div>
-        <span class="sp-dots">⋮</span>
-      </div>
-      <div class="sp-menu" id="spMenu">
-        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
-        <hr class="sp-sep">
-        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
-      </div>
-    </div>
-  </aside>
-
-  <main class="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
-        <div>
-          <h1>Editar Passagem #{{ oc.id }}</h1>
-          <p>{{ oc.turno }} — {{ oc.site }} | Criado por {{ oc.criado_por }}</p>
+        {% if session.get('user_perfil') in ('ADMIN','Admin','admin') %}
+        <div class="field">
+          <label>Site</label>
+          <select name="site" required>
+            <option value="">Selecione</option>
+            {% for s in sites %}<option value="{{ s.nome_do_site }}" {% if s.nome_do_site == oc.site %}selected{% endif %}>{{ s.nome_do_site }}</option>{% endfor %}
+          </select>
         </div>
-      </div>
-      <div class="topbar-right">
-        <a href="{{ url_for('sh_index') }}" class="btn btn-dark btn-sm">← Voltar</a>
-      </div>
-    </header>
+        {% else %}
+        <div class="field">
+          <label>Site</label>
+          <input type="text" value="{{ oc.site }}" readonly class="readonly-field">
+        </div>
+        {% endif %}
+      </div><div class="spacer"></div>
 
-    <div class="content">
+      <div class="row">
+        <div class="field">
+          <label>Turno</label>
+          <select name="turno" required>
+            <option value="">Selecione</option>
+            <option value="TURNO A" {% if oc.turno=='TURNO A' %}selected{% endif %}>1° Turno</option>
+            <option value="TURNO B" {% if oc.turno=='TURNO B' %}selected{% endif %}>2° Turno</option>
+            <option value="TURNO C" {% if oc.turno=='TURNO C' %}selected{% endif %}>3° Turno</option>
+            <option value="ADM" {% if oc.turno=='ADM' %}selected{% endif %}>ADM</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Setor / Área</label>
+          <input type="text" name="setor" value="{{ oc.setor }}" required>
+        </div>
+        <div class="field">
+          <label>Tipo</label>
+          <select name="tipo_ocorrencia" required>
+            <option value="">Selecione</option>
+            {% for t in ['ROTINA','DESVIO DE PROCESSO','EXTRAVIO','INCIDENTE','MANUTENCAO','PENDENCIA','INFORMATIVO'] %}
+            <option value="{{ t }}" {% if oc.tipo_ocorrencia == t %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div><div class="spacer"></div>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}{% for cat,msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}{% endif %}
-      {% endwith %}
+      <div class="row">
+        <div class="field">
+          <label>Prioridade</label>
+          <select name="prioridade" required>
+            <option value="">Selecione</option>
+            {% for p in ['BAIXA','MEDIA','ALTA','CRITICA'] %}
+            <option value="{{ p }}" {% if oc.prioridade == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select name="status" required>
+            <option value="">Selecione</option>
+            <option value="EM ABERTO"         {% if oc.status=='EM ABERTO'         %}selected{% endif %}>EM ABERTO</option>
+            <option value="EM ACOMPANHAMENTO" {% if oc.status=='EM ACOMPANHAMENTO' %}selected{% endif %}>EM ACOMPANHAMENTO</option>
+            <option value="FINALIZADO"        {% if oc.status=='FINALIZADO'        %}selected{% endif %}>FINALIZADO</option>
+          </select>
+        </div>
+      </div><div class="spacer"></div>
 
-      <div class="note-box">⚠️ Esta edição só é permitida antes do recebedor assinar. Campos em cinza são somente leitura.</div>
+      <div class="field">
+        <label>Responsável que está saindo</label>
+        <input type="text" value="{{ oc.responsavel_saida }}" readonly class="readonly-field">
+      </div><div class="spacer"></div>
 
-      <div class="card">
-        <div class="section-title"><h3>Dados da passagem</h3></div>
-        <form method="POST" action="{{ url_for('sh_editar', oc_id=oc.id) }}" enctype="multipart/form-data" id="edit-form">
+      <div class="field">
+        <label>Responsável que está assumindo</label>
+        <select name="responsavel_entrada" required>
+          <option value="">Selecione</option>
+          {% for u in usuarios_mesmo_site %}
+          <option value="{{ u.nome }}" {% if u.nome == oc.responsavel_entrada %}selected{% endif %}>{{ u.nome }}</option>
+          {% endfor %}
+        </select>
+        <div class="small">Usuários ativos do site. Podem ser alterados antes da assinatura.</div>
+      </div><div class="spacer"></div>
 
-          <div class="row">
-            <div class="field">
-              <label>Data</label>
-              <input type="date" name="data_ocorrencia" value="{{ data_oc_val }}" required>
-            </div>
-            <div class="field">
-              <label>Data/Hora</label>
-              <input type="datetime-local" name="data_hora_registro" value="{{ data_hr_val }}" required>
-            </div>
-            {% if session.get('user_perfil') in ('ADMIN','Admin','admin') %}
-            <div class="field">
-              <label>Site</label>
-              <select name="site" required>
-                <option value="">Selecione</option>
-                {% for s in sites %}<option value="{{ s.nome_site }}" {% if s.nome_site == oc.site %}selected{% endif %}>{{ s.nome_site }}</option>{% endfor %}
-              </select>
-            </div>
-            {% else %}
-            <div class="field">
-              <label>Site</label>
-              <input type="text" value="{{ oc.site }}" readonly class="readonly-field">
-            </div>
-            {% endif %}
-          </div><div class="spacer"></div>
+      <div class="field"><label>Efetivo</label><textarea name="efetivo">{{ oc.efetivo or '' }}</textarea></div><div class="spacer"></div>
+      <div class="field"><label>Descrição</label><textarea name="descricao">{{ oc.descricao or '' }}</textarea></div><div class="spacer"></div>
+      <div class="field"><label>Ações tomadas</label><textarea name="acoes_tomadas">{{ oc.acoes_tomadas or '' }}</textarea></div><div class="spacer"></div>
+      <div class="field"><label>Pendências</label><textarea name="pendencias">{{ oc.pendencias or '' }}</textarea></div><div class="spacer"></div>
 
-          <div class="row">
-            <div class="field">
-              <label>Turno</label>
-              <select name="turno" required>
-                <option value="">Selecione</option>
-                <option value="TURNO A" {% if oc.turno=='TURNO A' %}selected{% endif %}>1° Turno</option>
-                <option value="TURNO B" {% if oc.turno=='TURNO B' %}selected{% endif %}>2° Turno</option>
-                <option value="TURNO C" {% if oc.turno=='TURNO C' %}selected{% endif %}>3° Turno</option>
-                <option value="ADM" {% if oc.turno=='ADM' %}selected{% endif %}>ADM</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Setor / Área</label>
-              <input type="text" name="setor" value="{{ oc.setor }}" required>
-            </div>
-            <div class="field">
-              <label>Tipo</label>
-              <select name="tipo_ocorrencia" required>
-                <option value="">Selecione</option>
-                {% for t in ['ROTINA','DESVIO DE PROCESSO','EXTRAVIO','INCIDENTE','MANUTENCAO','PENDENCIA','INFORMATIVO'] %}
-                <option value="{{ t }}" {% if oc.tipo_ocorrencia == t %}selected{% endif %}>{{ t }}</option>
-                {% endfor %}
-              </select>
-            </div>
-          </div><div class="spacer"></div>
-
-          <div class="row">
-            <div class="field">
-              <label>Prioridade</label>
-              <select name="prioridade" required>
-                <option value="">Selecione</option>
-                {% for p in ['BAIXA','MEDIA','ALTA','CRITICA'] %}
-                <option value="{{ p }}" {% if oc.prioridade == p %}selected{% endif %}>{{ p }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="field">
-              <label>Status</label>
-              <select name="status" required>
-                <option value="">Selecione</option>
-                <option value="EM ABERTO" {% if oc.status=='EM ABERTO' %}selected{% endif %}>EM ABERTO</option>
-                <option value="EM ACOMPANHAMENTO" {% if oc.status=='EM ACOMPANHAMENTO' %}selected{% endif %}>EM ACOMPANHAMENTO</option>
-                <option value="FINALIZADO" {% if oc.status=='FINALIZADO' %}selected{% endif %}>FINALIZADO</option>
-              </select>
-            </div>
-          </div><div class="spacer"></div>
-
-          <div class="field">
-            <label>Responsável que está saindo</label>
-            <input type="text" value="{{ oc.responsavel_saida }}" readonly class="readonly-field">
-          </div><div class="spacer"></div>
-
-          <div class="field">
-            <label>Responsável que está assumindo</label>
-            <select name="responsavel_entrada" required>
-              <option value="">Selecione</option>
-              {% for u in usuarios_mesmo_site %}
-              <option value="{{ u.nome }}" {% if u.nome == oc.responsavel_entrada %}selected{% endif %}>{{ u.nome }}</option>
-              {% endfor %}
-            </select>
-            <div class="small">Usuários ativos do site. Podem ser alterados antes da assinatura.</div>
-          </div><div class="spacer"></div>
-
-          <div class="field">
-            <label>Efetivo</label>
-            <textarea name="efetivo">{{ oc.efetivo or '' }}</textarea>
-          </div><div class="spacer"></div>
-
-          <div class="field">
-            <label>Descrição</label>
-            <textarea name="descricao">{{ oc.descricao or '' }}</textarea>
-          </div><div class="spacer"></div>
-
-          <div class="field">
-            <label>Ações tomadas</label>
-            <textarea name="acoes_tomadas">{{ oc.acoes_tomadas or '' }}</textarea>
-          </div><div class="spacer"></div>
-
-          <div class="field">
-            <label>Pendências</label>
-            <textarea name="pendencias">{{ oc.pendencias or '' }}</textarea>
-          </div><div class="spacer"></div>
-
-          <!-- Assinatura saída (opcional — só atualiza se redesenhar) -->
-          <div class="field">
-            <label>Assinatura saída <span style="color:var(--muted);font-weight:400;">(redesenhe apenas se quiser substituir)</span></label>
-            <div class="signature-card">
-              <h4>Assinatura — Responsável saída</h4>
-              {% if oc.assinatura_saida %}
-              <div class="signature-preview" style="margin-bottom:10px;">
-                <div class="small" style="margin-bottom:6px;">Assinatura atual:</div>
-                <img src="{{ oc.assinatura_saida }}" alt="Assinatura atual">
-              </div>
-              {% endif %}
-              <canvas id="sig-pad" class="signature-pad"></canvas>
-              <input type="hidden" name="assinatura_saida" id="assinatura_saida">
-              <div class="signature-toolbar">
-                <button type="button" class="btn btn-dark btn-sm" onclick="limparSig()">Limpar</button>
-              </div>
-              <div class="small">Deixe em branco para manter a assinatura atual.</div>
-            </div>
-          </div><div class="spacer"></div>
-
-          <!-- Imagens (opcionais — só atualiza as que forem enviadas) -->
-          <div class="field">
-            <label>Evidências <span style="color:var(--muted);font-weight:400;">(deixe em branco para manter as atuais)</span></label>
-
-            {% if oc.imagem_1 or oc.imagem_2 or oc.imagem_3 or oc.imagem_4 %}
-            <div class="small" style="margin-bottom:8px;">Imagens atuais:</div>
-            <div class="preview-grid" style="margin-bottom:12px;">
-              {% if oc.imagem_1 %}<div class="preview-item"><img src="{{ oc.imagem_1 }}"></div>{% endif %}
-              {% if oc.imagem_2 %}<div class="preview-item"><img src="{{ oc.imagem_2 }}"></div>{% endif %}
-              {% if oc.imagem_3 %}<div class="preview-item"><img src="{{ oc.imagem_3 }}"></div>{% endif %}
-              {% if oc.imagem_4 %}<div class="preview-item"><img src="{{ oc.imagem_4 }}"></div>{% endif %}
-            </div>
-            {% endif %}
-
-            <div class="upload-grid">
-              <div class="upload-item"><label>Imagem 1</label><input type="file" name="imagem_1" accept="image/*"></div>
-              <div class="upload-item"><label>Imagem 2</label><input type="file" name="imagem_2" accept="image/*"></div>
-              <div class="upload-item"><label>Imagem 3</label><input type="file" name="imagem_3" accept="image/*"></div>
-              <div class="upload-item"><label>Imagem 4</label><input type="file" name="imagem_4" accept="image/*"></div>
-            </div>
+      <div class="field">
+        <label>Assinatura saída <span style="color:var(--muted);font-weight:400;">(redesenhe apenas se quiser substituir)</span></label>
+        <div class="signature-card">
+          <h4>Assinatura — Responsável saída</h4>
+          {% if oc.assinatura_saida %}
+          <div class="signature-preview" style="margin-bottom:10px;">
+            <div class="small" style="margin-bottom:6px;">Assinatura atual:</div>
+            <img src="{{ oc.assinatura_saida }}" alt="Assinatura atual">
           </div>
-
-          <div class="actions">
-            <button type="submit" class="btn btn-red">💾 Salvar Alterações</button>
-            <a href="{{ url_for('sh_index') }}" class="btn btn-dark">Cancelar</a>
+          {% endif %}
+          <canvas id="sig-pad" class="signature-pad"></canvas>
+          <input type="hidden" name="assinatura_saida" id="assinatura_saida">
+          <div class="signature-toolbar">
+            <button type="button" class="btn btn-dark btn-sm" onclick="limparSig()">Limpar</button>
           </div>
-        </form>
+          <div class="small">Deixe em branco para manter a assinatura atual.</div>
+        </div>
+      </div><div class="spacer"></div>
+
+      <div class="field">
+        <label>Evidências <span style="color:var(--muted);font-weight:400;">(deixe em branco para manter as atuais)</span></label>
+
+        {% if oc.imagem_1 or oc.imagem_2 or oc.imagem_3 or oc.imagem_4 %}
+        <div class="small" style="margin-bottom:8px;">Imagens atuais:</div>
+        <div class="preview-grid" style="margin-bottom:12px;">
+          {% if oc.imagem_1 %}<div class="preview-item"><img src="{{ oc.imagem_1 }}"></div>{% endif %}
+          {% if oc.imagem_2 %}<div class="preview-item"><img src="{{ oc.imagem_2 }}"></div>{% endif %}
+          {% if oc.imagem_3 %}<div class="preview-item"><img src="{{ oc.imagem_3 }}"></div>{% endif %}
+          {% if oc.imagem_4 %}<div class="preview-item"><img src="{{ oc.imagem_4 }}"></div>{% endif %}
+        </div>
+        {% endif %}
+
+        <div class="upload-grid">
+          <div class="upload-item"><label>Imagem 1</label><input type="file" name="imagem_1" accept="image/*"></div>
+          <div class="upload-item"><label>Imagem 2</label><input type="file" name="imagem_2" accept="image/*"></div>
+          <div class="upload-item"><label>Imagem 3</label><input type="file" name="imagem_3" accept="image/*"></div>
+          <div class="upload-item"><label>Imagem 4</label><input type="file" name="imagem_4" accept="image/*"></div>
+        </div>
       </div>
-    </div>
-      <footer class="app-footer">
-        <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
-        <span>DHL SUPPLY CHAIN — USO INTERNO</span>
-      </footer>
-  </main>
+
+      <div class="actions">
+        <button type="submit" class="btn btn-red"> Salvar Alterações</button>
+        <a href="{{ url_for('sh_index') }}" class="btn btn-dark">Cancelar</a>
+      </div>
+    </form>
+  </div>
 </div>
+{% endblock %}
 
+{% block page_scripts %}
 <script>
-  function iniciarSigPad(canvasId, inputId) {
-    const cv = document.getElementById(canvasId);
-    const inp = document.getElementById(inputId);
-    if (!cv || !inp) return null;
-    const ctx = cv.getContext("2d");
-    let draw = false;
-    function setup() { ctx.lineWidth=2; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.strokeStyle="#111"; }
-    function resize() {
-      const r=Math.max(window.devicePixelRatio||1,1), rc=cv.getBoundingClientRect();
-      cv.width=rc.width*r; cv.height=rc.height*r;
-      ctx.setTransform(1,0,0,1,0,0); ctx.scale(r,r); setup();
-    }
-    function pos(e) {
-      const rc=cv.getBoundingClientRect(), t=e.touches?e.touches[0]:null;
-      return {x:(t?t.clientX:e.clientX)-rc.left, y:(t?t.clientY:e.clientY)-rc.top};
-    }
-    function start(e){ draw=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
-    function move(e){ if(!draw)return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
-    function end(e){ if(!draw)return; draw=false; save(); if(e)e.preventDefault(); }
-    function save(){ inp.value=cv.toDataURL("image/png"); }
-    function clear() {
-      const r=Math.max(window.devicePixelRatio||1,1);
-      ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height); ctx.scale(r,r); setup(); inp.value="";
-    }
-    cv.addEventListener("mousedown",start); cv.addEventListener("mousemove",move);
-    cv.addEventListener("mouseup",end); cv.addEventListener("mouseleave",end);
-    cv.addEventListener("touchstart",start,{passive:false}); cv.addEventListener("touchmove",move,{passive:false});
-    cv.addEventListener("touchend",end,{passive:false});
-    window.addEventListener("resize",resize); resize();
-    return {clear};
+function iniciarSigPad(canvasId, inputId) {
+  const cv = document.getElementById(canvasId);
+  const inp = document.getElementById(inputId);
+  if (!cv || !inp) return null;
+  const ctx = cv.getContext("2d");
+  let draw = false;
+  function setup() { ctx.lineWidth=2; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.strokeStyle="#111"; }
+  function resize() {
+    const r=Math.max(window.devicePixelRatio||1,1), rc=cv.getBoundingClientRect();
+    cv.width=rc.width*r; cv.height=rc.height*r;
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(r,r); setup();
   }
-  const _sigPad = iniciarSigPad("sig-pad","assinatura_saida");
-  function limparSig(){ if(_sigPad) _sigPad.clear(); }
-
-  document.addEventListener('DOMContentLoaded', function(){
-    const ov=document.getElementById('loading-overlay');
-    document.querySelectorAll('form').forEach(f=>f.addEventListener('submit',function(){ ov.classList.add('show'); }));
-  });
-
-  function spToggle(e){ e.stopPropagation(); document.getElementById('spMenu').classList.toggle('open'); }
-  document.addEventListener('click', function(){ document.getElementById('spMenu').classList.remove('open'); });
+  function pos(e) {
+    const rc=cv.getBoundingClientRect(), t=e.touches?e.touches[0]:null;
+    return {x:(t?t.clientX:e.clientX)-rc.left, y:(t?t.clientY:e.clientY)-rc.top};
+  }
+  function start(e){ draw=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
+  function move(e){ if(!draw)return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
+  function end(e){ if(!draw)return; draw=false; save(); if(e)e.preventDefault(); }
+  function save(){ inp.value=cv.toDataURL("image/png"); }
+  function clear() {
+    const r=Math.max(window.devicePixelRatio||1,1);
+    ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height); ctx.scale(r,r); setup(); inp.value="";
+  }
+  cv.addEventListener("mousedown",start); cv.addEventListener("mousemove",move);
+  cv.addEventListener("mouseup",end); cv.addEventListener("mouseleave",end);
+  cv.addEventListener("touchstart",start,{passive:false}); cv.addEventListener("touchmove",move,{passive:false});
+  cv.addEventListener("touchend",end,{passive:false});
+  window.addEventListener("resize",resize); resize();
+  return {clear};
+}
+const _sigPad = iniciarSigPad("sig-pad","assinatura_saida");
+function limparSig(){ if(_sigPad) _sigPad.clear(); }
 </script>
-
-<script>
-(function(){
-  var _ov = document.getElementById('loading-overlay');
-  if(!_ov) return;
-  document.addEventListener('click', function(e){
-    var el = e.target;
-    while(el && el.tagName !== 'A') el = el.parentElement;
-    if(!el) return;
-    var href = el.getAttribute('href') || '';
-    if(!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-    if(href.indexOf('exportar') !== -1 || href.indexOf('download') !== -1 || href.indexOf('anexo') !== -1) return;
-    _ov.classList.add('show');
-  }, true);
-})();
-</script>
-{% include "_translate.html" %}
-</body>
-</html>
+{% endblock %}

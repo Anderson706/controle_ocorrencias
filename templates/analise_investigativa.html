@@ -1,625 +1,283 @@
-﻿{% extends "base.html" %}
-{% block title %}Análise Investigativa | CCTV Control Panel{% endblock %}
+{% extends "base_app.html" %}
+{% block page_title %}Análise Investigativa | CCTV Control Panel{% endblock %}
 
-{% block body %}
+{% block topbar_title %}Análise Investigativa{% endblock %}
+{% block topbar_subtitle %}CCTV Control Panel — DHL Supply Chain{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('ocorrencias') }}" class="btn btn-dark" style="padding:11px 16px; border-radius:12px;">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
 <style>
-  :root{
-    --dhl-yellow:#ffcc00;
-    --dhl-red:#d40511;
-    --dhl-red-dark:#b1030d;
-    --dhl-black:#1f1f1f;
-    --bg:#f3f5f7;
-    --card:#ffffff;
-    --line:#e5e7eb;
-    --text:#1f2937;
-    --muted:#6b7280;
-    --shadow:0 12px 28px rgba(15,23,42,.08);
-    --radius:20px;
-    --sidebar:#161a1d;
-    --sidebar-2:#20262b;
-  }
+  /* ── SECTIONS / CARDS ── */
+  .section{ margin-bottom:22px; }
+  .section-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+  .section-head h3{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black,#1f1f1f); }
+  .section-chip{ background:#fff8db; color:#7a5a00; border:1px solid #f5d66f; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
 
-  *{ box-sizing:border-box; }
-  html, body{
-    margin:0; padding:0;
-    min-height:100vh;
-    background:var(--bg);
-    color:var(--text);
-    font-family:Arial, Helvetica, sans-serif;
-  }
-  a{ text-decoration:none; }
-
-  /* ── SHELL ── */
-  .app-shell{ display:flex; min-height:100vh; width:100%; }
-
-  /* ── Loading overlay ── */
-  #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
-  #loading-overlay.show{ display:flex; }
-  .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
-  .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
-  @keyframes spin{ to{ transform:rotate(360deg); } }
-  .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; letter-spacing:.3px; }
-  /* ── Sidebar ── */
-  .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
-  .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
-  .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
-  .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
-  .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
-  .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
-  .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
-  .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
-  .nav-icon{ font-size:15px; flex-shrink:0; }
-  .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
-  .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
-  .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
-  .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
-  .sub-link.cur{ color:#ffcc00; font-weight:800; }
-  /* ── Profile widget ── */
-  .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
-  .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
-  .sp-trigger:hover{ background:rgba(255,255,255,.06); }
-  .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
-  .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
-  .sp-info{ flex:1; min-width:0; }
-  .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
-  .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
-  .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
-  .sp-menu.open{ display:block; animation:spIn .15s ease; }
-  @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
-  .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
-  .sp-item:hover{ background:#f3f4f6; }
-  .sp-item-red{ color:#d40511; }
-  .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
-  /* ── Footer ── */
-  .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
-
-  /* ── MAIN ── */
-  .main{
-    margin-left:260px;
-    width:calc(100% - 260px);
-    min-height:100vh;
-    display:flex; flex-direction:column;
-  }
-
-  .topbar{
-    height:76px; background:#fff;
-    border-bottom:1px solid var(--line);
-    display:flex; align-items:center;
-    justify-content:space-between;
-    gap:16px; padding:0 24px;
-    position:sticky; top:0; z-index:900;
-  }
-  .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
-  .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
-  .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
-  .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
-  .top-chip{
-    display:inline-flex; align-items:center; justify-content:center;
-    padding:8px 12px; border-radius:999px;
-    font-size:12px; font-weight:800;
-    border:1px solid #efd56f; background:#fff8d8; color:#7a5a00;
-    white-space:nowrap;
-  }
-  .topbar-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-
-  .content{ padding:24px; }
-
-  /* ── FLASH ── */
-  .flash-wrap{ margin-bottom:16px; }
-  .flash{
-    margin-bottom:12px; padding:12px 14px;
-    border-radius:12px; font-weight:700; border:1px solid transparent;
-  }
-  .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
-  .flash.danger { background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
-  .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); min-width:0; }
 
   /* ── HERO ── */
-  .hero{
-    position:relative; overflow:hidden;
-    background:linear-gradient(135deg,#d40511,#93000a);
-    color:#fff; border-radius:24px;
-    padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px;
-  }
+  .hero{ position:relative; overflow:hidden; background:#d40511; color:#fff; border-radius:24px; padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px; }
   .hero h2{ margin:0 0 8px; font-size:30px; font-weight:900; }
   .hero p{ margin:0; line-height:1.55; font-size:14px; opacity:.96; max-width:850px; }
 
-  /* ── SECTIONS / CARDS ── */
-  .section{ margin-bottom:22px; }
-  .section-head{
-    display:flex; justify-content:space-between;
-    align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap;
-  }
-  .section-head h3{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
-  .section-chip{
-    background:#fff8db; color:#7a5a00;
-    border:1px solid #f5d66f; border-radius:999px;
-    padding:7px 12px; font-size:12px; font-weight:800;
-    text-transform:uppercase; letter-spacing:.3px;
-  }
-
-  .card{
-    background:var(--card); border:1px solid var(--line);
-    border-radius:var(--radius); padding:22px;
-    box-shadow:var(--shadow); min-width:0;
-  }
-
   /* ── FORM GRID ── */
-  .form-grid{
-    display:grid;
-    grid-template-columns:repeat(2, minmax(0,1fr));
-    gap:16px;
-  }
-  .form-grid-3{
-    display:grid;
-    grid-template-columns:repeat(3, minmax(0,1fr));
-    gap:16px;
-  }
+  .form-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; }
+  .form-grid-3{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; }
   .field-full{ grid-column:1 / -1; }
 
   .field{ display:flex; flex-direction:column; gap:6px; }
-  .field label{
-    font-size:12px; color:#374151; font-weight:900;
-    text-transform:uppercase; letter-spacing:.35px;
-  }
-  .field input,
-  .field select,
-  .field textarea{
-    width:100%; border:1px solid #d6dae1; background:#fff;
-    border-radius:14px; padding:13px 14px;
-    font-size:14px; color:#111827; outline:none;
-    font-family:Arial, Helvetica, sans-serif;
-    transition:border-color .18s ease, box-shadow .18s ease;
-  }
+  .field label{ font-size:12px; color:#374151; font-weight:900; text-transform:uppercase; letter-spacing:.35px; }
+  .field input,.field select,.field textarea{ width:100%; border:1px solid #d6dae1; background:#fff; border-radius:14px; padding:13px 14px; font-size:14px; color:#111827; outline:none; font-family:Arial,Helvetica,sans-serif; transition:border-color .18s ease, box-shadow .18s ease; }
   .field textarea{ resize:vertical; min-height:88px; }
-  .field input:focus,
-  .field select:focus,
-  .field textarea:focus{
-    border-color:var(--dhl-red);
-    box-shadow:0 0 0 4px rgba(212,5,17,.08);
-  }
+  .field input:focus,.field select:focus,.field textarea:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 4px rgba(212,5,17,.08); }
 
   /* ── EVIDÊNCIAS ── */
-  .imagem-bloco{
-    margin-top:14px;
-    border:1px dashed #cbd5e1;
-    border-radius:18px;
-    padding:16px;
-    background:linear-gradient(180deg,#ffffff,#f8fafc);
-  }
-  .file-row{
-    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-  }
+  .imagem-bloco{ margin-top:14px; border:1px dashed #cbd5e1; border-radius:18px; padding:16px; background:#ffffff; }
+  .file-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .file-row input[type="file"]{ flex:1; min-width:260px; }
-  .img-preview{
-    width:100%; max-height:280px; object-fit:contain;
-    margin-top:12px; border-radius:16px;
-    border:1px solid var(--line); background:#fff; display:none;
-  }
+  .img-preview{ width:100%; max-height:280px; object-fit:contain; margin-top:12px; border-radius:16px; border:1px solid var(--line); background:#fff; display:none; }
 
   /* ── BUTTONS ── */
-  .btn{
-    border:none; cursor:pointer;
-    border-radius:999px; font-weight:900;
-    transition:.2s ease; display:inline-flex;
-    align-items:center; justify-content:center;
-    gap:8px; text-decoration:none;
-  }
-  .btn:hover{ transform:translateY(-1px); filter:brightness(.97); }
+  .btn-primary{ background:linear-gradient(135deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; padding:13px 24px; box-shadow:0 14px 24px rgba(212,5,17,.25); }
+  .btn-yellow{ background:var(--dhl-yellow); color:#111; padding:11px 18px; box-shadow:0 10px 18px rgba(255,204,0,.25); }
+  .btn-dark{ background:#1f2937; color:#fff; padding:13px 22px; }
+  .btn-danger{ background:#7f1d1d; color:#fff; padding:10px 14px; font-size:12px; }
 
-  .btn-primary{
-    background:linear-gradient(135deg,var(--dhl-red),var(--dhl-red-dark));
-    color:#fff; padding:13px 24px;
-    box-shadow:0 14px 24px rgba(212,5,17,.25);
-  }
-  .btn-yellow{
-    background:var(--dhl-yellow); color:#111;
-    padding:11px 18px;
-    box-shadow:0 10px 18px rgba(255,204,0,.25);
-  }
-  .btn-dark{
-    background:#1f2937; color:#fff; padding:13px 22px;
-  }
-  .btn-danger{
-    background:#7f1d1d; color:#fff; padding:10px 14px; font-size:12px;
-  }
-
-  .field-locked{
-    display:flex; align-items:center; gap:10px;
-    background:#f1f5f9; border:1px solid #e2e8f0;
-    border-radius:14px; padding:13px 16px;
-    font-size:14px; color:#475569; font-weight:600;
-    user-select:none; cursor:default;
-  }
+  .field-locked{ display:flex; align-items:center; gap:10px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:14px; padding:13px 16px; font-size:14px; color:#475569; font-weight:600; user-select:none; cursor:default; }
   .lock-icon{ font-size:13px; opacity:.55; }
 
-  .buttons-row{
-    display:flex; justify-content:center; gap:12px;
-    flex-wrap:wrap; margin-top:26px; padding-top:22px;
-    border-top:1px solid var(--line);
-  }
+  .buttons-row{ display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin-top:26px; padding-top:22px; border-top:1px solid var(--line); }
 
-  /* ── RESPONSIVE ── */
-  @media(max-width:1100px){
-    .sidebar{ position:relative; width:100%; height:auto; inset:auto; }
-    .main{ margin-left:0; width:100%; }
-    .app-shell{ flex-direction:column; }
-  }
-  @media(max-width:850px){
-    .topbar{ height:auto; padding:14px 16px; flex-direction:column; align-items:flex-start; }
-    .form-grid, .form-grid-3{ grid-template-columns:1fr; }
-  }
+  @media(max-width:850px){ .form-grid,.form-grid-3{ grid-template-columns:1fr; } }
 </style>
 
-<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
-<div class="app-shell">
-
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
-    </div>
-    <nav class="main-nav">
-      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
-      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise'] -%}
-      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
-      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
-        <span class="nav-icon">🌐</span><span>Overview</span>
-      </a>
-      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
-        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_oc %}<div class="sub-nav">
-        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
-        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
-        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_an %}<div class="sub-nav">
-        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
-        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle de Análises</a>
-        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
-        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_anc %}<div class="sub-nav">
-        <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
-        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
-        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] else '' }}">
-        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if request.endpoint in ['sh_index','sh_dashboard','sh_assinar'] %}<div class="sub-nav">
-        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
-        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
-      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
-        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_chv %}<div class="sub-nav">
-        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
-        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
-        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
-      </div>{% endif %}
-      {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
-      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
-        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_adm %}<div class="sub-nav">
-        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
-        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
-        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
-      </div>{% endif %}
-      {% endif %}
-    </nav>
-    <div class="sp-wrap" id="spWrap">
-      <div class="sp-trigger" onclick="spToggle(event)">
-        <div class="sp-avatar">
-          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
-        </div>
-        <div class="sp-info">
-          <span class="sp-name">{{ session.get('user_nome','') }}</span>
-          <span class="sp-role">{{ session.get('user_site','') }}</span>
-        </div>
-        <span class="sp-dots">⋮</span>
-      </div>
-      <div class="sp-menu" id="spMenu">
-        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
-        <hr class="sp-sep">
-        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
-      </div>
-    </div>
-  </aside>
-
-  <!-- MAIN -->
-  <main class="main">
-
-    <header class="topbar">
-      <div class="topbar-left">
-        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
-        <div>
-          <h1>Análise Investigativa</h1>
-          <p>CCTV Control Panel — DHL Supply Chain</p>
-        </div>
-      </div>
-      <div class="topbar-right">
-        <a href="{{ url_for('ocorrencias') }}" class="btn btn-dark" style="padding:11px 16px; border-radius:12px;">← Voltar</a>
-      </div>
-    </header>
-
-    <div class="content">
-
-      <!-- FLASH -->
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="flash-wrap">
-            {% for category, message in messages %}
-              <div class="flash {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </div>
-        {% endif %}
-      {% endwith %}
-
-      <!-- HERO -->
-      <div class="hero">
-        <h2>Formulário de Análise Investigativa</h2>
-        <p>Preencha os dados da ocorrência, evidências e conclusão para gerar o relatório corporativo DOCX + PDF.</p>
-      </div>
-
-      <form id="form-ai" method="POST" action="{{ url_for('gerar_analise_investigativa') }}" enctype="multipart/form-data">
-        <input type="hidden" name="site" value="{{ site_atual.nome_do_site if site_atual else '' }}">
-
-        <!-- DADOS DA OPERAÇÃO -->
-        <section class="section">
-          <div class="section-head">
-            <h3>Dados da Operação</h3>
-            <span class="section-chip">Identificação</span>
-          </div>
-          <div class="card">
-            <div class="form-grid-3">
-              <div class="field">
-                <label>Nº do Relatório (ID)</label>
-                <div class="field-locked">
-                  <span class="lock-icon">🔒</span>
-                  {{ proximo_numero }}
-                </div>
-                <input type="hidden" name="id_relatorio" value="{{ proximo_numero }}">
-              </div>
-              <div class="field">
-                <label>Empresa</label>
-                <input type="text" name="empresa" value="DHL" required>
-              </div>
-              <div class="field">
-                <label>Cliente(s)</label>
-                <input type="text" name="clientes" placeholder="Ex: SHEIN" required>
-              </div>
-              <div class="field field-full">
-                <label>Unidade</label>
-                <input type="hidden" name="unidade" value="{{ site_atual.nome_do_site if site_atual else '' }}">
-                <div class="field-locked">
-                  <span class="lock-icon">🔒</span>
-                  {{ site_atual.nome_do_site if site_atual else '— site não configurado para este usuário —' }}
-                </div>
-              </div>
-              <div class="field field-full">
-                <label>Endereço</label>
-                {% set end_partes = [] %}
-                {% if site_atual %}
-                  {% if site_atual.endereco %}{% set _ = end_partes.append(site_atual.endereco) %}{% endif %}
-                  {% if site_atual.cidade %}{% set _ = end_partes.append(site_atual.cidade) %}{% endif %}
-                  {% if site_atual.estado %}{% set _ = end_partes.append(site_atual.estado) %}{% endif %}
-                {% endif %}
-                {% set end_valor = end_partes | join(', ') %}
-                <input type="hidden" name="endereco" value="{{ end_valor }}">
-                <div class="field-locked">
-                  <span class="lock-icon">🔒</span>
-                  {{ end_valor if end_valor else '— endereço não cadastrado —' }}
-                </div>
-              </div>
-              <div class="field">
-                <label>Classificação do Site</label>
-                <select name="classificacao" required>
-                  <option value="Warehouse ( X )">Warehouse</option>
-                  <option value="Inhouse ( X )" selected>Inhouse</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Produtos Segmento (Setor)</label>
-                <input type="hidden" name="produtos_segmento" value="{{ site_atual.sector if site_atual else '' }}">
-                <div class="field-locked">
-                  <span class="lock-icon">🔒</span>
-                  {{ site_atual.sector if site_atual and site_atual.sector else '— setor não cadastrado —' }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- DADOS DO LEVANTAMENTO -->
-        <section class="section">
-          <div class="section-head">
-            <h3>Dados do Levantamento</h3>
-            <span class="section-chip">Responsabilidade</span>
-          </div>
-          <div class="card">
-            <div class="form-grid">
-              <div class="field field-full">
-                <label>Objetivo</label>
-                <textarea name="objetivo" rows="2" placeholder="Ex: Levantamento de imagens para apurar embalagem vazia" required></textarea>
-              </div>
-              <div class="field">
-                <label>Responsável pelo Levantamento</label>
-                <input type="text" name="responsavel" value="{{ user_nome }}" readonly
-                       style="background:#f3f4f6; color:#6b7280; cursor:not-allowed;" required>
-              </div>
-              <div class="field">
-                <label>Cargo</label>
-                <select name="funcao_levantamento">
-                  <option value="">Selecione o cargo…</option>
-                  <option value="AUXILIAR DE SEGURANÇA PATRIMONIAL">AUXILIAR DE SEGURANÇA PATRIMONIAL</option>
-                  <option value="ASSISTENTE DE SEGURANÇA PATRIMONIAL">ASSISTENTE DE SEGURANÇA PATRIMONIAL</option>
-                  <option value="ANALISTA DE SEGURANÇA PATRIMONIAL">ANALISTA DE SEGURANÇA PATRIMONIAL</option>
-                  <option value="COORDENADOR DE SEGURANÇA PATRIMONIAL">COORDENADOR DE SEGURANÇA PATRIMONIAL</option>
-                  <option value="SUPERVISOR DE SEGURANÇA PATRIMONIAL">SUPERVISOR DE SEGURANÇA PATRIMONIAL</option>
-                  <option value="GERENTE DE SEGURANÇA PATRIMONIAL">GERENTE DE SEGURANÇA PATRIMONIAL</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Data</label>
-                <input type="date" name="data_levantamento">
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- DESCRIÇÃO DO REGISTRO -->
-        <section class="section">
-          <div class="section-head">
-            <h3>Descrição do Registro</h3>
-            <span class="section-chip">Narrativa</span>
-          </div>
-          <div class="card">
-            <div class="field">
-              <label>Descrição</label>
-              <textarea name="descricao_registro" rows="4" placeholder="Descreva o que foi registrado em imagens..." required></textarea>
-            </div>
-          </div>
-        </section>
-
-        <!-- CONCLUSÃO -->
-        <section class="section">
-          <div class="section-head">
-            <h3>Conclusão &amp; Recomendação</h3>
-            <span class="section-chip">Resultado</span>
-          </div>
-          <div class="card">
-            <div class="form-grid">
-              <div class="field field-full">
-                <label>Conclusão</label>
-                <textarea name="conclusao" rows="3" placeholder="Descreva a conclusão final da análise..." required></textarea>
-              </div>
-              <div class="field field-full">
-                <label>Recomendação</label>
-                <textarea name="sugestao" rows="3" placeholder="Recomendações ou ações sugeridas (opcional)"></textarea>
-              </div>
-              <div class="field">
-                <label>Valor estimado</label>
-                <input type="text" name="valor" placeholder="Ex: R$ 5.000,00">
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- EVIDÊNCIAS -->
-        <section class="section">
-          <div class="section-head">
-            <h3>Imagens / Evidências</h3>
-            <span class="section-chip">Registro fotográfico</span>
-          </div>
-          <div class="card">
-            <div id="imagens-container"></div>
-            <button type="button" class="btn btn-yellow" style="margin-top:14px;" onclick="adicionarImagem()">
-              + Adicionar Imagem
-            </button>
-          </div>
-        </section>
-
-        <!-- AÇÕES -->
-        <div class="buttons-row">
-          <button type="submit" class="btn btn-primary">Salvar Análise</button>
-          <button type="button" class="btn btn-dark" onclick="window.history.back()">← Voltar</button>
-          <button type="button" class="btn btn-danger" onclick="excluirFormulario()">Limpar</button>
-        </div>
-
-      </form>
-    </div>
-    <footer class="app-footer">
-      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
-      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
-    </footer>
-  </main>
+<!-- HERO -->
+<div class="hero">
+  <h2>Formulário de Análise Investigativa</h2>
+  <p>Preencha os dados da ocorrência, evidências e conclusão para gerar o relatório corporativo DOCX + PDF.</p>
 </div>
 
-<script>
-  function adicionarImagem() {
-    const container = document.getElementById('imagens-container');
-    const bloco = document.createElement('div');
-    bloco.classList.add('imagem-bloco');
+<form id="form-ai" method="POST" action="{{ url_for('gerar_analise_investigativa') }}" enctype="multipart/form-data">
+  <input type="hidden" name="site" value="{{ site_atual.nome_do_site if site_atual else '' }}">
 
-    bloco.innerHTML = `
-      <div class="field">
-        <label>Imagem</label>
-        <div class="file-row">
-          <input type="file" name="imagens[]" accept="image/*" class="file-input" required>
-          <button type="button" class="btn btn-danger" onclick="editarImagem(this)">Editar</button>
-          <button type="button" class="btn btn-danger" onclick="removerImagem(this)">Excluir</button>
+  <!-- DADOS DA OPERAÇÃO -->
+  <section class="section">
+    <div class="section-head">
+      <h3>Dados da Operação</h3>
+      <span class="section-chip">Identificação</span>
+    </div>
+    <div class="card">
+      <div class="form-grid-3">
+        <div class="field">
+          <label>Nº do Relatório (ID)</label>
+          <div class="field-locked">
+            <span class="lock-icon"></span>
+            {{ proximo_numero }}
+          </div>
+          <input type="hidden" name="id_relatorio" value="{{ proximo_numero }}">
         </div>
-        <img class="img-preview" alt="Pré-visualização">
+        <div class="field">
+          <label>Empresa</label>
+          <input type="text" name="empresa" value="DHL" required>
+        </div>
+        <div class="field">
+          <label>Cliente(s)</label>
+          <input type="text" name="clientes" placeholder="Ex: SHEIN" required>
+        </div>
+        <div class="field field-full">
+          <label>Unidade</label>
+          <input type="hidden" name="unidade" value="{{ site_atual.nome_do_site if site_atual else '' }}">
+          <div class="field-locked">
+            <span class="lock-icon"></span>
+            {{ site_atual.nome_do_site if site_atual else '— site não configurado para este usuário —' }}
+          </div>
+        </div>
+        <div class="field field-full">
+          <label>Endereço</label>
+          {% set end_partes = [] %}
+          {% if site_atual %}
+            {% if site_atual.endereco %}{% set _ = end_partes.append(site_atual.endereco) %}{% endif %}
+            {% if site_atual.cidade %}{% set _ = end_partes.append(site_atual.cidade) %}{% endif %}
+            {% if site_atual.estado %}{% set _ = end_partes.append(site_atual.estado) %}{% endif %}
+          {% endif %}
+          {% set end_valor = end_partes | join(', ') %}
+          <input type="hidden" name="endereco" value="{{ end_valor }}">
+          <div class="field-locked">
+            <span class="lock-icon"></span>
+            {{ end_valor if end_valor else '— endereço não cadastrado —' }}
+          </div>
+        </div>
+        <div class="field">
+          <label>Classificação do Site</label>
+          <select name="classificacao" required>
+            <option value="Warehouse ( X )">Warehouse</option>
+            <option value="Inhouse ( X )" selected>Inhouse</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Produtos Segmento (Setor)</label>
+          <input type="hidden" name="produtos_segmento" value="{{ site_atual.sector if site_atual else '' }}">
+          <div class="field-locked">
+            <span class="lock-icon"></span>
+            {{ site_atual.sector if site_atual and site_atual.sector else '— setor não cadastrado —' }}
+          </div>
+        </div>
       </div>
-      <div class="field" style="margin-top:10px;">
-        <label>Descrição da imagem</label>
-        <textarea name="descricoes[]" rows="2" required></textarea>
+    </div>
+  </section>
+
+  <!-- DADOS DO LEVANTAMENTO -->
+  <section class="section">
+    <div class="section-head">
+      <h3>Dados do Levantamento</h3>
+      <span class="section-chip">Responsabilidade</span>
+    </div>
+    <div class="card">
+      <div class="form-grid">
+        <div class="field field-full">
+          <label>Objetivo</label>
+          <textarea name="objetivo" rows="2" placeholder="Ex: Levantamento de imagens para apurar embalagem vazia" required></textarea>
+        </div>
+        <div class="field">
+          <label>Responsável pelo Levantamento</label>
+          <input type="text" name="responsavel" value="{{ user_nome }}" readonly
+                 style="background:#f3f4f6; color:#6b7280; cursor:not-allowed;" required>
+        </div>
+        <div class="field">
+          <label>Cargo</label>
+          <select name="funcao_levantamento">
+            <option value="">Selecione o cargo…</option>
+            <option value="AUXILIAR DE SEGURANÇA PATRIMONIAL">AUXILIAR DE SEGURANÇA PATRIMONIAL</option>
+            <option value="ASSISTENTE DE SEGURANÇA PATRIMONIAL">ASSISTENTE DE SEGURANÇA PATRIMONIAL</option>
+            <option value="ANALISTA DE SEGURANÇA PATRIMONIAL">ANALISTA DE SEGURANÇA PATRIMONIAL</option>
+            <option value="COORDENADOR DE SEGURANÇA PATRIMONIAL">COORDENADOR DE SEGURANÇA PATRIMONIAL</option>
+            <option value="SUPERVISOR DE SEGURANÇA PATRIMONIAL">SUPERVISOR DE SEGURANÇA PATRIMONIAL</option>
+            <option value="GERENTE DE SEGURANÇA PATRIMONIAL">GERENTE DE SEGURANÇA PATRIMONIAL</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input type="date" name="data_levantamento">
+        </div>
       </div>
-    `;
+    </div>
+  </section>
 
-    container.appendChild(bloco);
-    bloco.querySelector('.file-input').addEventListener('change', function(){ previewImagem(this); });
-  }
+  <!-- DESCRIÇÃO DO REGISTRO -->
+  <section class="section">
+    <div class="section-head">
+      <h3>Descrição do Registro</h3>
+      <span class="section-chip">Narrativa</span>
+    </div>
+    <div class="card">
+      <div class="field">
+        <label>Descrição</label>
+        <textarea name="descricao_registro" rows="4" placeholder="Descreva o que foi registrado em imagens..." required></textarea>
+      </div>
+    </div>
+  </section>
 
-  function previewImagem(input) {
-    const img = input.closest('.imagem-bloco').querySelector('.img-preview');
-    if (input.files && input.files[0]) {
-      img.src = URL.createObjectURL(input.files[0]);
-      img.style.display = 'block';
-    } else {
-      img.src = ''; img.style.display = 'none';
-    }
-  }
+  <!-- CONCLUSÃO -->
+  <section class="section">
+    <div class="section-head">
+      <h3>Conclusão &amp; Recomendação</h3>
+      <span class="section-chip">Resultado</span>
+    </div>
+    <div class="card">
+      <div class="form-grid">
+        <div class="field field-full">
+          <label>Conclusão</label>
+          <textarea name="conclusao" rows="3" placeholder="Descreva a conclusão final da análise..." required></textarea>
+        </div>
+        <div class="field field-full">
+          <label>Recomendação</label>
+          <textarea name="sugestao" rows="3" placeholder="Recomendações ou ações sugeridas (opcional)"></textarea>
+        </div>
+        <div class="field">
+          <label>Valor estimado</label>
+          <input type="text" name="valor" placeholder="Ex: R$ 5.000,00">
+        </div>
+      </div>
+    </div>
+  </section>
 
-  function editarImagem(btn) {
-    const bloco = btn.closest('.imagem-bloco');
-    const input = bloco.querySelector('.file-input');
-    const img   = bloco.querySelector('.img-preview');
-    input.value = ''; img.src = ''; img.style.display = 'none';
-    input.click();
-  }
+  <!-- EVIDÊNCIAS -->
+  <section class="section">
+    <div class="section-head">
+      <h3>Imagens / Evidências</h3>
+      <span class="section-chip">Registro fotográfico</span>
+    </div>
+    <div class="card">
+      <div id="imagens-container"></div>
+      <button type="button" class="btn btn-yellow" style="margin-top:14px;" onclick="adicionarImagem()">
+        + Adicionar Imagem
+      </button>
+    </div>
+  </section>
 
-  function removerImagem(btn) {
-    btn.closest('.imagem-bloco').remove();
-  }
+  <!-- AÇÕES -->
+  <div class="buttons-row">
+    <button type="submit" class="btn btn-primary">Salvar Análise</button>
+    <button type="button" class="btn btn-dark" onclick="window.history.back()">← Voltar</button>
+    <button type="button" class="btn btn-danger" onclick="excluirFormulario()">Limpar</button>
+  </div>
 
-  function excluirFormulario() {
-    if (!confirm('Tem certeza que deseja limpar o formulário?')) return;
-    document.getElementById('form-ai').reset();
-    document.getElementById('imagens-container').innerHTML = '';
-  }
-</script>
+</form>
+{% endblock %}
+
+{% block page_scripts %}
 <script>
-(function(){
-  var ov=document.getElementById('loading-overlay');
-  function show(){ov.classList.add('show');}
-  document.querySelectorAll('form').forEach(function(f){
-    f.addEventListener('submit',function(){show();});
-  });
-  document.querySelectorAll('a[href]').forEach(function(a){
-    var h=a.getAttribute('href')||'';
-    if(h.startsWith('#')||h.startsWith('javascript:')) return;
-    if(a.target==='_blank') return;
-    if(h.indexOf('exportar')!==-1||h.indexOf('download')!==-1) return;
-    a.addEventListener('click',function(e){
-      if(e.ctrlKey||e.metaKey||e.shiftKey) return;
-      show();
-    });
-  });
-})();
-</script>
-<script>
-function spToggle(e){ e.stopPropagation(); document.getElementById('spMenu').classList.toggle('open'); }
-document.addEventListener('click', function(){ var m=document.getElementById('spMenu'); if(m) m.classList.remove('open'); });
+function adicionarImagem() {
+  const container = document.getElementById('imagens-container');
+  const bloco = document.createElement('div');
+  bloco.classList.add('imagem-bloco');
+  bloco.innerHTML = `
+    <div class="field">
+      <label>Imagem</label>
+      <div class="file-row">
+        <input type="file" name="imagens[]" accept="image/*" class="file-input" required>
+        <button type="button" class="btn btn-danger" onclick="editarImagem(this)">Editar</button>
+        <button type="button" class="btn btn-danger" onclick="removerImagem(this)">Excluir</button>
+      </div>
+      <img class="img-preview" alt="Pré-visualização">
+    </div>
+    <div class="field" style="margin-top:10px;">
+      <label>Descrição da imagem</label>
+      <textarea name="descricoes[]" rows="2" required></textarea>
+    </div>
+  `;
+  container.appendChild(bloco);
+  bloco.querySelector('.file-input').addEventListener('change', function(){ previewImagem(this); });
+}
+
+function previewImagem(input) {
+  const img = input.closest('.imagem-bloco').querySelector('.img-preview');
+  if (input.files && input.files[0]) {
+    img.src = URL.createObjectURL(input.files[0]);
+    img.style.display = 'block';
+  } else {
+    img.src = ''; img.style.display = 'none';
+  }
+}
+
+function editarImagem(btn) {
+  const bloco = btn.closest('.imagem-bloco');
+  const input = bloco.querySelector('.file-input');
+  const img   = bloco.querySelector('.img-preview');
+  input.value = ''; img.src = ''; img.style.display = 'none';
+  input.click();
+}
+
+function removerImagem(btn) {
+  btn.closest('.imagem-bloco').remove();
+}
+
+function excluirFormulario() {
+  if (!confirm('Tem certeza que deseja limpar o formulário?')) return;
+  document.getElementById('form-ai').reset();
+  document.getElementById('imagens-container').innerHTML = '';
+}
 </script>
 {% endblock %}

@@ -1,571 +1,362 @@
-﻿<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <title>Overview | CCTV Control Panel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <style>
-    :root{
-      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
-      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#fff;
-      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
-      --shadow:0 4px 18px rgba(15,23,42,.07); --radius:18px;
-    }
-    *{ box-sizing:border-box; margin:0; padding:0; }
-    html,body{ min-height:100vh; font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:var(--text); }
-    a{ text-decoration:none; color:inherit; }
+{% extends "base_app.html" %}
+{% block page_title %}Overview | CCTV Control Panel{% endblock %}
 
-    /* Loading */
-    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
-    #loading-overlay.show{ display:flex; }
-    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
-    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
-    @keyframes spin{ to{ transform:rotate(360deg); } }
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
 
-    /* Sidebar */
-    .app-shell{ display:flex; min-height:100vh; }
-    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
-    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
-    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; color:#fff; }
-    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
-    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
-    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
-    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
-    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
-    .nav-icon{ font-size:15px; flex-shrink:0; }
-    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
-    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
-    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
-    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
-    .sub-link.cur{ color:#ffcc00; font-weight:800; }
-    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
-    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
-    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
-    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
-    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
-    .sp-info{ flex:1; min-width:0; }
-    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
-    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
-    .sp-menu{ display:none; position:absolute; bottom:calc(100%+6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
-    .sp-menu.open{ display:block; }
-    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
-    .sp-item:hover{ background:#f3f4f6; }
-    .sp-item-red{ color:#d40511; }
-    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
+{% block topbar_title %}Overview Geral{% endblock %}
+{% block topbar_subtitle %}Visão consolidada de todos os módulos{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('dashboard') }}" class="btn btn-soft btn-sm">📊 Dashboard Investigações</a>
+{% endblock %}
 
-    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+{% block page_content %}
+<style>
+  /* KPI grids */
+  .grid{ display:grid; gap:16px; }
+  .g2{ grid-template-columns:repeat(2,1fr); }
+  .g3{ grid-template-columns:repeat(3,1fr); }
+  .g4{ grid-template-columns:repeat(4,1fr); }
+  .g5{ grid-template-columns:repeat(5,1fr); }
 
-    /* Main */
-    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
-    .topbar{ height:74px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
-    .topbar-left{ display:flex; align-items:center; gap:14px; }
-    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
-    .topbar-left h1{ font-size:20px; font-weight:900; }
-    .topbar-left p{ font-size:12px; color:var(--muted); margin-top:4px; }
-    .topbar-right{ display:flex; align-items:center; gap:10px; }
-    .content{ padding:24px; flex:1; }
+  .module-header{ display:flex; align-items:center; gap:10px; margin:28px 0 14px; }
+  .module-header .icon{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+  .module-header h2{ font-size:17px; font-weight:900; }
+  .module-header .line{ flex:1; height:1px; background:var(--line); }
 
-    /* KPI */
-    .grid{ display:grid; gap:16px; }
-    .g2{ grid-template-columns:repeat(2,1fr); }
-    .g3{ grid-template-columns:repeat(3,1fr); }
-    .g4{ grid-template-columns:repeat(4,1fr); }
-    .g5{ grid-template-columns:repeat(5,1fr); }
+  .kpi{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); border-left:5px solid var(--dhl-yellow); display:flex; flex-direction:column; gap:6px; }
+  .kpi .label{ font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+  .kpi .value{ font-size:30px; font-weight:900; line-height:1; color:var(--dhl-red); }
+  .kpi .sub{ font-size:11px; color:var(--muted); }
 
-    .module-header{
-      display:flex; align-items:center; gap:10px;
-      margin:28px 0 14px;
-    }
-    .module-header .icon{
-      width:36px; height:36px; border-radius:10px;
-      display:flex; align-items:center; justify-content:center;
-      font-size:16px; flex-shrink:0;
-    }
-    .module-header h2{ font-size:17px; font-weight:900; }
-    .module-header .line{ flex:1; height:1px; background:var(--line); }
+  /* Charts */
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); }
+  .card-title{ font-size:14px; font-weight:800; margin-bottom:14px; color:var(--dhl-black); text-align:center; }
+  .chart-wrap{ position:relative; height:240px; }
+  .chart-wrap canvas{ width:100%!important; height:100%!important; }
 
-    .kpi{
-      background:var(--card); border:1px solid var(--line);
-      border-radius:var(--radius); padding:18px 20px;
-      box-shadow:var(--shadow);
-      border-left:5px solid var(--dhl-yellow);
-      display:flex; flex-direction:column; gap:6px;
-    }
-    .kpi .label{ font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
-    .kpi .value{ font-size:30px; font-weight:900; line-height:1; color:var(--dhl-red); }
-    .kpi .sub{ font-size:11px; color:var(--muted); }
+  /* Tabs */
+  .tab-bar{ display:flex; gap:0; background:#fff; border:1px solid var(--line); border-radius:14px 14px 0 0; overflow:hidden; border-bottom:none; }
+  .tab-btn{ flex:1; padding:13px 8px; font-size:12px; font-weight:800; cursor:pointer; border:none; background:none; color:var(--muted); font-family:inherit; transition:.15s; text-transform:uppercase; letter-spacing:.4px; border-right:1px solid var(--line); display:flex; align-items:center; justify-content:center; gap:6px; }
+  .tab-btn:last-child{ border-right:none; }
+  .tab-btn:hover{ background:#f9fafb; color:var(--text); }
+  .tab-btn.active{ background:#d40511; color:#ffcc00; }
+  .tab-panel{ display:none; }
+  .tab-panel.active{ display:block; }
 
-    /* Charts */
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); }
-    .card-title{ font-size:14px; font-weight:800; margin-bottom:14px; color:var(--dhl-black); text-align:center; }
-    .chart-wrap{ position:relative; height:240px; }
-    .chart-wrap canvas{ width:100%!important; height:100%!important; }
+  /* Table */
+  .table-wrap{ background:#fff; border:1px solid var(--line); border-radius:0 0 14px 14px; border-top:none; overflow:auto; }
+  table{ width:100%; border-collapse:collapse; min-width:600px; }
+  th,td{ padding:11px 14px; text-align:left; border-bottom:1px solid #edf1f5; font-size:13px; vertical-align:middle; }
+  th{ background:#fffbea; font-weight:900; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:#5a4500; white-space:nowrap; }
+  tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:#fffdf7; }
 
-    /* Tabs */
-    .tab-bar{
-      display:flex; gap:0;
-      background:#fff; border:1px solid var(--line);
-      border-radius:14px 14px 0 0; overflow:hidden;
-      border-bottom:none;
-    }
-    .tab-btn{
-      flex:1; padding:13px 8px;
-      font-size:12px; font-weight:800;
-      cursor:pointer; border:none;
-      background:none; color:var(--muted);
-      font-family:inherit; transition:.15s;
-      text-transform:uppercase; letter-spacing:.4px;
-      border-right:1px solid var(--line);
-      display:flex; align-items:center; justify-content:center; gap:6px;
-    }
-    .tab-btn:last-child{ border-right:none; }
-    .tab-btn:hover{ background:#f9fafb; color:var(--text); }
-    .tab-btn.active{
-      background:linear-gradient(180deg,#d40511,#b1030d);
-      color:#ffcc00;
-    }
-    .tab-panel{ display:none; }
-    .tab-panel.active{ display:block; }
+  .badge{ display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
+  .badge-red{ background:#fde8ea; color:#b42318; }
+  .badge-warn{ background:#fff4db; color:#9a6700; }
+  .badge-ok{ background:#e8f7ee; color:#146c43; }
+  .badge-blue{ background:#eff6ff; color:#1e40af; }
+  .badge-gray{ background:#f3f4f6; color:#4b5563; }
+  .badge-purple{ background:#faf5ff; color:#6d28d9; }
 
-    /* Table */
-    .table-wrap{
-      background:#fff; border:1px solid var(--line);
-      border-radius:0 0 14px 14px; border-top:none;
-      overflow:auto;
-    }
-    table{ width:100%; border-collapse:collapse; min-width:600px; }
-    th,td{ padding:11px 14px; text-align:left; border-bottom:1px solid #edf1f5; font-size:13px; vertical-align:middle; }
-    th{ background:#fffbea; font-weight:900; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:#5a4500; white-space:nowrap; }
-    tr:last-child td{ border-bottom:none; }
-    tbody tr:hover{ background:#fffdf7; }
+  .code{ font-family:monospace; font-size:11px; background:#f3f4f6; border-radius:6px; padding:2px 6px; color:#374151; }
+  .empty-row td{ text-align:center; padding:24px; color:var(--muted); font-style:italic; }
 
-    .badge{ display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
-    .badge-red{ background:#fde8ea; color:#b42318; }
-    .badge-warn{ background:#fff4db; color:#9a6700; }
-    .badge-ok{ background:#e8f7ee; color:#146c43; }
-    .badge-blue{ background:#eff6ff; color:#1e40af; }
-    .badge-gray{ background:#f3f4f6; color:#4b5563; }
-    .badge-purple{ background:#faf5ff; color:#6d28d9; }
+  /* Hero strip */
+  .hero-strip{ background:#1a1a1a; border-radius:20px; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:24px; color:#fff; }
+  .hero-strip h1{ font-size:22px; font-weight:900; color:#ffcc00; }
+  .hero-strip p{ font-size:13px; color:rgba(255,255,255,.6); margin-top:4px; }
+  .hero-stat{ text-align:center; }
+  .hero-stat .n{ font-size:28px; font-weight:900; color:#ffcc00; line-height:1; }
+  .hero-stat .l{ font-size:10px; font-weight:800; text-transform:uppercase; color:rgba(255,255,255,.5); letter-spacing:.4px; margin-top:3px; }
+  .hero-stats{ display:flex; gap:24px; flex-wrap:wrap; }
+  .hero-div{ width:1px; background:rgba(255,255,255,.12); align-self:stretch; }
 
-    .code{ font-family:monospace; font-size:11px; background:#f3f4f6; border-radius:6px; padding:2px 6px; color:#374151; }
+  @media(max-width:1100px){ .g4,.g5{ grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:700px){ .g2,.g3,.g4,.g5{ grid-template-columns:1fr; } }
+</style>
 
-    .empty-row td{ text-align:center; padding:24px; color:var(--muted); font-style:italic; }
+<!-- ── HERO STRIP ─────────────────────────────── -->
+<div class="hero-strip">
+  <div>
+    <h1>📊 Overview Operacional</h1>
+    <p>Todos os módulos · Dados em tempo real do banco</p>
+  </div>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="n">{{ oc_total }}</div><div class="l">Investigações</div></div>
+    <div class="hero-div"></div>
+    <div class="hero-stat"><div class="n">{{ anc_total }}</div><div class="l">ANCs</div></div>
+    <div class="hero-div"></div>
+    <div class="hero-stat"><div class="n">{{ an_total }}</div><div class="l">Análises</div></div>
+    <div class="hero-div"></div>
+    <div class="hero-stat"><div class="n">{{ sh_total }}</div><div class="l">Passagens</div></div>
+  </div>
+</div>
 
-    /* Hero strip */
-    .hero-strip{
-      background:linear-gradient(135deg,#1a1a1a,#2d2d2d);
-      border-radius:20px; padding:20px 24px;
-      display:flex; align-items:center; justify-content:space-between;
-      gap:16px; flex-wrap:wrap; margin-bottom:24px;
-      color:#fff;
-    }
-    .hero-strip h1{ font-size:22px; font-weight:900; color:#ffcc00; }
-    .hero-strip p{ font-size:13px; color:rgba(255,255,255,.6); margin-top:4px; }
-    .hero-stat{ text-align:center; }
-    .hero-stat .n{ font-size:28px; font-weight:900; color:#ffcc00; line-height:1; }
-    .hero-stat .l{ font-size:10px; font-weight:800; text-transform:uppercase; color:rgba(255,255,255,.5); letter-spacing:.4px; margin-top:3px; }
-    .hero-stats{ display:flex; gap:24px; flex-wrap:wrap; }
-    .hero-div{ width:1px; background:rgba(255,255,255,.12); align-self:stretch; }
+<!-- ════════════════════════════════════════════ -->
+<!-- MÓDULO: INVESTIGAÇÕES -->
+<!-- ════════════════════════════════════════════ -->
+<div class="module-header">
+  <div class="icon" style="background:#fde8ea;">📋</div>
+  <h2>Investigações (Ocorrências)</h2>
+  <div class="line"></div>
+  <a href="{{ url_for('ocorrencias') }}" style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">Ver todas →</a>
+</div>
 
-    @media(max-width:1100px){ .sidebar{display:none;} .main{margin-left:0;width:100%;} .g4,.g5{grid-template-columns:repeat(2,1fr);} }
-    @media(max-width:700px){ .g2,.g3,.g4,.g5{grid-template-columns:1fr;} }
-  </style>
-</head>
-<body>
-<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p style="font-size:14px;font-weight:700;">Carregando...</p></div></div>
+<div class="grid g5" style="margin-bottom:16px;">
+  <div class="kpi"><div class="label">Total</div><div class="value">{{ oc_total }}</div><div class="sub">Registradas</div></div>
+  <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Pendentes</div><div class="value" style="color:#b45309;">{{ oc_pendentes }}</div><div class="sub">Aguardando</div></div>
+  <div class="kpi" style="border-left-color:#0ea5e9;"><div class="label">Em andamento</div><div class="value" style="color:#0369a1;">{{ oc_andamento }}</div><div class="sub">Em tratativa</div></div>
+  <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Concluídas</div><div class="value" style="color:#15803d;">{{ oc_concluidas }}</div><div class="sub">Finalizadas</div></div>
+  <div class="kpi" style="border-left-color:#d40511;"><div class="label">Alta prioridade</div><div class="value" style="color:#d40511;">{{ oc_altas }}</div><div class="sub">Críticas</div></div>
+</div>
+<div class="grid g2" style="margin-bottom:8px;">
+  <div class="kpi" style="border-left-color:#d40511; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
+    <div style="font-size:28px;">🚨</div>
+    <div><div class="label">Com B.O. aberto</div><div class="value" style="font-size:26px;color:#d40511;">{{ oc_bo }}</div></div>
+  </div>
+  <div class="kpi" style="border-left-color:#7c3aed; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
+    <div style="font-size:28px;">💰</div>
+    <div><div class="label">Custo estimado total</div><div class="value" style="font-size:20px;color:#6d28d9;">{{ oc_custo }}</div></div>
+  </div>
+</div>
 
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand"><div class="brand-badge">DHL</div>
-      <div class="brand-title">CCTV<br>CONTROL PANEL</div></div>
-    <nav class="main-nav">
-      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
-      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise','editar_analise'] -%}
-      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
-      {%- set sec_sh  = request.endpoint in ['sh_index','sh_dashboard','sh_assinar','sh_editar','sh_registrar'] -%}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
+<div class="grid g3" style="margin-bottom:6px;">
+  <div class="card"><div class="card-title">Status das Investigações</div><div class="chart-wrap"><canvas id="cOcStatus"></canvas></div></div>
+  <div class="card"><div class="card-title">Natureza (top 8)</div><div class="chart-wrap"><canvas id="cOcNat"></canvas></div></div>
+  <div class="card"><div class="card-title">Prioridade</div><div class="chart-wrap"><canvas id="cOcPri"></canvas></div></div>
+</div>
 
-      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
-        <span class="nav-icon">🌐</span><span>Overview</span>
-      </a>
-      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
-        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_oc %}<div class="sub-nav">
-        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
-        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
-        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_an %}<div class="sub-nav">
-        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
-        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle</a>
-        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
-        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_anc %}<div class="sub-nav">
-        <a href="{{ url_for('anc') }}" class="sub-link cur">Controle de ANC</a>
-        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if sec_sh else '' }}">
-        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if sec_sh %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_sh %}<div class="sub-nav">
-        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar</a>
-        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
-      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
-        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_chv %}<div class="sub-nav">
-        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
-        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
-        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
-      </div>{% endif %}
-      {% if session.get('user_perfil','') == 'ADMIN' %}
-      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
-        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_adm %}<div class="sub-nav">
-        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
-        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
-        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
-      </div>{% endif %}
-      {% endif %}
-    </nav>
-    <div class="sp-wrap" id="spWrap">
-      <div class="sp-trigger" onclick="spToggle(event)">
-        <div class="sp-avatar">
-          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
-        </div>
-        <div class="sp-info">
-          <span class="sp-name">{{ session.get('user_nome','') }}</span>
-          <span class="sp-role">{{ session.get('user_perfil','') }} · {{ session.get('user_site','') }}</span>
-        </div>
-        <span class="sp-dots">⋯</span>
-      </div>
-      <div class="sp-menu" id="spMenu">
-        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
-        <hr class="sp-sep">
-        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">🚪 Sair</a>
-      </div>
+<!-- ════════════════════════════════════════════ -->
+<!-- MÓDULO: ANC -->
+<!-- ════════════════════════════════════════════ -->
+<div class="module-header" style="margin-top:32px;">
+  <div class="icon" style="background:#fff4db;">⚠️</div>
+  <h2>Avisos de Não Conformidade (ANC)</h2>
+  <div class="line"></div>
+  <a href="{{ url_for('anc') }}" style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">Ver todas →</a>
+</div>
+
+<div class="grid g5" style="margin-bottom:16px;">
+  <div class="kpi"><div class="label">Total</div><div class="value">{{ anc_total }}</div><div class="sub">Registradas</div></div>
+  <div class="kpi" style="border-left-color:#d40511;"><div class="label">Abertos</div><div class="value" style="color:#d40511;">{{ anc_abertos }}</div><div class="sub">Sem resposta</div></div>
+  <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Em andamento</div><div class="value" style="color:#b45309;">{{ anc_andamento }}</div><div class="sub">Em tratativa</div></div>
+  <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Concluídos</div><div class="value" style="color:#15803d;">{{ anc_concluidos }}</div><div class="sub">Finalizados</div></div>
+  <div class="kpi" style="border-left-color:#ef4444;"><div class="label">Críticos</div><div class="value" style="color:#dc2626;">{{ anc_criticos }}</div><div class="sub">Gravidade crítica</div></div>
+</div>
+{% if anc_valor != '—' %}
+<div class="kpi" style="border-left-color:#7c3aed; flex-direction:row; align-items:center; gap:14px; padding:14px 20px; margin-bottom:16px; max-width:340px;">
+  <div style="font-size:28px;">💶</div>
+  <div><div class="label">Valor estimado total</div><div class="value" style="font-size:20px;color:#6d28d9;">{{ anc_valor }}</div></div>
+</div>
+{% endif %}
+
+<div class="grid g2" style="margin-bottom:6px;">
+  <div class="card"><div class="card-title">Status das ANCs</div><div class="chart-wrap"><canvas id="cAncStatus"></canvas></div></div>
+  <div class="card"><div class="card-title">Gravidade</div><div class="chart-wrap"><canvas id="cAncGrav"></canvas></div></div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- MÓDULO: ANÁLISES INVESTIGATIVAS -->
+<!-- ════════════════════════════════════════════ -->
+<div class="module-header" style="margin-top:32px;">
+  <div class="icon" style="background:#eff6ff;">🔍</div>
+  <h2>Análises Investigativas</h2>
+  <div class="line"></div>
+  <a href="{{ url_for('analises') }}" style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">Ver todas →</a>
+</div>
+
+<div class="grid g4" style="margin-bottom:16px;">
+  <div class="kpi"><div class="label">Total</div><div class="value">{{ an_total }}</div><div class="sub">Registradas</div></div>
+  <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Em andamento</div><div class="value" style="color:#b45309;">{{ an_andamento }}</div><div class="sub">Aguardando fechamento</div></div>
+  <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Fechadas</div><div class="value" style="color:#15803d;">{{ an_fechadas }}</div><div class="sub">Concluídas</div></div>
+  {% if an_valor != '—' %}
+  <div class="kpi" style="border-left-color:#7c3aed; flex-direction:row; align-items:center; gap:12px;">
+    <div style="font-size:24px;">💰</div>
+    <div><div class="label">Valor estimado</div><div class="value" style="font-size:18px;color:#6d28d9;">{{ an_valor }}</div></div>
+  </div>
+  {% else %}
+  <div class="kpi" style="border-left-color:#22c55e;">
+    <div class="label">Taxa resolução</div>
+    <div class="value" style="color:#15803d;">{{ ((an_fechadas / an_total * 100)|round|int) if an_total else 0 }}%</div>
+    <div class="sub">Fechadas / total</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="grid g2" style="margin-bottom:6px;">
+  <div class="card"><div class="card-title">Status das Análises</div><div class="chart-wrap"><canvas id="cAnStatus"></canvas></div></div>
+  <div class="card"><div class="card-title">Classificação (top 8)</div><div class="chart-wrap"><canvas id="cAnClass"></canvas></div></div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- MÓDULO: SHIFT HANDOVER -->
+<!-- ════════════════════════════════════════════ -->
+<div class="module-header" style="margin-top:32px;">
+  <div class="icon" style="background:#f0fdf4;">🔄</div>
+  <h2>Passagem de Turno (Shift Handover)</h2>
+  <div class="line"></div>
+  <a href="{{ url_for('sh_index') }}" style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">Ver todas →</a>
+</div>
+
+<div class="grid g3" style="margin-bottom:16px;">
+  <div class="kpi"><div class="label">Total</div><div class="value">{{ sh_total }}</div><div class="sub">Registradas</div></div>
+  <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Assinadas</div><div class="value" style="color:#15803d;">{{ sh_assinados }}</div><div class="sub">Recebidas</div></div>
+  <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Pendentes</div><div class="value" style="color:#b45309;">{{ sh_pendentes }}</div><div class="sub">Aguardando assinatura</div></div>
+</div>
+
+<div class="grid g2" style="margin-bottom:6px;">
+  <div class="card"><div class="card-title">Status das Passagens</div><div class="chart-wrap"><canvas id="cShStatus"></canvas></div></div>
+  <div class="card"><div class="card-title">Por Turno</div><div class="chart-wrap"><canvas id="cShTurno"></canvas></div></div>
+</div>
+
+<!-- ════════════════════════════════════════════ -->
+<!-- TABELA — ÚLTIMOS 10 REGISTROS -->
+<!-- ════════════════════════════════════════════ -->
+<div class="module-header" style="margin-top:36px; margin-bottom:0;">
+  <div class="icon" style="background:#f3f4f6;">📄</div>
+  <h2>Últimos Registros</h2>
+  <div class="line"></div>
+</div>
+
+<div style="margin-top:14px;">
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="trocarTab('oc',this)">📋 Investigações <span style="background:rgba(255,255,255,.2);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimas_ocs|length }}</span></button>
+    <button class="tab-btn" onclick="trocarTab('anc',this)">⚠️ ANCs <span style="background:rgba(0,0,0,.06);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimas_ancs|length }}</span></button>
+    <button class="tab-btn" onclick="trocarTab('an',this)">🔍 Análises <span style="background:rgba(0,0,0,.06);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimas_analises|length }}</span></button>
+    <button class="tab-btn" onclick="trocarTab('sh',this)">🔄 Passagens <span style="background:rgba(0,0,0,.06);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimos_shifts|length }}</span></button>
+  </div>
+
+  <!-- Tab: Investigações -->
+  <div class="tab-panel active" id="tab-oc">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Código</th><th>Data</th><th>Natureza</th><th>Local</th><th>Operador</th><th>Status</th><th>Prioridade</th><th>B.O.</th>
+        </tr></thead>
+        <tbody>
+          {% for r in ultimas_ocs %}
+          <tr>
+            <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
+            <td style="white-space:nowrap;">{{ (r.data_hora or '')[:10] }}</td>
+            <td>{{ r.natureza or '—' }}</td>
+            <td>{{ r.local or '—' }}</td>
+            <td>{{ r.operador or '—' }}</td>
+            <td>
+              {% set s = (r.status or '')|upper %}
+              <span class="badge {% if s in ['CONCLUIDO','CONCLUÍDO','CONCLUIDA','CONCLUÍDA','INCONCLUSIVA'] %}badge-ok{% elif s == 'EM ANDAMENTO' %}badge-warn{% else %}badge-red{% endif %}">{{ r.status }}</span>
+            </td>
+            <td>
+              {% set p = (r.prioridade or '')|upper %}
+              <span class="badge {% if p == 'ALTA' %}badge-red{% elif p == 'MEDIA' %}badge-warn{% else %}badge-gray{% endif %}">{{ r.prioridade }}</span>
+            </td>
+            <td>{% if r.boletim_ocorrencia %}<span class="badge badge-red">Sim</span>{% else %}<span style="color:#9ca3af;font-size:12px;">—</span>{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr class="empty-row"><td colspan="8">Nenhuma investigação encontrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-  </aside>
+  </div>
 
-  <div class="main">
-    <div class="topbar">
-      <div class="topbar-left">
-        <img src="{{ url_for('static', filename='shared image.png') }}" class="logo-topbar" alt="">
-        <div>
-          <h1>Overview Geral</h1>
-          <p>Visão consolidada de todos os módulos</p>
-        </div>
-      </div>
-      <div class="topbar-right">
-        <a href="{{ url_for('dashboard') }}" style="font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:8px 14px;">📊 Dashboard Investigações</a>
-      </div>
+  <!-- Tab: ANCs -->
+  <div class="tab-panel" id="tab-anc">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Código</th><th>Data</th><th>Tipo</th><th>Setor</th><th>Responsável</th><th>Gravidade</th><th>Status</th><th>Valor</th>
+        </tr></thead>
+        <tbody>
+          {% for r in ultimas_ancs %}
+          <tr>
+            <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
+            <td style="white-space:nowrap;">{{ (r.data_nc or '')[:10] }}</td>
+            <td>{{ r.tipo_ocorrencia or '—' }}</td>
+            <td>{{ r.setor or '—' }}</td>
+            <td>{{ r.responsavel or '—' }}</td>
+            <td>
+              {% set g = (r.gravidade or '')|upper %}
+              <span class="badge {% if g == 'CRÍTICA' %}badge-red{% elif g == 'ALTA' %}badge-warn{% elif g == 'MÉDIA' %}badge-blue{% else %}badge-gray{% endif %}">{{ r.gravidade or '—' }}</span>
+            </td>
+            <td>
+              {% set s = (r.status or '')|upper %}
+              <span class="badge {% if s in ['CONCLUIDO','CONCLUÍDO','CONCLUIDA','CONCLUÍDA'] %}badge-ok{% elif s == 'EM ANDAMENTO' %}badge-warn{% else %}badge-red{% endif %}">{{ r.status or '—' }}</span>
+            </td>
+            <td>{{ r.valor or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr class="empty-row"><td colspan="8">Nenhuma ANC encontrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+  </div>
 
-    <div class="content">
+  <!-- Tab: Análises -->
+  <div class="tab-panel" id="tab-an">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Código</th><th>Data</th><th>Classificação</th><th>Site</th><th>Criado por</th><th>Status</th><th>Valor</th>
+        </tr></thead>
+        <tbody>
+          {% for r in ultimas_analises %}
+          <tr>
+            <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
+            <td style="white-space:nowrap;">{{ (r.data_ocorrencia or '')[:10] }}</td>
+            <td>{{ r.classificacao or '—' }}</td>
+            <td>{{ r.site or '—' }}</td>
+            <td>{{ r.criado_por or '—' }}</td>
+            <td>
+              {% set s = (r.status_analise or '')|upper %}
+              <span class="badge {% if s == 'FECHADA' %}badge-ok{% elif s == 'EM ANDAMENTO' %}badge-warn{% else %}badge-red{% endif %}">{{ r.status_analise or '—' }}</span>
+            </td>
+            <td>{{ r.valor or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr class="empty-row"><td colspan="7">Nenhuma análise encontrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-      <!-- ── HERO STRIP ─────────────────────────────── -->
-      <div class="hero-strip">
-        <div>
-          <h1>🌐 Overview Operacional</h1>
-          <p>Todos os módulos · Dados em tempo real do banco</p>
-        </div>
-        <div class="hero-stats">
-          <div class="hero-stat"><div class="n">{{ oc_total }}</div><div class="l">Investigações</div></div>
-          <div class="hero-div"></div>
-          <div class="hero-stat"><div class="n">{{ anc_total }}</div><div class="l">ANCs</div></div>
-          <div class="hero-div"></div>
-          <div class="hero-stat"><div class="n">{{ an_total }}</div><div class="l">Análises</div></div>
-          <div class="hero-div"></div>
-          <div class="hero-stat"><div class="n">{{ sh_total }}</div><div class="l">Passagens</div></div>
-        </div>
-      </div>
+  <!-- Tab: Shift Handover -->
+  <div class="tab-panel" id="tab-sh">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Data</th><th>Site</th><th>Turno</th><th>Setor</th><th>Saída</th><th>Entrada</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          {% for r in ultimos_shifts %}
+          <tr>
+            <td style="white-space:nowrap;">{{ r.data_ocorrencia.strftime('%d/%m/%Y') if r.data_ocorrencia else '—' }}</td>
+            <td>{{ r.site or '—' }}</td>
+            <td><span class="badge badge-gray">{{ r.turno or '—' }}</span></td>
+            <td>{{ r.setor or '—' }}</td>
+            <td>{{ r.responsavel_saida or '—' }}</td>
+            <td>{{ r.responsavel_entrada or '—' }}</td>
+            <td>
+              {% set s = (r.status or '')|upper %}
+              <span class="badge {% if 'RECEBIDO' in s %}badge-ok{% elif 'PEND' in s %}badge-warn{% else %}badge-gray{% endif %}">{{ r.status or '—' }}</span>
+            </td>
+          </tr>
+          {% else %}
+          <tr class="empty-row"><td colspan="7">Nenhuma passagem encontrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div><!-- /tab area -->
+{% endblock %}
 
-      <!-- ════════════════════════════════════════════ -->
-      <!-- MÓDULO: INVESTIGAÇÕES                        -->
-      <!-- ════════════════════════════════════════════ -->
-      <div class="module-header">
-        <div class="icon" style="background:#fde8ea;">📋</div>
-        <h2>Investigações (Ocorrências)</h2>
-        <div class="line"></div>
-        <a href="{{ url_for('ocorrencias') }}" style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">Ver todas →</a>
-      </div>
-
-      <div class="grid g5" style="margin-bottom:16px;">
-        <div class="kpi"><div class="label">Total</div><div class="value">{{ oc_total }}</div><div class="sub">Registradas</div></div>
-        <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Pendentes</div><div class="value" style="color:#b45309;">{{ oc_pendentes }}</div><div class="sub">Aguardando</div></div>
-        <div class="kpi" style="border-left-color:#0ea5e9;"><div class="label">Em andamento</div><div class="value" style="color:#0369a1;">{{ oc_andamento }}</div><div class="sub">Em tratativa</div></div>
-        <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Concluídas</div><div class="value" style="color:#15803d;">{{ oc_concluidas }}</div><div class="sub">Finalizadas</div></div>
-        <div class="kpi" style="border-left-color:#d40511;"><div class="label">Alta prioridade</div><div class="value" style="color:#d40511;">{{ oc_altas }}</div><div class="sub">Críticas</div></div>
-      </div>
-      <div class="grid g2" style="margin-bottom:8px;">
-        <div class="kpi" style="border-left-color:#d40511; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
-          <div style="font-size:28px;">🚨</div>
-          <div><div class="label">Com B.O. aberto</div><div class="value" style="font-size:26px;color:#d40511;">{{ oc_bo }}</div></div>
-        </div>
-        <div class="kpi" style="border-left-color:#7c3aed; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
-          <div style="font-size:28px;">💰</div>
-          <div><div class="label">Custo estimado total</div><div class="value" style="font-size:20px;color:#6d28d9;">{{ oc_custo }}</div></div>
-        </div>
-      </div>
-
-      <div class="grid g3" style="margin-bottom:6px;">
-        <div class="card"><div class="card-title">Status das Investigações</div><div class="chart-wrap"><canvas id="cOcStatus"></canvas></div></div>
-        <div class="card"><div class="card-title">Natureza (top 8)</div><div class="chart-wrap"><canvas id="cOcNat"></canvas></div></div>
-        <div class="card"><div class="card-title">Prioridade</div><div class="chart-wrap"><canvas id="cOcPri"></canvas></div></div>
-      </div>
-
-      <!-- ════════════════════════════════════════════ -->
-      <!-- MÓDULO: ANC                                  -->
-      <!-- ════════════════════════════════════════════ -->
-      <div class="module-header" style="margin-top:32px;">
-        <div class="icon" style="background:#fff4db;">⚠️</div>
-        <h2>Avisos de Não Conformidade (ANC)</h2>
-        <div class="line"></div>
-        <a href="{{ url_for('anc') }}" style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">Ver todas →</a>
-      </div>
-
-      <div class="grid g5" style="margin-bottom:16px;">
-        <div class="kpi"><div class="label">Total</div><div class="value">{{ anc_total }}</div><div class="sub">Registradas</div></div>
-        <div class="kpi" style="border-left-color:#d40511;"><div class="label">Abertos</div><div class="value" style="color:#d40511;">{{ anc_abertos }}</div><div class="sub">Sem resposta</div></div>
-        <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Em andamento</div><div class="value" style="color:#b45309;">{{ anc_andamento }}</div><div class="sub">Em tratativa</div></div>
-        <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Concluídos</div><div class="value" style="color:#15803d;">{{ anc_concluidos }}</div><div class="sub">Finalizados</div></div>
-        <div class="kpi" style="border-left-color:#ef4444;"><div class="label">Críticos</div><div class="value" style="color:#dc2626;">{{ anc_criticos }}</div><div class="sub">Gravidade crítica</div></div>
-      </div>
-      {% if anc_valor != '—' %}
-      <div class="kpi" style="border-left-color:#7c3aed; flex-direction:row; align-items:center; gap:14px; padding:14px 20px; margin-bottom:16px; max-width:340px;">
-        <div style="font-size:28px;">💰</div>
-        <div><div class="label">Valor estimado total</div><div class="value" style="font-size:20px;color:#6d28d9;">{{ anc_valor }}</div></div>
-      </div>
-      {% endif %}
-
-      <div class="grid g2" style="margin-bottom:6px;">
-        <div class="card"><div class="card-title">Status das ANCs</div><div class="chart-wrap"><canvas id="cAncStatus"></canvas></div></div>
-        <div class="card"><div class="card-title">Gravidade</div><div class="chart-wrap"><canvas id="cAncGrav"></canvas></div></div>
-      </div>
-
-      <!-- ════════════════════════════════════════════ -->
-      <!-- MÓDULO: ANÁLISES INVESTIGATIVAS              -->
-      <!-- ════════════════════════════════════════════ -->
-      <div class="module-header" style="margin-top:32px;">
-        <div class="icon" style="background:#eff6ff;">🔍</div>
-        <h2>Análises Investigativas</h2>
-        <div class="line"></div>
-        <a href="{{ url_for('analises') }}" style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">Ver todas →</a>
-      </div>
-
-      <div class="grid g4" style="margin-bottom:16px;">
-        <div class="kpi"><div class="label">Total</div><div class="value">{{ an_total }}</div><div class="sub">Registradas</div></div>
-        <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Em andamento</div><div class="value" style="color:#b45309;">{{ an_andamento }}</div><div class="sub">Aguardando fechamento</div></div>
-        <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Fechadas</div><div class="value" style="color:#15803d;">{{ an_fechadas }}</div><div class="sub">Concluídas</div></div>
-        {% if an_valor != '—' %}
-        <div class="kpi" style="border-left-color:#7c3aed; flex-direction:row; align-items:center; gap:12px;">
-          <div style="font-size:24px;">💰</div>
-          <div><div class="label">Valor estimado</div><div class="value" style="font-size:18px;color:#6d28d9;">{{ an_valor }}</div></div>
-        </div>
-        {% else %}
-        <div class="kpi" style="border-left-color:#22c55e;">
-          <div class="label">Taxa resolução</div>
-          <div class="value" style="color:#15803d;">{{ ((an_fechadas / an_total * 100)|round|int) if an_total else 0 }}%</div>
-          <div class="sub">Fechadas / total</div>
-        </div>
-        {% endif %}
-      </div>
-
-      <div class="grid g2" style="margin-bottom:6px;">
-        <div class="card"><div class="card-title">Status das Análises</div><div class="chart-wrap"><canvas id="cAnStatus"></canvas></div></div>
-        <div class="card"><div class="card-title">Classificação (top 8)</div><div class="chart-wrap"><canvas id="cAnClass"></canvas></div></div>
-      </div>
-
-      <!-- ════════════════════════════════════════════ -->
-      <!-- MÓDULO: SHIFT HANDOVER                       -->
-      <!-- ════════════════════════════════════════════ -->
-      <div class="module-header" style="margin-top:32px;">
-        <div class="icon" style="background:#f0fdf4;">🔄</div>
-        <h2>Passagem de Turno (Shift Handover)</h2>
-        <div class="line"></div>
-        <a href="{{ url_for('sh_index') }}" style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">Ver todas →</a>
-      </div>
-
-      <div class="grid g3" style="margin-bottom:16px;">
-        <div class="kpi"><div class="label">Total</div><div class="value">{{ sh_total }}</div><div class="sub">Registradas</div></div>
-        <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Assinadas</div><div class="value" style="color:#15803d;">{{ sh_assinados }}</div><div class="sub">Recebidas</div></div>
-        <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Pendentes</div><div class="value" style="color:#b45309;">{{ sh_pendentes }}</div><div class="sub">Aguardando assinatura</div></div>
-      </div>
-
-      <div class="grid g2" style="margin-bottom:6px;">
-        <div class="card"><div class="card-title">Status das Passagens</div><div class="chart-wrap"><canvas id="cShStatus"></canvas></div></div>
-        <div class="card"><div class="card-title">Por Turno</div><div class="chart-wrap"><canvas id="cShTurno"></canvas></div></div>
-      </div>
-
-      <!-- ════════════════════════════════════════════ -->
-      <!-- TABELA — ÚLTIMOS 10 REGISTROS                -->
-      <!-- ════════════════════════════════════════════ -->
-      <div class="module-header" style="margin-top:36px; margin-bottom:0;">
-        <div class="icon" style="background:#f3f4f6;">📄</div>
-        <h2>Últimos Registros</h2>
-        <div class="line"></div>
-      </div>
-
-      <div style="margin-top:14px;">
-        <div class="tab-bar">
-          <button class="tab-btn active" onclick="trocarTab('oc',this)">📋 Investigações <span style="background:rgba(255,255,255,.2);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimas_ocs|length }}</span></button>
-          <button class="tab-btn" onclick="trocarTab('anc',this)">⚠️ ANCs <span style="background:rgba(0,0,0,.06);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimas_ancs|length }}</span></button>
-          <button class="tab-btn" onclick="trocarTab('an',this)">🔍 Análises <span style="background:rgba(0,0,0,.06);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimas_analises|length }}</span></button>
-          <button class="tab-btn" onclick="trocarTab('sh',this)">🔄 Passagens <span style="background:rgba(0,0,0,.06);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimos_shifts|length }}</span></button>
-        </div>
-
-        <!-- Tab: Investigações -->
-        <div class="tab-panel active" id="tab-oc">
-          <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Código</th><th>Data</th><th>Natureza</th><th>Local</th><th>Operador</th><th>Status</th><th>Prioridade</th><th>B.O.</th>
-              </tr></thead>
-              <tbody>
-                {% for r in ultimas_ocs %}
-                <tr>
-                  <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
-                  <td style="white-space:nowrap;">{{ (r.data_hora or '')[:10] }}</td>
-                  <td>{{ r.natureza or '—' }}</td>
-                  <td>{{ r.local or '—' }}</td>
-                  <td>{{ r.operador or '—' }}</td>
-                  <td>
-                    {% set s = (r.status or '')|upper %}
-                    <span class="badge {% if s in ['CONCLUIDO','CONCLUÍDA','INCONCLUSIVA'] %}badge-ok{% elif s == 'EM ANDAMENTO' %}badge-warn{% else %}badge-red{% endif %}">{{ r.status }}</span>
-                  </td>
-                  <td>
-                    {% set p = (r.prioridade or '')|upper %}
-                    <span class="badge {% if p == 'ALTA' %}badge-red{% elif p == 'MEDIA' %}badge-warn{% else %}badge-gray{% endif %}">{{ r.prioridade }}</span>
-                  </td>
-                  <td>{% if r.boletim_ocorrencia %}<span class="badge badge-red">Sim</span>{% else %}<span style="color:#9ca3af;font-size:12px;">—</span>{% endif %}</td>
-                </tr>
-                {% else %}
-                <tr class="empty-row"><td colspan="8">Nenhuma investigação encontrada.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Tab: ANCs -->
-        <div class="tab-panel" id="tab-anc">
-          <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Código</th><th>Data</th><th>Tipo</th><th>Setor</th><th>Responsável</th><th>Gravidade</th><th>Status</th><th>Valor</th>
-              </tr></thead>
-              <tbody>
-                {% for r in ultimas_ancs %}
-                <tr>
-                  <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
-                  <td style="white-space:nowrap;">{{ (r.data_nc or '')[:10] }}</td>
-                  <td>{{ r.tipo_ocorrencia or '—' }}</td>
-                  <td>{{ r.setor or '—' }}</td>
-                  <td>{{ r.responsavel or '—' }}</td>
-                  <td>
-                    {% set g = (r.gravidade or '')|upper %}
-                    <span class="badge {% if g == 'CRÍTICA' %}badge-red{% elif g == 'ALTA' %}badge-warn{% elif g == 'MÉDIA' %}badge-blue{% else %}badge-gray{% endif %}">{{ r.gravidade or '—' }}</span>
-                  </td>
-                  <td>
-                    {% set s = (r.status or '')|upper %}
-                    <span class="badge {% if s == 'CONCLUÍDO' %}badge-ok{% elif s == 'EM ANDAMENTO' %}badge-warn{% else %}badge-red{% endif %}">{{ r.status or '—' }}</span>
-                  </td>
-                  <td>{{ r.valor or '—' }}</td>
-                </tr>
-                {% else %}
-                <tr class="empty-row"><td colspan="8">Nenhuma ANC encontrada.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Tab: Análises -->
-        <div class="tab-panel" id="tab-an">
-          <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Código</th><th>Data</th><th>Classificação</th><th>Site</th><th>Criado por</th><th>Status</th><th>Valor</th>
-              </tr></thead>
-              <tbody>
-                {% for r in ultimas_analises %}
-                <tr>
-                  <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
-                  <td style="white-space:nowrap;">{{ (r.data_ocorrencia or '')[:10] }}</td>
-                  <td>{{ r.classificacao or '—' }}</td>
-                  <td>{{ r.site or '—' }}</td>
-                  <td>{{ r.criado_por or '—' }}</td>
-                  <td>
-                    {% set s = (r.status_analise or '')|upper %}
-                    <span class="badge {% if s == 'FECHADA' %}badge-ok{% elif s == 'EM ANDAMENTO' %}badge-warn{% else %}badge-red{% endif %}">{{ r.status_analise or '—' }}</span>
-                  </td>
-                  <td>{{ r.valor or '—' }}</td>
-                </tr>
-                {% else %}
-                <tr class="empty-row"><td colspan="7">Nenhuma análise encontrada.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Tab: Shift Handover -->
-        <div class="tab-panel" id="tab-sh">
-          <div class="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Data</th><th>Site</th><th>Turno</th><th>Setor</th><th>Saída</th><th>Entrada</th><th>Status</th>
-              </tr></thead>
-              <tbody>
-                {% for r in ultimos_shifts %}
-                <tr>
-                  <td style="white-space:nowrap;">{{ r.data_ocorrencia.strftime('%d/%m/%Y') if r.data_ocorrencia else '—' }}</td>
-                  <td>{{ r.site or '—' }}</td>
-                  <td><span class="badge badge-gray">{{ r.turno or '—' }}</span></td>
-                  <td>{{ r.setor or '—' }}</td>
-                  <td>{{ r.responsavel_saida or '—' }}</td>
-                  <td>{{ r.responsavel_entrada or '—' }}</td>
-                  <td>
-                    {% set s = (r.status or '')|upper %}
-                    <span class="badge {% if 'RECEBIDO' in s %}badge-ok{% elif 'PEND' in s %}badge-warn{% else %}badge-gray{% endif %}">{{ r.status or '—' }}</span>
-                  </td>
-                </tr>
-                {% else %}
-                <tr class="empty-row"><td colspan="7">Nenhuma passagem encontrada.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div><!-- /tab area -->
-
-    </div><!-- /content -->
-    <footer class="app-footer">
-      <span>CCTV Control Panel — DHL Security</span>
-      <span>Overview Operacional</span>
-    </footer>
-  </div><!-- /main -->
-</div><!-- /app-shell -->
-
+{% block page_scripts %}
 <script>
-// ── Profile menu ─────────────────────────────────────
-function spToggle(e){
-  e.stopPropagation();
-  document.getElementById('spMenu').classList.toggle('open');
-}
-document.addEventListener('click', () => document.getElementById('spMenu')?.classList.remove('open'));
-
 // ── Tabs ─────────────────────────────────────────────
 function trocarTab(id, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -625,6 +416,4 @@ mkBar     ('cAnClass',   {{ an_cl_labels  | tojson }}, {{ an_cl_vals  | tojson }
 mkDoughnut('cShStatus',  {{ sh_st_labels  | tojson }}, {{ sh_st_vals  | tojson }});
 mkDoughnut('cShTurno',   {{ sh_tu_labels  | tojson }}, {{ sh_tu_vals  | tojson }});
 </script>
-{% include "_translate.html" %}
-</body>
-</html>
+{% endblock %}

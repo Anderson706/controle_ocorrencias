@@ -14,6 +14,27 @@ import base64
 
 chaves_bp = Blueprint('chaves', __name__, template_folder='templates')
 
+
+def _tempo_decorrido(dt):
+    """Retorna string legível do tempo decorrido desde dt.
+    Ex: '5d 3h 20min', '2h 45min', '38min'
+    """
+    delta = datetime.now() - dt
+    total_seg = int(delta.total_seconds())
+    if total_seg < 0:
+        return "agora"
+    dias  = total_seg // 86400
+    horas = (total_seg % 86400) // 3600
+    mins  = (total_seg % 3600) // 60
+    partes = []
+    if dias:
+        partes.append(f"{dias}d")
+    if horas:
+        partes.append(f"{horas}h")
+    if mins or not partes:
+        partes.append(f"{mins}min")
+    return " ".join(partes)
+
 # ── Referências globais (preenchidas via setup_chaves) ─────────────────────────
 _db              = None
 ClavicularioChave    = None
@@ -31,7 +52,9 @@ def setup_chaves(db):
         """Cadastro de chaves físicas de um site (gerenciado por ADMIN)."""
         __tablename__ = "claviculario_chave"
 
-        id           = db.Column(db.Integer,     primary_key=True)
+        id           = db.Column(db.Integer,
+                           db.Sequence('clav_chave_id_seq', start=1),
+                           primary_key=True)
         numero_chave = db.Column(db.String(50),  nullable=False)
         local        = db.Column(db.String(150), nullable=False)
         site         = db.Column(db.String(100), nullable=False)
@@ -44,7 +67,9 @@ def setup_chaves(db):
         """Registro de retirada/devolução de uma chave do claviculário."""
         __tablename__ = "claviculario_retirada"
 
-        id                  = db.Column(db.Integer,     primary_key=True)
+        id                  = db.Column(db.Integer,
+                                db.Sequence('clav_retirada_id_seq', start=1),
+                                primary_key=True)
         chave_id            = db.Column(db.Integer,     db.ForeignKey("claviculario_chave.id"), nullable=False)
         # Retirador — quem está pegando a chave (preenchido manualmente)
         cpf_matricula       = db.Column(db.String(50),  nullable=False)
@@ -52,6 +77,7 @@ def setup_chaves(db):
         # Responsável pela entrega — usuário logado (automático)
         responsavel_entrega = db.Column(db.String(150), nullable=False)
         usuario_id          = db.Column(db.Integer,     nullable=False)
+        usuario_nome        = db.Column(db.String(150), nullable=False, default="")
         # Dados gerais
         site                = db.Column(db.String(100), nullable=False)
         data_retirada       = db.Column(db.DateTime, nullable=False, default=datetime.now)
@@ -114,16 +140,34 @@ def meu_claviculario():
         if not is_admin:
             flash("Apenas administradores podem adicionar chaves ao claviculário.", "danger")
             return redirect(url_for("chaves.meu_claviculario"))
-        nova = ClavicularioChave(
-            numero_chave = request.form.get("numero_chave", "").strip(),
-            local        = request.form.get("local", "").strip(),
-            site         = site,
-            criador_id   = session.get("user_id"),
-            criador_nome = session.get("user_nome", ""),
-        )
-        _db.session.add(nova)
-        _db.session.commit()
-        flash("Chave adicionada ao claviculário com sucesso!", "success")
+
+        numero_chave = request.form.get("numero_chave", "").strip()
+        local        = request.form.get("local", "").strip()
+
+        if not numero_chave or not local:
+            flash("Preencha o número da chave e o local.", "warning")
+            return redirect(url_for("chaves.meu_claviculario"))
+
+        if not site:
+            flash("Seu usuário não tem site configurado. Contate o administrador.", "danger")
+            return redirect(url_for("chaves.meu_claviculario"))
+
+        try:
+            nova = ClavicularioChave(
+                numero_chave = numero_chave,
+                local        = local,
+                site         = site,
+                criador_id   = session.get("user_id"),
+                criador_nome = session.get("user_nome", ""),
+                ativa        = True,
+            )
+            _db.session.add(nova)
+            _db.session.commit()
+            flash("Chave adicionada ao claviculário com sucesso!", "success")
+        except Exception as e:
+            _db.session.rollback()
+            flash(f"Erro ao salvar a chave: {e}", "danger")
+
         return redirect(url_for("chaves.meu_claviculario"))
 
     chaves = (ClavicularioChave.query
@@ -131,14 +175,22 @@ def meu_claviculario():
               .order_by(ClavicularioChave.id)
               .all())
 
-    agora         = datetime.now()
+    agora           = datetime.now()
     tres_dias_atras = agora - timedelta(days=3)
     em_uso = disponiveis = mais_de_3_dias = 0
 
+    # ── UMA query para todas as retiradas ativas (elimina N+1) ───────────────
+    chave_ids = [c.id for c in chaves]
+    retiradas_map = {}
+    if chave_ids:
+        rows = (ClavicularioRetirada.query
+                .filter(ClavicularioRetirada.chave_id.in_(chave_ids))
+                .filter_by(status="EM USO")
+                .all())
+        retiradas_map = {r.chave_id: r for r in rows}
+
     for chave in chaves:
-        ret = (ClavicularioRetirada.query
-               .filter_by(chave_id=chave.id, status="EM USO")
-               .first())
+        ret = retiradas_map.get(chave.id)
         chave._retirada = ret
         if ret:
             em_uso += 1
@@ -215,16 +267,7 @@ def realizar_retirada():
     site       = session.get("user_site", "")
     usuario_id = session.get("user_id")
 
-    # Verifica se o usuário já tem chave em uso
-    retirada_pendente = (ClavicularioRetirada.query
-                         .filter_by(usuario_id=usuario_id, status="EM USO")
-                         .first())
-
     if request.method == "POST":
-        if retirada_pendente:
-            flash("Você já possui uma chave em uso. Devolva-a antes de realizar outra retirada.", "danger")
-            return redirect(url_for("chaves.realizar_retirada"))
-
         chave_id = request.form.get("chave_id", type=int)
         chave    = ClavicularioChave.query.get(chave_id)
 
@@ -232,6 +275,7 @@ def realizar_retirada():
             flash("Chave inválida ou não pertence ao seu site.", "danger")
             return redirect(url_for("chaves.realizar_retirada"))
 
+        # Bloqueia se ESSA chave específica já está em uso
         em_uso = (ClavicularioRetirada.query
                   .filter_by(chave_id=chave_id, status="EM USO")
                   .first())
@@ -239,23 +283,38 @@ def realizar_retirada():
             flash("Esta chave já está em uso por outra pessoa.", "danger")
             return redirect(url_for("chaves.realizar_retirada"))
 
-        nova = ClavicularioRetirada(
-            chave_id            = chave_id,
-            # Retirador — preenchido manualmente no formulário
-            cpf_matricula       = request.form.get("cpf_matricula", "").strip(),
-            nome_retirador      = request.form.get("nome_retirador", "").strip(),
-            # Responsável pela entrega — usuário logado (automático, travado)
-            responsavel_entrega = session.get("user_nome", ""),
-            usuario_id          = usuario_id,
-            site                = site,
-            data_retirada       = datetime.now(),
-            status              = "EM USO",
-            assinatura          = request.form.get("assinatura") or None,
-        )
-        _db.session.add(nova)
-        _db.session.commit()
-        flash("Retirada registrada com sucesso!", "success")
-        return redirect(url_for("chaves.comprovante_retirada", retirada_id=nova.id))
+        # Bloqueia se o mesmo CPF/matrícula já tem uma chave em uso no site
+        cpf = request.form.get("cpf_matricula", "").strip()
+        cpf_em_uso = (ClavicularioRetirada.query
+                      .filter_by(cpf_matricula=cpf, site=site, status="EM USO")
+                      .first())
+        if cpf_em_uso:
+            chave_cpf = ClavicularioChave.query.get(cpf_em_uso.chave_id)
+            num = chave_cpf.numero_chave if chave_cpf else "?"
+            flash(f"Este CPF/matrícula já possui a chave {num} em uso. Devolva-a antes de retirar outra.", "danger")
+            return redirect(url_for("chaves.realizar_retirada"))
+
+        try:
+            nova = ClavicularioRetirada(
+                chave_id            = chave_id,
+                cpf_matricula       = request.form.get("cpf_matricula", "").strip(),
+                nome_retirador      = request.form.get("nome_retirador", "").strip(),
+                responsavel_entrega = session.get("user_nome", ""),
+                usuario_id          = usuario_id,
+                usuario_nome        = session.get("user_nome", ""),
+                site                = site,
+                data_retirada       = datetime.now(),
+                status              = "EM USO",
+                assinatura          = request.form.get("assinatura") or None,
+            )
+            _db.session.add(nova)
+            _db.session.commit()
+            flash(f"Retirada da chave {chave.numero_chave} registrada com sucesso!", "success")
+            return redirect(url_for("chaves.realizar_retirada"))
+        except Exception as e:
+            _db.session.rollback()
+            flash(f"Erro ao registrar retirada: {e}", "danger")
+            return redirect(url_for("chaves.realizar_retirada"))
 
     # Chaves disponíveis do site (sem retirada ativa)
     chaves_site = (ClavicularioChave.query
@@ -267,18 +326,33 @@ def realizar_retirada():
         if not ClavicularioRetirada.query.filter_by(chave_id=c.id, status="EM USO").first()
     ]
 
-    # Enriquece retirada pendente com dados da chave
-    if retirada_pendente:
-        chave_p = ClavicularioChave.query.get(retirada_pendente.chave_id)
-        retirada_pendente._numero_chave = chave_p.numero_chave if chave_p else "?"
-        retirada_pendente._local        = chave_p.local        if chave_p else "?"
+    # Retiradas ativas do site para exibir no painel de status
+    retiradas_ativas = (ClavicularioRetirada.query
+                        .filter_by(site=site, status="EM USO")
+                        .order_by(ClavicularioRetirada.data_retirada.desc())
+                        .all())
+    # ── UMA query para todas as chaves referenciadas (elimina N+1) ───────────
+    ret_chave_ids = [r.chave_id for r in retiradas_ativas]
+    chaves_ret_map = {}
+    if ret_chave_ids:
+        chaves_ret_map = {
+            c.id: c for c in ClavicularioChave.query
+                .filter(ClavicularioChave.id.in_(ret_chave_ids)).all()
+        }
+    agora_ret = datetime.now()
+    for r in retiradas_ativas:
+        chave_r = chaves_ret_map.get(r.chave_id)
+        r._numero_chave = chave_r.numero_chave if chave_r else "?"
+        r._local        = chave_r.local        if chave_r else "?"
+        r._tempo        = _tempo_decorrido(r.data_retirada)
+        r._alerta       = (agora_ret - r.data_retirada).days >= 3
 
     return render_template(
         "chaves/realizar_retirada.html",
         chaves_disponiveis=chaves_disponiveis,
-        retirada_pendente=retirada_pendente,
+        retiradas_ativas=retiradas_ativas,
         site=site,
-        responsavel_nome=session.get("user_nome", ""),   # travado no form
+        responsavel_nome=session.get("user_nome", ""),
     )
 
 
@@ -300,8 +374,8 @@ def realizar_devolucao():
         chave        = ClavicularioChave.query.get(r.chave_id)
         r._numero_chave = chave.numero_chave if chave else "?"
         r._local        = chave.local        if chave else "?"
-        r._dias         = (agora - r.data_retirada).days
-        r._alerta       = r._dias >= 3
+        r._tempo        = _tempo_decorrido(r.data_retirada)
+        r._alerta       = (agora - r.data_retirada).days >= 3
 
     return render_template("chaves/realizar_devolucao.html", retiradas=retiradas, site=site)
 
@@ -318,6 +392,178 @@ def devolver_chave_clav(retirada_id):
     _db.session.commit()
     flash("Chave devolvida com sucesso!", "success")
     return redirect(url_for("chaves.realizar_devolucao"))
+
+
+@chaves_bp.route("/historico/export/excel")
+@login_required_chaves
+def exportar_historico_excel():
+    """Exporta o histórico completo de retiradas (com filtros opcionais de data e status)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    site      = session.get("user_site", "")
+    is_admin  = (session.get("user_perfil") or "").upper() == "ADMIN"
+
+    # Filtros via query string
+    data_ini  = request.args.get("data_ini", "").strip()
+    data_fim  = request.args.get("data_fim", "").strip()
+    status_f  = request.args.get("status",   "").strip().upper()  # EM USO | DEVOLVIDA | "" = todos
+
+    query = ClavicularioRetirada.query
+    if not is_admin:
+        query = query.filter_by(site=site)
+    else:
+        site_f = request.args.get("site", site).strip()
+        if site_f:
+            query = query.filter_by(site=site_f)
+
+    if status_f in ("EM USO", "DEVOLVIDA"):
+        query = query.filter_by(status=status_f)
+
+    if data_ini:
+        try:
+            dt_ini = datetime.strptime(data_ini, "%Y-%m-%d")
+            query  = query.filter(ClavicularioRetirada.data_retirada >= dt_ini)
+        except ValueError:
+            pass
+    if data_fim:
+        try:
+            dt_fim = datetime.strptime(data_fim, "%Y-%m-%d")
+            dt_fim = dt_fim.replace(hour=23, minute=59, second=59)
+            query  = query.filter(ClavicularioRetirada.data_retirada <= dt_fim)
+        except ValueError:
+            pass
+
+    retiradas = query.order_by(ClavicularioRetirada.data_retirada.desc()).all()
+
+    # Pré-carrega chaves para evitar N+1
+    chaves_map = {}
+    for r in retiradas:
+        if r.chave_id not in chaves_map:
+            chaves_map[r.chave_id] = ClavicularioChave.query.get(r.chave_id)
+
+    # ── Workbook ──────────────────────────────────────────────────────────────
+    wb  = Workbook()
+    ws  = wb.active
+    ws.title = "Histórico de Retiradas"
+    thin = Side(style="thin", color="D1D5DB")
+
+    # Título
+    ws.merge_cells("A1:K1")
+    ws["A1"] = f"HISTÓRICO DE RETIRADAS DE CHAVES — {site}"
+    ws["A1"].font      = Font(size=14, bold=True, color="FFFFFF")
+    ws["A1"].fill      = PatternFill("solid", fgColor="D40511")
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    # Subtítulo / metadados
+    periodo = ""
+    if data_ini or data_fim:
+        periodo = f" | Período: {data_ini or '—'} a {data_fim or '—'}"
+    filtro_status = f" | Status: {status_f}" if status_f else " | Status: Todos"
+    ws.merge_cells("A2:K2")
+    ws["A2"] = (f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+                f" | Usuário: {session.get('user_nome', 'Sistema')}"
+                f"{periodo}{filtro_status}")
+    ws["A2"].font      = Font(size=10, bold=True, color="111827")
+    ws["A2"].fill      = PatternFill("solid", fgColor="FFCC00")
+    ws["A2"].alignment = Alignment(horizontal="center")
+    ws.row_dimensions[2].height = 18
+
+    # Linha de totais resumo
+    total_todos      = len(retiradas)
+    total_em_uso     = sum(1 for r in retiradas if r.status == "EM USO")
+    total_devolvidas = sum(1 for r in retiradas if r.status == "DEVOLVIDA")
+    ws.merge_cells("A3:K3")
+    ws["A3"] = (f"Total de registros: {total_todos}"
+                f"  |  Em Uso: {total_em_uso}"
+                f"  |  Devolvidas: {total_devolvidas}")
+    ws["A3"].font      = Font(size=10, bold=True, color="374151")
+    ws["A3"].fill      = PatternFill("solid", fgColor="F3F4F6")
+    ws["A3"].alignment = Alignment(horizontal="center")
+
+    # Cabeçalho das colunas
+    headers = [
+        "ID", "Site", "Nº Chave", "Local", "Nome do Retirador",
+        "CPF / Matrícula", "Resp. Entrega", "Data Retirada",
+        "Data Devolução", "Dias em Uso", "Status",
+    ]
+    for col, h in enumerate(headers, start=1):
+        c = ws.cell(row=5, column=col, value=h)
+        c.font      = Font(bold=True, color="111827", size=10)
+        c.fill      = PatternFill("solid", fgColor="E5E7EB")
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border    = Border(top=thin, left=thin, right=thin, bottom=thin)
+    ws.row_dimensions[5].height = 22
+
+    # Dados
+    agora = datetime.now()
+    fill_em_uso    = PatternFill("solid", fgColor="FEF3C7")   # amarelo claro
+    fill_devolvida = PatternFill("solid", fgColor="D1FAE5")   # verde claro
+    fill_alerta    = PatternFill("solid", fgColor="FEE2E2")   # vermelho claro
+
+    for row_idx, r in enumerate(retiradas, start=6):
+        chave = chaves_map.get(r.chave_id)
+        dias  = (r.data_devolucao or agora) - r.data_retirada
+        dias_n = dias.days
+
+        row_data = [
+            r.id,
+            r.site,
+            chave.numero_chave if chave else "?",
+            chave.local        if chave else "?",
+            r.nome_retirador   or "—",
+            r.cpf_matricula,
+            r.responsavel_entrega,
+            r.data_retirada.strftime("%d/%m/%Y %H:%M"),
+            r.data_devolucao.strftime("%d/%m/%Y %H:%M") if r.data_devolucao else "—",
+            dias_n,
+            r.status,
+        ]
+        for col, val in enumerate(row_data, start=1):
+            c = ws.cell(row=row_idx, column=col, value=val)
+            c.border    = Border(top=thin, left=thin, right=thin, bottom=thin)
+            c.alignment = Alignment(vertical="center")
+
+        # Colorir a linha conforme status
+        if r.status == "EM USO" and dias_n >= 3:
+            row_fill = fill_alerta
+        elif r.status == "EM USO":
+            row_fill = fill_em_uso
+        else:
+            row_fill = fill_devolvida
+
+        for col in range(1, 12):
+            ws.cell(row=row_idx, column=col).fill = row_fill
+
+    # Larguras
+    for col, w in zip("ABCDEFGHIJK", [8, 14, 12, 24, 28, 18, 28, 20, 20, 12, 14]):
+        ws.column_dimensions[col].width = w
+    ws.freeze_panes = "A6"
+
+    # Legenda de cores
+    row_leg = len(retiradas) + 8
+    ws.cell(row=row_leg, column=1, value="Legenda:").font = Font(bold=True, size=9)
+    leg_items = [
+        ("DEVOLVIDA", "D1FAE5", "Chave devolvida normalmente"),
+        ("EM USO (< 3 dias)", "FEF3C7", "Chave em uso dentro do prazo"),
+        ("EM USO (≥ 3 dias)", "FEE2E2", "Chave em uso acima de 3 dias — requer atenção"),
+    ]
+    for i, (lbl, cor, desc) in enumerate(leg_items, start=1):
+        c_cor  = ws.cell(row=row_leg + i, column=1, value="")
+        c_cor.fill = PatternFill("solid", fgColor=cor)
+        c_cor.border = Border(top=thin, left=thin, right=thin, bottom=thin)
+        c_txt = ws.cell(row=row_leg + i, column=2, value=f"{lbl} — {desc}")
+        c_txt.font = Font(size=9, color="374151")
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    nome_arq = f"historico_chaves_{site}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        output, as_attachment=True, download_name=nome_arq,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @chaves_bp.route("/realizar-devolucao/export/excel")

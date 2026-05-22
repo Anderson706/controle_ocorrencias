@@ -1,256 +1,85 @@
-﻿<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <title>{{ 'Novo Usuário' if acao=='novo' else 'Editar Usuário' }} | CCTV Control Panel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    :root{--red:#b1030d;--yellow:#ffcc00;--dark:#1a1a1a;--bg:#f3f4f6;--card:#fff;--line:#e5e7eb;--text:#1f2937;--muted:#6b7280;--sidebar-w:260px;--topbar-h:74px}
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
-    a{text-decoration:none;color:inherit}
-    #loading-overlay{display:none;position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.5);backdrop-filter:blur(3px);align-items:center;justify-content:center}
-    #loading-overlay.show{display:flex}
-    .loading-box{background:#fff;border-radius:16px;padding:32px 48px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.2)}
-    .spinner{width:44px;height:44px;border:4px solid #e5e7eb;border-top-color:var(--red);border-radius:50%;animation:spin .75s linear infinite;margin:0 auto 14px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .app-shell{display:flex;min-height:100vh}
-    .sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,#161a1d,#20262b);color:#fff;position:fixed;top:0;left:0;bottom:0;padding:22px 16px 16px;box-shadow:6px 0 22px rgba(0,0,0,.18);z-index:1000;overflow-y:auto;display:flex;flex-direction:column}
-    .brand{padding-bottom:16px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}
-    .brand-title{font-size:20px;font-weight:900;line-height:1.15;color:#fff}
-    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
-    .main-nav{display:flex;flex-direction:column;gap:3px;flex:1}
-    .nav-section{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;color:rgba(255,255,255,.58);font-size:12px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;transition:.18s;border:1px solid transparent;text-decoration:none;cursor:pointer}
-    .nav-section:hover{color:#fff;background:rgba(255,255,255,.06)}
-    .nav-section.active{color:#fff;background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.12)}
-    .nav-icon{font-size:15px;flex-shrink:0}
-    .nav-chevron{margin-left:auto;font-size:11px;opacity:.65}
-    .sub-nav{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px 16px;padding-left:14px;border-left:2px solid rgba(255,255,255,.10)}
-    .sub-link{display:block;padding:8px 10px;border-radius:8px;color:rgba(255,255,255,.52);font-size:13px;font-weight:600;transition:.15s;text-decoration:none}
-    .sub-link:hover{color:#fff;background:rgba(255,255,255,.06)}
-    .sub-link.cur{color:#ffcc00;font-weight:800}
-    .sp-wrap{margin-top:auto;padding:10px 0 0;border-top:1px solid rgba(255,255,255,.08);position:relative}
-    .sp-trigger{display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 10px;border-radius:12px;transition:.15s}
-    .sp-trigger:hover{background:rgba(255,255,255,.06)}
-    .sp-avatar{width:38px;height:38px;border-radius:50%;background:#ffcc00;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;color:#111;flex-shrink:0;overflow:hidden}
-    .sp-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
-    .sp-info{flex:1;min-width:0}
-    .sp-name{display:block;font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .sp-role{display:block;font-size:11px;color:rgba(255,255,255,.5);font-weight:600;text-transform:uppercase}
-    .sp-dots{color:rgba(255,255,255,.35);font-size:20px;line-height:1;flex-shrink:0}
-    .sp-menu{display:none;position:absolute;bottom:calc(100% + 6px);left:0;right:0;background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.22);overflow:hidden;z-index:600;border:1px solid #e5e7eb}
-    .sp-menu.open{display:block;animation:spIn .15s ease}
-    @keyframes spIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-    .sp-item{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:13px;font-weight:700;color:#1f2937;text-decoration:none;transition:.12s}
-    .sp-item:hover{background:#f3f4f6}
-    .sp-item-red{color:#d40511}
-    .sp-sep{border-top:1px solid #f0f0f0;margin:0}
-    .main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh}
-    .topbar{height:var(--topbar-h);background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:100;gap:16px}
-    .topbar-left{display:flex;align-items:center;gap:14px}
-    .logo-topbar{height:42px;width:auto;object-fit:contain}
-    .topbar-left h1{font-size:18px;font-weight:900;color:var(--text)}
-    .topbar-left p{font-size:12px;color:var(--muted);margin-top:2px}
-    .topbar-right{display:flex;align-items:center;gap:10px}
-    .content{padding:28px;flex:1;display:flex;align-items:flex-start;justify-content:center}
-    .flash-wrap{margin-bottom:18px}
-    .flash{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-radius:12px;font-weight:700;border:1px solid transparent;font-size:13px;margin-bottom:6px}
-    .flash.success{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
-    .flash.danger{background:#ffe4e6;color:#9f1239;border-color:#fecdd3}
-    .flash.warning{background:#fff4db;color:#9a6700;border-color:#f5d66f}
-    .form-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:32px;width:100%;max-width:600px;box-shadow:0 4px 16px rgba(0,0,0,.06)}
-    .form-card h2{font-size:20px;font-weight:900;color:var(--text);margin-bottom:6px}
-    .form-card .subtitle{font-size:13px;color:var(--muted);margin-bottom:28px}
-    .field{margin-bottom:18px}
-    .field label{display:block;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
-    .field input,.field select{width:100%;padding:12px 14px;border:1px solid #d1d5db;border-radius:12px;font-size:14px;font-family:inherit;background:#fafbfc;color:var(--text);transition:.15s}
-    .field input:focus,.field select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(177,3,13,.08);background:#fff}
-    .field-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .divider{border:none;border-top:1px solid var(--line);margin:24px 0}
-    .btn{display:inline-flex;align-items:center;gap:6px;padding:12px 20px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:.15s}
-    .btn-red{background:var(--red);color:#fff}
-    .btn-red:hover{background:#8f0209}
-    .btn-gray{background:#f3f4f6;color:#374151;border:1px solid #d1d5db}
-    .btn-gray:hover{background:#e5e7eb}
-    .form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:28px}
-    .app-footer{background:#fff;border-top:1px solid var(--line);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;flex-shrink:0;gap:12px}
-    .info-box{background:#fffbeb;border:1px solid #f5d66f;border-radius:12px;padding:12px 16px;font-size:13px;color:#92400e;margin-bottom:20px}
-  </style>
-</head>
-<body>
-<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p style="font-size:14px;font-weight:700;color:#374151">Salvando...</p></div></div>
+{% extends "base_app.html" %}
+{% block page_title %}{{ 'Novo Usuário' if acao=='novo' else 'Editar Usuário' }} | CCTV Control Panel{% endblock %}
+{% block topbar_title %}{{ '➕ Novo Usuário' if acao=='novo' else '✏️ Editar Usuário' }}{% endblock %}
+{% block topbar_subtitle %}{{ 'Preencha os dados para criar o acesso' if acao=='novo' else 'Atualize os dados do usuário' }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
 
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-badge">DHL</div>
-      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+{% block page_content %}
+<style>
+  .content{ max-width:700px; margin:0 auto; }
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:18px; padding:32px; box-shadow:0 4px 16px rgba(0,0,0,.06); }
+  .form-card h2{ font-size:20px; font-weight:900; color:var(--text); margin:0 0 6px; }
+  .form-card .subtitle{ font-size:13px; color:var(--muted); margin:0 0 28px; }
+  .field{ margin-bottom:18px; }
+  .field label{ display:block; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  .field input,.field select{ width:100%; padding:12px 14px; border:1px solid #d1d5db; border-radius:12px; font-size:14px; font-family:inherit; background:#fafbfc; color:var(--text); transition:.15s; }
+  .field input:focus,.field select:focus{ outline:none; border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(177,3,13,.08); background:#fff; }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .divider{ border:none; border-top:1px solid var(--line); margin:24px 0; }
+  .form-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:28px; }
+  .info-box{ background:#fffbeb; border:1px solid #f5d66f; border-radius:12px; padding:12px 16px; font-size:13px; color:#92400e; margin-bottom:20px; }
+</style>
+
+<div class="form-card">
+  <h2>{{ '➕ Novo Usuário' if acao=='novo' else '✏️ Editar Usuário' }}</h2>
+  <p class="subtitle">
+    {% if acao=='novo' %}
+    Uma senha temporária será gerada e enviada por e-mail ao usuário.
+    {% else %}
+    Edite os campos desejados. Para redefinir a senha, use o botão na lista.
+    {% endif %}
+  </p>
+
+  {% if acao=='novo' %}
+  <div class="info-box">ℹ️ Uma senha temporária de 10 caracteres será gerada automaticamente e enviada ao e-mail informado.</div>
+  {% endif %}
+
+  <form method="POST" onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+    <div class="field">
+      <label>Nome completo *</label>
+      <input type="text" name="nome" value="{{ dados.nome if dados else '' }}" required placeholder="Nome completo do usuário">
     </div>
-    <nav class="main-nav">
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
-      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
-        <span class="nav-icon">🌐</span><span>Overview</span>
-      </a>
-      <a href="{{ url_for('ocorrencias') }}" class="nav-section">
-        <span class="nav-icon">📋</span><span>Investigações</span>
-      </a>
-      <a href="{{ url_for('analises') }}" class="nav-section">
-        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>
-      </a>
-      <a href="{{ url_for('anc') }}" class="nav-section">
-        <span class="nav-icon">⚠️</span><span>ANC</span>
-      </a>
-      <a href="{{ url_for('sh_index') }}" class="nav-section">
-        <span class="nav-icon">🔄</span><span>Shift Handover</span>
-      </a>
-      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
-      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
-        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_chv %}<div class="sub-nav">
-        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
-        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
-        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
-      </div>{% endif %}
-      <a href="{{ url_for('admin_usuarios') }}" class="nav-section active">
-        <span class="nav-icon">⚙️</span><span>Administração</span><span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav">
-        <a href="{{ url_for('admin_usuarios') }}" class="sub-link cur">Usuários</a>
-        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link">Solicitações{% if pendentes %} <strong style="color:#ffcc00">({{ pendentes }})</strong>{% endif %}</a>
-        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
+    <div class="field">
+      <label>E-mail corporativo *</label>
+      <input type="email" name="email" value="{{ dados.email if dados else '' }}" required placeholder="nome.sobrenome@dhl.com">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Perfil de acesso</label>
+        <select name="perfil">
+          <option value="OPERACIONAL" {{ 'selected' if (dados.perfil if dados else '') == 'OPERACIONAL' }}>Operacional</option>
+          <option value="SUPERVISOR" {{ 'selected' if (dados.perfil if dados else '') == 'SUPERVISOR' }}>Supervisor</option>
+          <option value="ADMIN" {{ 'selected' if (dados.perfil if dados else '') == 'ADMIN' }}>Admin</option>
+        </select>
       </div>
-    </nav>
-    <div class="sp-wrap" id="spWrap">
-      <div class="sp-trigger" onclick="spToggle(event)">
-        <div class="sp-avatar">
-          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
-        </div>
-        <div class="sp-info">
-          <span class="sp-name">{{ session.get('user_nome','') }}</span>
-          <span class="sp-role">{{ session.get('user_site','') }}</span>
-        </div>
-        <span class="sp-dots">⋮</span>
-      </div>
-      <div class="sp-menu" id="spMenu">
-        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
-        <hr class="sp-sep">
-        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
+      <div class="field">
+        <label>Site / Unidade</label>
+        <select name="site">
+          <option value="">Sem site vinculado</option>
+          {% for s in todos_sites %}
+          <option value="{{ s }}" {{ 'selected' if (dados.site if dados else '') == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
-  </aside>
-
-  <main class="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
-        <div>
-          <h1>{{ 'Novo Usuário' if acao=='novo' else 'Editar Usuário' }}</h1>
-          <p>{{ 'Preencha os dados para criar o acesso' if acao=='novo' else 'Atualize os dados do usuário' }}</p>
-        </div>
-      </div>
-      <div class="topbar-right">
-        <a href="{{ url_for('admin_usuarios') }}" class="btn btn-gray" style="padding:9px 16px;font-size:13px;border-radius:10px">← Voltar</a>
-      </div>
-    </header>
-
-    <div class="content">
-      <div style="width:100%;max-width:600px">
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <div class="flash-wrap">
-              {% for cat, msg in messages %}
-                <div class="flash {{ cat }}">{{ msg }}</div>
-              {% endfor %}
-            </div>
-          {% endif %}
-        {% endwith %}
-
-        <div class="form-card">
-          <h2>{{ '➕ Novo Usuário' if acao=='novo' else '✏️ Editar Usuário' }}</h2>
-          <p class="subtitle">
-            {% if acao=='novo' %}
-              Uma senha temporária será gerada e enviada por e-mail ao usuário.
-            {% else %}
-              Edite os campos desejados. Para redefinir a senha, use o botão na lista.
-            {% endif %}
-          </p>
-
-          {% if acao=='novo' %}
-          <div class="info-box">
-            ℹ️ Uma senha temporária de 10 caracteres será gerada automaticamente e enviada ao e-mail informado.
-          </div>
-          {% endif %}
-
-          <form method="POST" onsubmit="document.getElementById('loading-overlay').classList.add('show')">
-
-            <div class="field">
-              <label>Nome completo *</label>
-              <input type="text" name="nome" value="{{ dados.nome if dados else '' }}" required placeholder="Nome completo do usuário">
-            </div>
-
-            <div class="field">
-              <label>E-mail corporativo *</label>
-              <input type="email" name="email" value="{{ dados.email if dados else '' }}" required placeholder="nome.sobrenome@dhl.com">
-            </div>
-
-            <div class="field-row">
-              <div class="field">
-                <label>Perfil de acesso</label>
-                <select name="perfil">
-                  <option value="OPERACIONAL" {{ 'selected' if (dados.perfil if dados else '') == 'OPERACIONAL' }}>Operacional</option>
-                  <option value="SUPERVISOR"  {{ 'selected' if (dados.perfil if dados else '') == 'SUPERVISOR' }}>Supervisor</option>
-                  <option value="ADMIN"       {{ 'selected' if (dados.perfil if dados else '') == 'ADMIN' }}>Admin</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Site / Unidade</label>
-                <select name="site">
-                  <option value="">Sem site vinculado</option>
-                  {% for s in todos_sites %}
-                    <option value="{{ s }}" {{ 'selected' if (dados.site if dados else '') == s }}>{{ s }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-            </div>
-
-            {% if acao == 'editar' %}
-            <hr class="divider">
-            <div class="field">
-              <label>Status da conta</label>
-              <select name="ativo">
-                <option value="1" {{ 'selected' if dados.is_active }}>Ativo</option>
-                <option value="0" {{ 'selected' if not dados.is_active }}>Inativo</option>
-              </select>
-            </div>
-            {% endif %}
-
-            <div class="form-actions">
-              <a href="{{ url_for('admin_usuarios') }}" class="btn btn-gray">Cancelar</a>
-              <button type="submit" class="btn btn-red">
-                {{ '➕ Criar Usuário' if acao=='novo' else '💾 Salvar Alterações' }}
-              </button>
-            </div>
-          </form>
-        </div>
-
-      </div>
+    {% if acao == 'editar' %}
+    <hr class="divider">
+    <div class="field">
+      <label>Status da conta</label>
+      <select name="ativo">
+        <option value="1" {{ 'selected' if dados.is_active }}>Ativo</option>
+        <option value="0" {{ 'selected' if not dados.is_active }}>Inativo</option>
+      </select>
     </div>
-    <footer class="app-footer">
-      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
-      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
-    </footer>
-  </main>
+    {% endif %}
+    <div class="form-actions">
+      <a href="{{ url_for('admin_usuarios') }}" class="btn btn-soft">Cancelar</a>
+      <button type="submit" class="btn btn-red">
+        {{ '➕ Criar Usuário' if acao=='novo' else '✓ Salvar Alterações' }}
+      </button>
+    </div>
+  </form>
 </div>
-
-<script>
-function spToggle(e){
-  e.stopPropagation();
-  document.getElementById('spMenu').classList.toggle('open');
-}
-document.addEventListener('click', () => document.getElementById('spMenu').classList.remove('open'));
-</script>
-{% include "_translate.html" %}
-</body>
-</html>
+{% endblock %}

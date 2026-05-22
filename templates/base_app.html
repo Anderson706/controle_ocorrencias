@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>{% block page_title %}CCTV Control Panel{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="htmx-config" content='{"historyCacheSize":30,"refreshOnHistoryMiss":false,"defaultSwapDelay":0,"defaultSettleDelay":20}'>
+  {% block extra_head %}{% endblock %}
+  <style>
+  /* ══ Design tokens ══════════════════════════════════════════ */
+  :root{
+    --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
+    --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#fff;
+    --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
+    --shadow:0 12px 28px rgba(15,23,42,.08); --radius:20px;
+    --sidebar:#161a1d; --sidebar-2:#20262b;
+    --ok-bg:#e8f7ee; --ok-text:#146c43;
+    --success-bg:#e8f7ee; --success-text:#146c43;
+    --warn-bg:#fff4db; --warn-text:#9a6700;
+    --danger-bg:#fde8ea; --danger-text:#b42318;
+    --neutral-bg:#eef1f4; --neutral-text:#3f4a5a;
+  }
+
+  /* ══ Reset ══════════════════════════════════════════════════ */
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
+  a{ text-decoration:none; color:inherit; }
+
+  /* ══ Shell ══════════════════════════════════════════════════ */
+  .app-shell{ display:flex; min-height:100vh; width:100%; }
+
+  /* ══ Loading overlay (panel.js sobrescreve via CSS injection) */
+  #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.62); backdrop-filter:blur(4px); align-items:center; justify-content:center; flex-direction:column; }
+  #loading-overlay.show{ display:flex; }
+
+  /* ══ Sidebar ════════════════════════════════════════════════ */
+  .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+  .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
+  .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
+  .brand-title{ font-size:15px; font-weight:900; line-height:1.2; color:#fff; }
+  .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
+  .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
+  .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
+  .nav-icon{ font-size:15px; flex-shrink:0; }
+  .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
+  .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
+  .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
+  .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
+  .sub-link.cur{ color:#ffcc00; font-weight:800; }
+
+  /* ══ Profile widget ═════════════════════════════════════════ */
+  .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
+  .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
+  .sp-trigger:hover{ background:rgba(255,255,255,.06); }
+  .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
+  .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
+  .sp-info{ flex:1; min-width:0; }
+  .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
+  .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
+  .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
+  .sp-menu.open{ display:block; animation:spIn .15s ease; }
+  @keyframes spIn{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
+  .sp-item:hover{ background:#f3f4f6; }
+  .sp-item-red{ color:#d40511; }
+  .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
+
+  /* ══ Footer ════════════════════════════════════════════════ */
+  .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
+
+  /* ══ Main + topbar ══════════════════════════════════════════ */
+  .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
+  .topbar{ height:76px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
+  .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; flex:1; }
+  .topbar-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; flex-wrap:wrap; }
+  .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
+  .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+  .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
+  .top-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; font-size:12px; font-weight:800; border:1px solid #efd56f; background:#fff8d8; color:#7a5a00; white-space:nowrap; }
+
+  /* ══ Content + flash ════════════════════════════════════════ */
+  .content{ padding:24px; flex:1; }
+  .flash-wrap{ margin-bottom:16px; }
+  .flash{ margin-bottom:12px; padding:12px 14px; border-radius:12px; font-weight:700; border:1px solid transparent; font-size:13px; }
+  .flash.success{ background:#e6fffa; color:#065f46; border-color:#a7f3d0; }
+  .flash.danger{ background:#ffe4e6; color:#9f1239; border-color:#fecdd3; }
+  .flash.warning{ background:#fff4db; color:#9a6700; border-color:#f5d66f; }
+
+  /* ══ Hero banner ════════════════════════════════════════════ */
+  .hero{ position:relative; overflow:hidden; background:var(--dhl-red); color:#fff; border-radius:24px; padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px; }
+  .hero h2{ margin:0 0 8px; font-size:30px; font-weight:900; }
+  .hero p{ margin:0; line-height:1.55; font-size:14px; opacity:.96; max-width:850px; }
+
+  /* ══ Section ════════════════════════════════════════════════ */
+  .section{ margin-bottom:22px; }
+  .section-title{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+  .section-title h3{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
+  .section-chip{ background:#fff8db; color:#7a5a00; border:1px solid #f5d66f; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
+
+  /* ══ Grid ═══════════════════════════════════════════════════ */
+  .grid{ display:grid; gap:16px; }
+  .grid-2,.g2{ grid-template-columns:repeat(2,1fr); }
+  .grid-3,.g3{ grid-template-columns:repeat(3,1fr); }
+  .grid-4,.g4{ grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
+
+  /* ══ Card / KPI ═════════════════════════════════════════════ */
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); min-width:0; }
+  .kpi{ min-height:110px; display:flex; flex-direction:column; justify-content:center; gap:8px; position:relative; overflow:hidden; background:#fff; border-left:6px solid var(--dhl-yellow); }
+  .kpi .label{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.6px; font-weight:800; }
+  .kpi .value{ font-size:34px; font-weight:900; color:var(--dhl-red); line-height:1; }
+  .kpi .delta{ font-size:12px; font-weight:700; color:var(--muted); }
+
+  /* ══ Filter bar ═════════════════════════════════════════════ */
+  .filter-bar{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px 20px; box-shadow:var(--shadow); margin-bottom:20px; }
+  .filter-bar-title{ font-size:13px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:14px; }
+  .filter-row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .filter-field{ display:flex; flex-direction:column; gap:5px; flex:1; min-width:150px; }
+  .filter-field label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .filter-field input,.filter-field select{ border:1px solid #d6dae1; border-radius:10px; padding:9px 12px; font-size:13px; font-family:inherit; background:#f8fafc; color:var(--text); transition:.15s; outline:none; width:100%; }
+  .filter-field input:focus,.filter-field select:focus{ border-color:var(--dhl-red); background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+  .filter-actions{ display:flex; gap:8px; align-items:flex-end; flex-shrink:0; }
+  .filter-count{ font-size:12px; font-weight:800; color:var(--muted); white-space:nowrap; }
+
+  /* ══ Chart (overview/dashboards) ════════════════════════════ */
+  .chart-wrap{ overflow-x:auto; padding-bottom:4px; }
+  .chart-columns{ display:flex; align-items:flex-end; gap:10px; height:160px; padding:0 4px; min-width:max-content; }
+  .chart-col{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:50px; max-width:80px; flex:1; }
+  .chart-count{ font-size:11px; font-weight:900; color:var(--dhl-red); }
+  .chart-bar{ width:100%; background:var(--dhl-red); border-radius:6px 6px 0 0; min-height:4px; transition:opacity .2s; }
+  .chart-bar:hover{ opacity:.75; }
+  .chart-col-label{ font-size:10px; font-weight:800; color:var(--muted); text-align:center; word-break:break-word; line-height:1.2; max-width:70px; }
+  .chart-empty{ font-size:13px; color:var(--muted); padding:20px 0; text-align:center; width:100%; }
+
+  /* ══ Form fields ════════════════════════════════════════════ */
+  .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .field{ display:flex; flex-direction:column; gap:6px; flex:1; min-width:220px; }
+  .field label{ font-size:13px; color:var(--muted); font-weight:800; }
+  .field input,.field select,.field textarea{ width:100%; border:1px solid #d6dae1; background:#fff; border-radius:14px; padding:13px 14px; font-size:14px; outline:none; font-family:inherit; transition:border-color .18s, box-shadow .18s; }
+  .field input:focus,.field select:focus,.field textarea:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 4px rgba(212,5,17,.08); }
+  .field textarea{ min-height:110px; resize:vertical; }
+  .readonly-field{ background:#f3f4f6!important; color:#6b7280; font-weight:700; }
+  .field-locked{ display:flex; align-items:center; gap:10px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:14px; padding:13px 16px; font-size:14px; color:#475569; font-weight:600; user-select:none; cursor:default; }
+  .lock-icon{ font-size:13px; opacity:.55; }
+  .small{ font-size:12px; color:var(--muted); line-height:1.45; }
+  .actions{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+
+  /* ══ Buttons ════════════════════════════════════════════════ */
+  .btn{ border:none; border-radius:14px; padding:12px 16px; cursor:pointer; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:.18s ease; font-size:13px; font-family:inherit; }
+  .btn:hover{ transform:translateY(-1px); }
+  .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#ffcc00; box-shadow:0 8px 18px rgba(212,5,17,.20); }
+  .btn-dark{ background:#3e434a; color:#fff; }
+  .btn-soft{ background:#fff6cf; color:#6d5400; border:1px solid #f0d66a; }
+  .btn-ghost{ background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; }
+  .btn-outline{ background:#fff; color:var(--dhl-black); border:1px solid #d1d5db; }
+  .btn-danger{ background:#b91c1c; color:#fff; }
+  .btn-green{ background:#16a34a; color:#fff; box-shadow:0 6px 14px rgba(22,163,74,.22); }
+  .btn-sm{ padding:8px 14px; font-size:12px; border-radius:10px; }
+  .btn-clear{ background:#f3f4f6; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:9px 16px; cursor:pointer; font-size:12px; font-weight:800; transition:.15s; font-family:inherit; }
+  .btn-clear:hover{ background:#e5e7eb; }
+
+  /* ══ Badges ═════════════════════════════════════════════════ */
+  .badge{ display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:900; white-space:nowrap; }
+  .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
+  .badge-warning{ background:var(--warn-bg); color:var(--warn-text); }
+  .badge-success{ background:var(--ok-bg); color:var(--ok-text); }
+  .badge-neutral{ background:var(--neutral-bg); color:var(--neutral-text); }
+
+  /* ══ Table ══════════════════════════════════════════════════ */
+  .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
+  table{ width:100%; border-collapse:collapse; min-width:640px; background:#fff; }
+  th,td{ padding:10px 12px; border-bottom:1px solid #edf0f4; text-align:left; vertical-align:top; font-size:13px; }
+  thead th{ background:#fff8db; color:#4b3c00; position:sticky; top:0; z-index:2; font-weight:800; white-space:nowrap; }
+  tbody tr:hover{ background:#fffdf5; }
+
+  /* ══ Thumbs ═════════════════════════════════════════════════ */
+  .thumbs{ display:flex; gap:8px; flex-wrap:wrap; }
+  .thumbs img{ width:72px; height:72px; object-fit:cover; border-radius:10px; border:1px solid #e5e7eb; background:#fff; }
+
+  /* ══ Modals ═════════════════════════════════════════════════ */
+  .modal-overlay{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:2000; align-items:center; justify-content:center; padding:20px; }
+  .modal-overlay.open{ display:flex; }
+  .modal-box{ background:#fff; border-radius:24px; width:100%; max-width:660px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 24px 60px rgba(0,0,0,.22); overflow:hidden; animation:slideUp .22s ease; }
+  @keyframes slideUp{ from{transform:translateY(24px);opacity:0} to{transform:translateY(0);opacity:1} }
+  .modal-head{ background:var(--dhl-red); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .modal-head h3{ margin:0; font-size:18px; font-weight:900; }
+  .modal-sub{ font-size:13px; opacity:.85; margin-top:3px; }
+  .modal-close{ background:rgba(255,255,255,.18); border:none; color:#fff; width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; transition:.15s; flex-shrink:0; }
+  .modal-close:hover{ background:rgba(255,255,255,.32); }
+  .modal-body{ padding:22px 24px; overflow-y:auto; flex:1; }
+  .modal-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .modal-item{ background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:10px 13px; }
+  .modal-item.full{ grid-column:1/-1; }
+  .modal-lbl{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
+  .modal-val{ font-size:13px; font-weight:700; color:var(--dhl-black); line-height:1.4; }
+  .modal-val.red{ color:var(--dhl-red); }
+  .modal-foot{ padding:14px 24px; border-top:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fafafa; flex-shrink:0; }
+
+  /* ══ Encerramento / fechar investigação ════════════════════ */
+  .info-fechamento{ background:#e8f7ee; border:1px solid #a7f3d0; border-radius:12px; padding:12px 14px; font-size:13px; color:#065f46; margin-bottom:12px; }
+  .fechar-field{ margin-bottom:12px; }
+  .fechar-field label{ display:block; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px; }
+  .fechar-field textarea,.fechar-field select,.fechar-field input[type=text]{ width:100%; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; background:#f8fafc; color:var(--text); outline:none; transition:.15s; resize:vertical; }
+  .fechar-field textarea:focus,.fechar-field select:focus,.fechar-field input:focus{ border-color:var(--dhl-red); background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+
+  /* ══ Table pager ════════════════════════════════════════════ */
+  .tbl-pager{ display:flex; align-items:center; justify-content:center; gap:10px; padding:14px 0 4px; flex-wrap:wrap; }
+  .tbl-pager-btn{ border:1px solid #e5e7eb; background:#fff; border-radius:8px; padding:6px 16px; font-size:12px; font-weight:800; cursor:pointer; color:#1f2937; transition:.15s; font-family:inherit; }
+  .tbl-pager-btn:hover:not(:disabled){ background:var(--dhl-red); color:#fff; border-color:var(--dhl-red); }
+  .tbl-pager-btn:disabled{ opacity:.35; cursor:default; }
+  .tbl-pager-info{ font-size:12px; font-weight:700; color:#6b7280; white-space:nowrap; }
+
+  /* ══ Responsive ═════════════════════════════════════════════ */
+  @media(max-width:1100px){
+    .sidebar{ position:relative; width:100%; height:auto; }
+    .main{ margin-left:0; width:100%; }
+    .app-shell{ flex-direction:column; }
+  }
+  @media(max-width:700px){
+    .content{ padding:16px; }
+    .topbar{ padding:14px 16px; height:auto; flex-direction:column; align-items:flex-start; gap:10px; }
+    .hero h2{ font-size:24px; }
+    .modal-grid{ grid-template-columns:1fr; }
+    .grid-2,.grid-3,.g2,.g3,.g4{ grid-template-columns:1fr; }
+  }
+  </style>
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/panel.js"></script>
+</head>
+<body hx-boost="true">
+
+<div id="loading-overlay"></div>
+
+<div class="app-shell">
+
+  <!-- ═══ SIDEBAR ═══════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+    </div>
+
+    <nav class="main-nav">
+      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard','nova_investigacao'] -%}
+      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise','editar_analise'] -%}
+      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc','nova_anc'] -%}
+      {%- set sec_sh  = request.endpoint in ['sh_index','sh_dashboard','sh_assinar','sh_editar','sh_controle'] -%}
+      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
+      {%- set sec_arm = request.endpoint is not none and request.endpoint.startswith('armarios.') -%}
+      {%- set sec_cam = request.endpoint in ['cameras_index','cameras_cadastrar','cameras_checklist_novo','cameras_checklist_ver'] -%}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
+
+      <a href="{{ url_for('overview') }}" hx-boost="false"
+         class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
+        <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
+
+      <a href="{{ url_for('ocorrencias') }}"
+         class="nav-section{{ ' active' if sec_oc else '' }}">
+        <span class="nav-icon">📋</span><span>Investigações</span>
+        {% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_oc %}
+      <div class="sub-nav">
+        <a href="{{ url_for('nova_investigacao') }}" class="sub-link{{ ' cur' if request.endpoint=='nova_investigacao' else '' }}">Nova Investigação</a>
+        <a href="{{ url_for('ocorrencias') }}"       class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle</a>
+        <a href="{{ url_for('dashboard') }}" hx-boost="false" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      </div>
+      {% endif %}
+
+      <a href="{{ url_for('analises') }}"
+         class="nav-section{{ ' active' if sec_an else '' }}">
+        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>
+        {% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_an %}
+      <div class="sub-nav">
+        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
+        <a href="{{ url_for('analises') }}"              class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle</a>
+        <a href="{{ url_for('dashboard_analise') }}" hx-boost="false" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
+      </div>
+      {% endif %}
+
+      <a href="{{ url_for('anc') }}"
+         class="nav-section{{ ' active' if sec_anc else '' }}">
+        <span class="nav-icon">⚠️</span><span>ANC</span>
+        {% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_anc %}
+      <div class="sub-nav">
+        <a href="{{ url_for('nova_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='nova_anc' else '' }}">Nova ANC</a>
+        <a href="{{ url_for('anc') }}"      class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle</a>
+        <a href="{{ url_for('dashboard_anc') }}" hx-boost="false" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
+      </div>
+      {% endif %}
+
+      <a href="{{ url_for('sh_index') }}"
+         class="nav-section{{ ' active' if sec_sh else '' }}">
+        <span class="nav-icon">🔄</span><span>Shift Handover</span>
+        {% if sec_sh %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_sh %}
+      <div class="sub-nav">
+        <a href="{{ url_for('sh_index') }}"    class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Nova Passagem</a>
+        <a href="{{ url_for('sh_controle') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_controle' else '' }}">Controle</a>
+        <a href="{{ url_for('sh_dashboard') }}" hx-boost="false" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      </div>
+      {% endif %}
+
+      <a href="{{ url_for('chaves.meu_claviculario') }}"
+         class="nav-section{{ ' active' if sec_chv else '' }}">
+        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>
+        {% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_chv %}
+      <div class="sub-nav">
+        <a href="{{ url_for('chaves.meu_claviculario') }}"  class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
+        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
+        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
+      </div>
+      {% endif %}
+
+      <a href="{{ url_for('armarios.painel') }}"
+         class="nav-section{{ ' active' if sec_arm else '' }}">
+        <span class="nav-icon">🗄️</span><span>Gestão de Armários</span>
+        {% if sec_arm %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_arm %}
+      <div class="sub-nav">
+        <a href="{{ url_for('armarios.painel') }}"       class="sub-link{{ ' cur' if request.endpoint=='armarios.painel' else '' }}">Painel de Armários</a>
+        <a href="{{ url_for('armarios.chave_reserva') }}" class="sub-link{{ ' cur' if request.endpoint=='armarios.chave_reserva' else '' }}">Chave Reserva</a>
+      </div>
+      {% endif %}
+
+      <a href="{{ url_for('cameras_index') }}"
+         class="nav-section{{ ' active' if sec_cam else '' }}">
+        <span class="nav-icon">📷</span><span>Checklist de Câmeras</span>
+        {% if sec_cam %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_cam %}
+      <div class="sub-nav">
+        <a href="{{ url_for('cameras_checklist_novo') }}" class="sub-link{{ ' cur' if request.endpoint=='cameras_checklist_novo' else '' }}">Novo Checklist</a>
+        <a href="{{ url_for('cameras_index') }}"          class="sub-link{{ ' cur' if request.endpoint=='cameras_index' else '' }}">Controle</a>
+        <a href="{{ url_for('cameras_cadastrar') }}"      class="sub-link{{ ' cur' if request.endpoint=='cameras_cadastrar' else '' }}">Cadastrar Câmeras</a>
+      </div>
+      {% endif %}
+
+      {% if session.get('user_perfil','') == 'ADMIN' %}
+      <a href="{{ url_for('admin_usuarios') }}"
+         class="nav-section{{ ' active' if sec_adm else '' }}">
+        <span class="nav-icon">⚙️</span><span>Administração</span>
+        {% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
+      </a>
+      {% if sec_adm %}
+      <div class="sub-nav">
+        <a href="{{ url_for('admin_usuarios') }}"    class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
+        <a href="{{ url_for('vincular_sites') }}"    class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">Sites OVERHEAD</a>
+      </div>
+      {% endif %}
+      {% endif %}
+    </nav>
+
+    <!-- Profile widget -->
+    <div class="sp-wrap" id="spWrap">
+      <div class="sp-trigger" onclick="spToggle(event)">
+        <div class="sp-avatar">
+          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
+        </div>
+        <div class="sp-info">
+          <span class="sp-name">{{ session.get('user_nome','') }}</span>
+          <span class="sp-role">{{ session.get('user_site','') }}</span>
+        </div>
+        <span class="sp-dots">⋮</span>
+      </div>
+      <div class="sp-menu" id="spMenu">
+        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
+        <hr class="sp-sep">
+        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red" hx-boost="false">🚪 Sair</a>
+      </div>
+    </div>
+  </aside>
+  <!-- ═══ FIM SIDEBAR ════════════════════════════════════════════ -->
+
+  <main class="main">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <img src="{{ url_for('static', filename='shared image.png') }}" alt="DHL Security" class="logo-topbar">
+        <div>
+          <h1>{% block topbar_title %}{% endblock %}</h1>
+          <p>{% block topbar_subtitle %}{% endblock %}</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        {% block topbar_actions %}{% endblock %}
+      </div>
+    </header>
+
+    <!-- Conteúdo principal -->
+    <div class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="flash-wrap">
+        {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
+
+      {% block page_content %}{% endblock %}
+    </div>
+
+    <footer class="app-footer">
+      <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
+      <span>DHL SUPPLY CHAIN — USO INTERNO</span>
+    </footer>
+  </main>
+</div>
+
+{% block modals %}{% endblock %}
+
+{% include "_translate.html" %}
+
+<script>
+function spToggle(e){
+  e.stopPropagation();
+  document.getElementById('spMenu').classList.toggle('open');
+}
+document.addEventListener('click', function(){
+  var m = document.getElementById('spMenu');
+  if(m) m.classList.remove('open');
+});
+</script>
+
+{% block page_scripts %}{% endblock %}
+
+</body>
+</html>

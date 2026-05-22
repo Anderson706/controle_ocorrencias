@@ -1,0 +1,168 @@
+{% extends "base_app.html" %}
+{% block page_title %}Cadastrar Câmeras | CCTV Control Panel{% endblock %}
+{% block topbar_title %}📷 Cadastrar Câmeras{% endblock %}
+{% block topbar_subtitle %}Adicione câmeras individualmente ou em lote para {{ site }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('cameras_index') }}" class="btn btn-soft btn-sm">← Controle</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:14px;
+              box-shadow:var(--shadow); overflow:hidden; max-width:860px; }
+  .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:16px 22px;
+                  display:flex; align-items:center; gap:12px; }
+  .form-card-hdr-bar{ width:5px; height:24px; background:#ffcc00; border-radius:3px; }
+  .form-card-hdr-title{ color:#fff; font-size:15px; font-weight:900; }
+  .form-card-body{ padding:24px; }
+
+  .tab-bar{ display:flex; gap:4px; background:#f3f4f6; border-radius:10px;
+            padding:4px; width:fit-content; margin-bottom:22px; }
+  .tab-btn{ padding:7px 20px; border-radius:8px; font-size:13px; font-weight:700;
+            cursor:pointer; border:none; background:none; color:var(--muted);
+            font-family:inherit; transition:.15s; }
+  .tab-btn.active{ background:#fff; color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.1); }
+
+  .cam-row{ display:grid; grid-template-columns:1fr 2fr auto; gap:10px;
+            align-items:center; margin-bottom:10px; }
+  .cam-row input{ width:100%; }
+  .btn-remove{ background:none; border:1px solid #e5e7eb; border-radius:8px;
+               width:32px; height:32px; cursor:pointer; font-size:14px; color:var(--muted);
+               display:flex; align-items:center; justify-content:center; transition:.15s; }
+  .btn-remove:hover{ background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
+
+  .info-box{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;
+             padding:12px 16px; font-size:13px; color:#1e40af; margin-bottom:18px; }
+  .info-box b{ color:#1e3a8a; }
+</style>
+
+<div class="form-card">
+  <div class="form-card-hdr">
+    <div class="form-card-hdr-bar"></div>
+    <div class="form-card-hdr-title">📷 CADASTRO DE CÂMERAS — {{ site }}</div>
+  </div>
+  <div class="form-card-body">
+
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="trocarModo('individual',this)">Individual</button>
+      <button class="tab-btn" onclick="trocarModo('lote',this)">Em Lote (range)</button>
+    </div>
+
+    <!-- ── Modo Individual ── -->
+    <div id="modo-individual">
+      <div class="info-box">
+        <b>Dica:</b> Adicione uma ou mais câmeras. O <b>Número</b> é o identificador (ex: CAM-001, 42, Sorter-A).
+        O <b>Nome</b> é opcional — use para descrever a localização da câmera.
+      </div>
+      <form method="POST" action="{{ url_for('cameras_cadastrar') }}" hx-boost="false"
+            onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+        <input type="hidden" name="modo" value="individual">
+
+        <div style="display:grid; grid-template-columns:1fr 2fr auto; gap:10px; margin-bottom:8px;">
+          <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Número *</label>
+          <label style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Nome / Localização</label>
+          <div></div>
+        </div>
+
+        <div id="linhas-individuais">
+          <div class="cam-row">
+            <input type="text" name="numero[]" placeholder="Ex: CAM-001" required>
+            <input type="text" name="nome[]"   placeholder="Ex: Entrada Principal (opcional)">
+            <button type="button" class="btn-remove" onclick="removerLinha(this)" title="Remover">✕</button>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-soft btn-sm" onclick="adicionarLinha()" style="margin-top:4px">+ Adicionar câmera</button>
+
+        <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:center;">
+          <button type="submit" class="btn btn-red">✓ Salvar Câmeras</button>
+          <a href="{{ url_for('cameras_index') }}" class="btn btn-soft">Cancelar</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- ── Modo Lote ── -->
+    <div id="modo-lote" style="display:none">
+      <div class="info-box">
+        <b>Cadastro em lote:</b> Informe o prefixo e o range numérico. Ex: prefixo <b>CAM</b> + range <b>1-100</b>
+        criará <b>CAM-001</b> até <b>CAM-100</b>. O sistema detecta automaticamente o número de dígitos.
+        Câmeras já existentes são ignoradas (sem duplicatas).
+      </div>
+      <form method="POST" action="{{ url_for('cameras_cadastrar') }}" hx-boost="false"
+            onsubmit="atualizarPreview(); document.getElementById('loading-overlay').classList.add('show')">
+        <input type="hidden" name="modo" value="lote">
+
+        <div class="row">
+          <div class="field">
+            <label>Prefixo</label>
+            <input type="text" name="prefixo_lote" id="prefixo" value="CAM"
+                   placeholder="Ex: CAM, SORTER, EXT" oninput="atualizarPreview()">
+          </div>
+          <div class="field">
+            <label>Range *</label>
+            <input type="text" name="range_lote" id="range_lote" required
+                   placeholder="Ex: 1-100 ou 001-050" oninput="atualizarPreview()">
+          </div>
+        </div>
+
+        <div id="preview-lote" style="margin:14px 0;padding:12px 16px;background:#f8fafc;
+             border:1px solid var(--line);border-radius:10px;font-size:13px;color:var(--muted);
+             min-height:44px;display:flex;align-items:center;"></div>
+
+        <div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:center;">
+          <button type="submit" class="btn btn-red">✓ Criar Lote</button>
+          <a href="{{ url_for('cameras_index') }}" class="btn btn-soft">Cancelar</a>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function trocarModo(modo, btn){
+  document.getElementById('modo-individual').style.display = modo==='individual'?'':'none';
+  document.getElementById('modo-lote').style.display       = modo==='lote'?'':'none';
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function adicionarLinha(){
+  const cont = document.getElementById('linhas-individuais');
+  const div  = document.createElement('div');
+  div.className = 'cam-row';
+  div.innerHTML = `
+    <input type="text" name="numero[]" placeholder="Ex: CAM-002" required>
+    <input type="text" name="nome[]"   placeholder="Nome / Localização (opcional)">
+    <button type="button" class="btn-remove" onclick="removerLinha(this)" title="Remover">✕</button>
+  `;
+  cont.appendChild(div);
+  div.querySelector('input').focus();
+}
+
+function removerLinha(btn){
+  const linhas = document.querySelectorAll('#linhas-individuais .cam-row');
+  if(linhas.length <= 1){ alert('Mantenha ao menos uma linha.'); return; }
+  btn.closest('.cam-row').remove();
+}
+
+function atualizarPreview(){
+  const pref  = (document.getElementById('prefixo').value || 'CAM').trim();
+  const rng   = (document.getElementById('range_lote').value || '').trim();
+  const el    = document.getElementById('preview-lote');
+  if(!rng){ el.textContent = 'Informe o range para visualizar a prévia.'; return; }
+  try {
+    const pts = rng.split('-');
+    const ini = parseInt(pts[0]), fim = parseInt(pts[1]);
+    if(isNaN(ini)||isNaN(fim)||ini>fim){ el.textContent = 'Range inválido.'; return; }
+    const pad  = Math.max(pts[0].length, pts[1].length);
+    const tot  = fim - ini + 1;
+    const ex1  = `${pref}-${String(ini).padStart(pad,'0')}`;
+    const ex2  = `${pref}-${String(fim).padStart(pad,'0')}`;
+    el.innerHTML = `<b>${tot} câmera(s)</b> serão criadas: <code>${ex1}</code> até <code>${ex2}</code>`;
+  } catch(e){ el.textContent = 'Verifique o range.'; }
+}
+</script>
+{% endblock %}

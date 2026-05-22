@@ -1,0 +1,241 @@
+{% extends "base_app.html" %}
+{% block page_title %}Chave Reserva — Armários | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🔐 Chave Reserva{% endblock %}
+{% block topbar_subtitle %}Controle de retirada e devolução das chaves reserva dos armários — {{ site }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('armarios.painel') }}" class="btn btn-dark btn-sm">← Painel de Armários</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .content{ max-width:1000px; margin:0 auto; }
+
+  /* Section head */
+  .section-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .section-title{ margin:0; font-size:18px; font-weight:900; color:#1f1f1f; }
+  .section-chip{ display:inline-flex; align-items:center; justify-content:center; padding:8px 12px; border-radius:999px; background:#fff4cc; border:1px solid #efd470; color:#735500; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.3px; }
+
+  /* Table */
+  .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:14px; background:#fff; }
+  table{ width:100%; border-collapse:collapse; min-width:620px; }
+  th,td{ padding:12px 14px; border-bottom:1px solid #edf1f5; text-align:left; vertical-align:middle; font-size:13px; }
+  th{ background:#fff8db; color:#4b3c00; font-weight:900; position:sticky; top:0; z-index:1; white-space:nowrap; }
+  tbody tr:hover{ background:#fffdf7; }
+  .badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:900; white-space:nowrap; }
+  .badge-ok{ background:var(--success-bg); color:var(--success-text); }
+  .badge-danger{ background:var(--danger-bg); color:var(--danger-text); }
+  .badge-warn{ background:var(--warn-bg); color:var(--warn-text); }
+  .empty{ padding:18px; color:var(--muted); font-size:13px; }
+
+  /* Add form */
+  .add-form{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px 24px; box-shadow:var(--shadow); }
+  .add-form h3{ margin:0 0 6px; font-size:16px; font-weight:900; color:#1f1f1f; }
+  .add-form p{ margin:0 0 16px; font-size:13px; color:var(--muted); }
+  .form-row{ display:flex; gap:14px; flex-wrap:wrap; }
+  .form-field{ flex:1; min-width:180px; }
+  .form-field label{ display:block; margin-bottom:6px; font-size:12px; font-weight:900; color:#374151; text-transform:uppercase; letter-spacing:.3px; }
+  .form-field input, .form-field select{ width:100%; padding:11px 13px; border:1px solid #d7dbe1; border-radius:12px; background:#f9fafb; font-size:13px; outline:none; transition:border-color .18s; }
+  .form-field input:focus, .form-field select:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+  .form-field input[readonly]{ background:#f0f0f0; color:#6b7280; cursor:not-allowed; }
+  .form-actions{ margin-top:14px; display:flex; gap:10px; }
+
+  /* Signature */
+  .form-section{ font-size:11px; font-weight:900; color:var(--dhl-red); text-transform:uppercase; letter-spacing:.5px; border-bottom:1.5px solid var(--dhl-red); padding-bottom:4px; margin:20px 0 14px; }
+  .sig-wrap{ border:2px dashed #cbd5e1; border-radius:14px; overflow:hidden; background:#fff; cursor:crosshair; }
+  .sig-wrap canvas{ display:block; width:100%; height:160px; touch-action:none; }
+  .sig-toolbar{ display:flex; gap:8px; margin-top:8px; }
+</style>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <h2>Chave Reserva — {{ site }}</h2>
+      <p>Registre a retirada e devolução das chaves reserva dos armários. O tempo decorrido é monitorado desde o momento da retirada.</p>
+    </div>
+    <div class="hero-badges">
+      <span class="hero-badge">📍 {{ site }}</span>
+      <span class="hero-badge">🔐 {{ ativas|length }} retirada{{ 's' if ativas|length != 1 else '' }} ativa{{ 's' if ativas|length != 1 else '' }}</span>
+    </div>
+  </div>
+</section>
+
+<!-- Chaves Fora do Local -->
+<div>
+  <div class="section-head">
+    <h2 class="section-title">Chaves Fora do Local</h2>
+    <span class="section-chip">{{ ativas|length }} ativa{{ 's' if ativas|length != 1 else '' }}</span>
+  </div>
+  {% if ativas %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Armário</th>
+          <th>Bloco</th>
+          <th>Retirado por</th>
+          <th>CPF/Matrícula</th>
+          <th>Retirada em</th>
+          <th>Tempo</th>
+          <th>Entregue por</th>
+          <th>Comprovante</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in ativas %}
+        <tr>
+          <td><strong>{{ r._numero }}</strong></td>
+          <td>{{ r._bloco }}</td>
+          <td>{{ r.retirado_por_nome }}</td>
+          <td>{{ r.retirado_por_cpf }}</td>
+          <td>{{ r.data_retirada.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td>
+            <span class="badge {{ 'badge-danger' if r._alerta else 'badge-warn' }}">
+              {{ '⚠️ ' if r._alerta else '🕐 ' }}{{ r._tempo }}
+            </span>
+          </td>
+          <td>{{ r.responsavel_entrega }}</td>
+          <td>
+            <a href="{{ url_for('armarios.comprovante_chave_reserva', reg_id=r.id) }}"
+               hx-boost="false"
+               class="btn btn-soft btn-sm">📄 PDF</a>
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('armarios.devolver_chave_reserva', reg_id=r.id) }}" hx-boost="false" onsubmit="mostrarLoading()">
+              <button type="submit" class="btn btn-sm" style="background:var(--success-bg);color:var(--success-text);">✓ Devolver</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card">
+    <p class="empty">✅ Nenhuma chave reserva fora do local no momento. Todas estão guardadas corretamente.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Formulário de nova retirada -->
+<div class="add-form">
+  <h3>🔐 Registrar Retirada de Chave Reserva</h3>
+  <p>Preencha os dados de quem está retirando a chave reserva. O responsável pela entrega é preenchido automaticamente com o usuário logado.</p>
+  <form method="POST" id="formRetirada" hx-boost="false">
+    <div class="form-row">
+      <div class="form-field" style="flex:2;min-width:200px;">
+        <label>Armário *</label>
+        <select name="armario_id" required>
+          <option value="">Selecione o armário...</option>
+          {% for arm in armarios_site %}
+          <option value="{{ arm.id }}" {% if arm._chave_fora %}disabled{% endif %}>
+            {{ arm.numero }}{% if arm.bloco %} — {{ arm.bloco }}{% endif %}{% if arm.colaborador_nome %} ({{ arm.colaborador_nome }}){% endif %}{% if arm._chave_fora %} 🔐 CHAVE FORA{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:14px;">
+      <div class="form-field">
+        <label>Nome de quem está retirando *</label>
+        <input type="text" name="retirado_por_nome" placeholder="Nome completo do retirador" required>
+      </div>
+      <div class="form-field">
+        <label>CPF / Matrícula do retirador *</label>
+        <input type="text" name="retirado_por_cpf" placeholder="000.000.000-00 ou matrícula" required>
+      </div>
+    </div>
+    <div class="form-row" style="margin-top:14px;">
+      <div class="form-field">
+        <label>Responsável pela entrega (Security)</label>
+        <input type="text" value="{{ responsavel_nome }}" readonly>
+      </div>
+    </div>
+
+    <!-- Assinatura -->
+    <div class="form-section">✍️ Assinatura do Retirador</div>
+    <input type="hidden" name="assinatura" id="assinaturaInput">
+    <div class="sig-wrap" id="sigWrap">
+      <canvas id="sigCanvas"></canvas>
+    </div>
+    <div class="sig-toolbar">
+      <button type="button" class="btn btn-soft btn-sm" onclick="limparAssinatura()">🗑 Limpar</button>
+      <span style="font-size:12px;color:var(--muted);align-self:center;">Assine no espaço acima usando o mouse ou touch.</span>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-red">Registrar Retirada e Gerar Comprovante</button>
+      <button type="button" class="btn btn-soft" onclick="limparAssinatura();this.form.reset();">Limpar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  function mostrarLoading(){
+    var ov = document.getElementById('loading-overlay');
+    if(ov) ov.classList.add('show');
+  }
+
+  /* ── Canvas de assinatura ── */
+  (function(){
+    const wrap   = document.getElementById('sigWrap');
+    const canvas = document.getElementById('sigCanvas');
+    if(!canvas) return;
+
+    function resizeCanvas(){
+      const rect = wrap.getBoundingClientRect();
+      canvas.width  = rect.width;
+      canvas.height = 160;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const ctx = canvas.getContext('2d');
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth   = 2.2;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+
+    let drawing = false, lastX = 0, lastY = 0;
+
+    function pos(e){
+      const r   = canvas.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return { x: src.clientX - r.left, y: src.clientY - r.top };
+    }
+
+    canvas.addEventListener('mousedown',  e=>{ drawing=true; const p=pos(e); lastX=p.x; lastY=p.y; });
+    canvas.addEventListener('mousemove',  e=>{ if(!drawing) return; const p=pos(e); ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke(); lastX=p.x; lastY=p.y; });
+    canvas.addEventListener('mouseup',    ()=>{ drawing=false; capturarAssinatura(); });
+    canvas.addEventListener('mouseleave', ()=>{ drawing=false; });
+
+    canvas.addEventListener('touchstart', e=>{ e.preventDefault(); drawing=true; const p=pos(e); lastX=p.x; lastY=p.y; }, {passive:false});
+    canvas.addEventListener('touchmove',  e=>{ e.preventDefault(); if(!drawing) return; const p=pos(e); ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke(); lastX=p.x; lastY=p.y; }, {passive:false});
+    canvas.addEventListener('touchend',   ()=>{ drawing=false; capturarAssinatura(); });
+  })();
+
+  function capturarAssinatura(){
+    const canvas = document.getElementById('sigCanvas');
+    document.getElementById('assinaturaInput').value = canvas.toDataURL('image/png');
+  }
+
+  function limparAssinatura(){
+    const canvas = document.getElementById('sigCanvas');
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    document.getElementById('assinaturaInput').value = '';
+  }
+
+  /* ── Submit: captura assinatura antes de enviar ── */
+  document.getElementById('formRetirada').addEventListener('submit', function(e){
+    const sel  = this.querySelector('select[name="armario_id"]');
+    const nome = this.querySelector('input[name="retirado_por_nome"]').value.trim();
+    if(!sel || !sel.value){ e.preventDefault(); alert('Selecione um armário.'); return; }
+    if(!nome){ e.preventDefault(); alert('Informe o nome do retirador.'); return; }
+    capturarAssinatura();
+    mostrarLoading();
+  });
+</script>
+{% endblock %}

@@ -1,288 +1,101 @@
-﻿<!doctype html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8">
-  <title>Shift Handover — Dashboard | CCTV Control Panel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <style>
-    :root{
-      --dhl-yellow:#ffcc00; --dhl-red:#d40511; --dhl-red-dark:#b1030d;
-      --dhl-black:#1f1f1f; --bg:#f3f5f7; --card:#ffffff;
-      --line:#e5e7eb; --text:#1f2937; --muted:#6b7280;
-      --sidebar:#161a1d; --sidebar-2:#20262b;
-      --shadow:0 10px 30px rgba(15,23,42,.08); --radius:18px;
-    }
-    *{ box-sizing:border-box; }
-    html,body{ margin:0; padding:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:Arial,Helvetica,sans-serif; }
-    a{ text-decoration:none; }
+{% extends "base_app.html" %}
+{% block page_title %}Shift Handover — Dashboard | CCTV Control Panel{% endblock %}
 
-    #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
-    #loading-overlay.show{ display:flex; }
-    .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
-    .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:#d40511; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
-    @keyframes spin{ to{ transform:rotate(360deg); } }
-    .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; }
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+{% endblock %}
 
-    .app-shell{ display:flex; min-height:100vh; width:100%; }
-    .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
-    .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
-    .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
-    .brand-title{ font-size:20px; font-weight:900; line-height:1.15; }
-    .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
-    .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
-    .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
-    .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
-    .nav-icon{ font-size:15px; flex-shrink:0; }
-    .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
-    .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
-    .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
-    .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
-    .sub-link.cur{ color:#ffcc00; font-weight:800; }
-    .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
-    .sp-trigger{ display:flex; align-items:center; gap:10px; cursor:pointer; padding:9px 10px; border-radius:12px; transition:.15s; }
-    .sp-trigger:hover{ background:rgba(255,255,255,.06); }
-    .sp-avatar{ width:38px; height:38px; border-radius:50%; background:var(--dhl-yellow); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; color:#111; flex-shrink:0; overflow:hidden; }
-    .sp-avatar img{ width:100%; height:100%; object-fit:cover; border-radius:50%; }
-    .sp-info{ flex:1; min-width:0; }
-    .sp-name{ display:block; font-size:13px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .sp-role{ display:block; font-size:11px; color:rgba(255,255,255,.5); font-weight:600; text-transform:uppercase; }
-    .sp-dots{ color:rgba(255,255,255,.35); font-size:20px; line-height:1; flex-shrink:0; }
-    .sp-menu{ display:none; position:absolute; bottom:calc(100% + 6px); left:0; right:0; background:#fff; border-radius:14px; box-shadow:0 8px 28px rgba(0,0,0,.22); overflow:hidden; z-index:600; border:1px solid #e5e7eb; }
-    .sp-menu.open{ display:block; animation:spIn .15s ease; }
-    @keyframes spIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
-    .sp-item{ display:flex; align-items:center; gap:10px; padding:12px 16px; font-size:13px; font-weight:700; color:#1f2937; text-decoration:none; transition:.12s; }
-    .sp-item:hover{ background:#f3f4f6; }
-    .sp-item-red{ color:#d40511; }
-    .sp-sep{ border-top:1px solid #f0f0f0; margin:0; }
+{% block topbar_title %}Dashboard — Shift Handover{% endblock %}
+{% block topbar_subtitle %}Visão consolidada das passagens de turno operacionais{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('sh_index') }}" class="btn btn-red btn-sm">← Registrar Passagem</a>
+{% endblock %}
 
-    .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
-    .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
-    .topbar{ height:74px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
-    .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
-    .logo-topbar{ height:42px; width:auto; display:block; object-fit:contain; flex-shrink:0; }
-    .topbar-left h1{ margin:0; font-size:20px; font-weight:900; color:var(--dhl-black); }
-    .topbar-left p{ margin:4px 0 0; font-size:12px; color:var(--muted); }
-    .topbar-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .btn{ border:none; border-radius:12px; padding:11px 16px; cursor:pointer; font-weight:800; text-decoration:none; display:inline-flex; align-items:center; gap:8px; transition:.18s; font-size:13px; }
-    .btn:hover{ transform:translateY(-1px); }
-    .btn-sm{ padding:6px 12px; font-size:12px; border-radius:8px; }
-    .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; }
-    .btn-dark{ background:linear-gradient(180deg,#3e434a,#262a2f); color:#fff; }
+{% block page_content %}
+<style>
+  .btn-sm{ padding:6px 12px; font-size:12px; border-radius:8px; }
+  .btn-red{ background:linear-gradient(180deg,var(--dhl-red),var(--dhl-red-dark)); color:#fff; }
 
-    .content{ padding:24px; }
-    .grid{ display:grid; gap:16px; }
-    .grid-4{ grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
-    .grid-3{ grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
-    .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); }
-    .kpi{ min-height:110px; display:flex; flex-direction:column; justify-content:center; gap:8px; border-left:6px solid var(--dhl-yellow); position:relative; overflow:hidden; }
-    .kpi::after{ content:""; position:absolute; right:-18px; top:-18px; width:80px; height:80px; border-radius:50%; background:rgba(255,204,0,.15); }
-    .kpi .label{ color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.6px; font-weight:800; position:relative; z-index:1; }
-    .kpi .value{ font-size:36px; font-weight:900; color:var(--dhl-red); line-height:1; position:relative; z-index:1; }
-    .section{ margin-bottom:24px; }
-    .section-title{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
-    .section-title h3{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black); }
-    .chart-wrap{ position:relative; height:260px; }
-  </style>
-</head>
-<body>
-<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+  .grid{ display:grid; gap:16px; }
+  .grid-4{ grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); }
+  .grid-3{ grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px; box-shadow:var(--shadow); }
+  .kpi{ min-height:110px; display:flex; flex-direction:column; justify-content:center; gap:8px; border-left:6px solid var(--dhl-yellow); position:relative; overflow:hidden; }
+  .kpi::after{ content:""; position:absolute; right:-18px; top:-18px; width:80px; height:80px; border-radius:50%; background:rgba(255,204,0,.15); }
+  .kpi .label{ color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.6px; font-weight:800; position:relative; z-index:1; }
+  .kpi .value{ font-size:36px; font-weight:900; color:var(--dhl-red); line-height:1; position:relative; z-index:1; }
+  .section{ margin-bottom:24px; }
+  .section-title{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .section-title h3{ margin:0; font-size:18px; font-weight:900; color:var(--dhl-black,#1f1f1f); }
+  .chart-wrap{ position:relative; height:260px; }
+</style>
 
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-title">CCTV<br>CONTROL PANEL</div>
+<!-- KPIs -->
+<section class="section">
+  <div class="grid grid-4">
+    <div class="card kpi"><div class="label">Total de passagens</div><div class="value">{{ total }}</div></div>
+    <div class="card kpi" style="border-left-color:#d40511"><div class="label">Em aberto</div><div class="value" style="color:#d40511">{{ em_aberto }}</div></div>
+    <div class="card kpi" style="border-left-color:#d97706"><div class="label">Em acompanhamento</div><div class="value" style="color:#d97706">{{ acompanhamento }}</div></div>
+    <div class="card kpi" style="border-left-color:#15803d"><div class="label">Finalizadas</div><div class="value" style="color:#15803d">{{ finalizado }}</div></div>
+  </div>
+</section>
+
+<!-- Gráficos -->
+<section class="section">
+  <div class="grid grid-3">
+    <div class="card">
+      <div class="section-title"><h3>Por Turno</h3></div>
+      <div class="chart-wrap"><canvas id="chartTurno"></canvas></div>
     </div>
-    <nav class="main-nav">
-      {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard'] -%}
-      {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise','editar_analise'] -%}
-      {%- set sec_anc = request.endpoint in ['anc','dashboard_anc'] -%}
-      {%- set sec_sh  = request.endpoint in ['sh_index','sh_dashboard','sh_assinar','sh_editar'] -%}
-      <a href="{{ url_for('overview') }}" class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
-        <span class="nav-icon">🌐</span><span>Overview</span>
-      </a>
-      <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
-        <span class="nav-icon">📋</span><span>Investigações</span>{% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_oc %}<div class="sub-nav">
-        <a href="{{ url_for('ocorrencias') }}" class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Investigações</a>
-        <a href="{{ url_for('dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
-        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>{% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_an %}<div class="sub-nav">
-        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
-        <a href="{{ url_for('analises') }}" class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise','editar_analise'] else '' }}">Controle de Análises</a>
-        <a href="{{ url_for('dashboard_analise') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
-        <span class="nav-icon">⚠️</span><span>ANC</span>{% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_anc %}<div class="sub-nav">
-        <a href="{{ url_for('anc') }}" class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle de ANC</a>
-        <a href="{{ url_for('exportar_anc_excel') }}" class="sub-link">Exportar Excel</a>
-        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if sec_sh else '' }}">
-        <span class="nav-icon">🔄</span><span>Shift Handover</span>{% if sec_sh %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_sh %}<div class="sub-nav">
-        <a href="{{ url_for('sh_index') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Registrar Passagem</a>
-        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
-      </div>{% endif %}
-      {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
-      <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
-        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>{% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_chv %}<div class="sub-nav">
-        <a href="{{ url_for('chaves.meu_claviculario') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
-        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
-        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
-      </div>{% endif %}
-      {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
-      <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
-        <span class="nav-icon">⚙️</span><span>Administração</span>{% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
-      </a>
-      {% if sec_adm %}<div class="sub-nav">
-        <a href="{{ url_for('admin_usuarios') }}" class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
-        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
-        <a href="{{ url_for('vincular_sites') }}" class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">🌐 Sites OVERHEAD</a>
-      </div>{% endif %}
-      {% endif %}
-    </nav>
-    <div class="sp-wrap" id="spWrap">
-      <div class="sp-trigger" onclick="spToggle(event)">
-        <div class="sp-avatar">
-          {% if session.get('user_tem_foto') %}<img src="{{ url_for('avatar') }}" alt="">{% else %}{{ session.get('user_nome','U')[0]|upper }}{% endif %}
-        </div>
-        <div class="sp-info">
-          <span class="sp-name">{{ session.get('user_nome','') }}</span>
-          <span class="sp-role">{{ session.get('user_site','') }}</span>
-        </div>
-        <span class="sp-dots">⋮</span>
-      </div>
-      <div class="sp-menu" id="spMenu">
-        <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
-        <hr class="sp-sep">
-        <a href="{{ url_for('logout') }}" class="sp-item sp-item-red">⏻ Sair</a>
-      </div>
+    <div class="card">
+      <div class="section-title"><h3>Por Prioridade</h3></div>
+      <div class="chart-wrap"><canvas id="chartPrior"></canvas></div>
     </div>
-  </aside>
-
-  <main class="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <img src="{{ url_for('static', filename='shared image.png') }}" alt="Security Shield" class="logo-topbar">
-        <div>
-          <h1>Dashboard — Shift Handover</h1>
-          <p>Visão consolidada das passagens de turno operacionais</p>
-        </div>
-      </div>
-      <div class="topbar-right">
-        <a href="{{ url_for('sh_index') }}" class="btn btn-red btn-sm">← Registrar Passagem</a>
-      </div>
-    </header>
-
-    <div class="content">
-
-      <!-- KPIs -->
-      <section class="section">
-        <div class="grid grid-4">
-          <div class="card kpi"><div class="label">Total de passagens</div><div class="value">{{ total }}</div></div>
-          <div class="card kpi" style="border-left-color:#d40511"><div class="label">Em aberto</div><div class="value" style="color:#d40511">{{ em_aberto }}</div></div>
-          <div class="card kpi" style="border-left-color:#d97706"><div class="label">Em acompanhamento</div><div class="value" style="color:#d97706">{{ acompanhamento }}</div></div>
-          <div class="card kpi" style="border-left-color:#15803d"><div class="label">Finalizadas</div><div class="value" style="color:#15803d">{{ finalizado }}</div></div>
-        </div>
-      </section>
-
-      <!-- Gráficos -->
-      <section class="section">
-        <div class="grid grid-3">
-          <div class="card">
-            <div class="section-title"><h3>Por Turno</h3></div>
-            <div class="chart-wrap"><canvas id="chartTurno"></canvas></div>
-          </div>
-          <div class="card">
-            <div class="section-title"><h3>Por Prioridade</h3></div>
-            <div class="chart-wrap"><canvas id="chartPrior"></canvas></div>
-          </div>
-          <div class="card">
-            <div class="section-title"><h3>Por Site</h3></div>
-            <div class="chart-wrap"><canvas id="chartSite"></canvas></div>
-          </div>
-        </div>
-      </section>
-
+    <div class="card">
+      <div class="section-title"><h3>Por Site</h3></div>
+      <div class="chart-wrap"><canvas id="chartSite"></canvas></div>
     </div>
-      <footer class="app-footer">
-        <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
-        <span>DHL SUPPLY CHAIN — USO INTERNO</span>
-      </footer>
-  </main>
-</div>
+  </div>
+</section>
+{% endblock %}
 
+{% block page_scripts %}
 <script>
-  const _opt = {
-    responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11, weight:'bold' } } } }
-  };
-  const _barOpt = {
-    ...JSON.parse(JSON.stringify(_opt)),
-    scales:{ x:{ grid:{ display:false } }, y:{ beginAtZero:true, ticks:{ stepSize:1 } } }
-  };
+const _opt = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{ legend:{ position:'bottom', labels:{ font:{ size:11, weight:'bold' } } } }
+};
+const _barOpt = {
+  ...JSON.parse(JSON.stringify(_opt)),
+  scales:{ x:{ grid:{ display:false } }, y:{ beginAtZero:true, ticks:{ stepSize:1 } } }
+};
 
-  new Chart(document.getElementById('chartTurno'), {
-    type:'bar',
-    data:{
-      labels: {{ por_turno | map(attribute=0) | list | tojson }},
-      datasets:[{ label:'Passagens', data: {{ por_turno | map(attribute=1) | list | tojson }},
-        backgroundColor:'rgba(212,5,17,.75)', borderRadius:6 }]
-    }, options:_barOpt
-  });
+new Chart(document.getElementById('chartTurno'), {
+  type:'bar',
+  data:{
+    labels: {{ por_turno | map(attribute=0) | list | tojson }},
+    datasets:[{ label:'Passagens', data: {{ por_turno | map(attribute=1) | list | tojson }},
+      backgroundColor:'rgba(212,5,17,.75)', borderRadius:6 }]
+  }, options:_barOpt
+});
 
-  new Chart(document.getElementById('chartPrior'), {
-    type:'doughnut',
-    data:{
-      labels: {{ por_prior | map(attribute=0) | list | tojson }},
-      datasets:[{ data: {{ por_prior | map(attribute=1) | list | tojson }},
-        backgroundColor:['#d40511','#f59e0b','#3b82f6','#6b7280','#10b981'],
-        borderWidth:2, borderColor:'#fff' }]
-    }, options:_opt
-  });
+new Chart(document.getElementById('chartPrior'), {
+  type:'doughnut',
+  data:{
+    labels: {{ por_prior | map(attribute=0) | list | tojson }},
+    datasets:[{ data: {{ por_prior | map(attribute=1) | list | tojson }},
+      backgroundColor:['#d40511','#f59e0b','#3b82f6','#6b7280','#10b981'],
+      borderWidth:2, borderColor:'#fff' }]
+  }, options:_opt
+});
 
-  new Chart(document.getElementById('chartSite'), {
-    type:'bar',
-    data:{
-      labels: {{ por_site | map(attribute=0) | list | tojson }},
-      datasets:[{ label:'Passagens', data: {{ por_site | map(attribute=1) | list | tojson }},
-        backgroundColor:'rgba(255,204,0,.85)', borderRadius:6 }]
-    }, options:{..._barOpt, indexAxis:'y'}
-  });
-
-  function spToggle(e){
-    e.stopPropagation();
-    document.getElementById('spMenu').classList.toggle('open');
-  }
-  document.addEventListener('click', function(){ document.getElementById('spMenu').classList.remove('open'); });
+new Chart(document.getElementById('chartSite'), {
+  type:'bar',
+  data:{
+    labels: {{ por_site | map(attribute=0) | list | tojson }},
+    datasets:[{ label:'Passagens', data: {{ por_site | map(attribute=1) | list | tojson }},
+      backgroundColor:'rgba(255,204,0,.85)', borderRadius:6 }]
+  }, options:{..._barOpt, indexAxis:'y'}
+});
 </script>
-
-<script>
-(function(){
-  var _ov = document.getElementById('loading-overlay');
-  if(!_ov) return;
-  document.addEventListener('click', function(e){
-    var el = e.target;
-    while(el && el.tagName !== 'A') el = el.parentElement;
-    if(!el) return;
-    var href = el.getAttribute('href') || '';
-    if(!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-    if(href.indexOf('exportar') !== -1 || href.indexOf('download') !== -1 || href.indexOf('anexo') !== -1) return;
-    _ov.classList.add('show');
-  }, true);
-})();
-</script>
-{% include "_translate.html" %}
-</body>
-</html>
+{% endblock %}
