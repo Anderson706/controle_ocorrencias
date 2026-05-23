@@ -89,7 +89,7 @@
     <h3>Filtros de análise</h3>
     <span class="section-chip">Consulta dinâmica</span>
   </div>
-  <form method="GET">
+  <form method="GET" hx-boost="false">
     <div class="filters{{ ' has-site' if is_admin else '' }}">
       <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}" title="Data inicial">
       <input type="date" name="data_final"   value="{{ filtros.data_final  }}" title="Data final">

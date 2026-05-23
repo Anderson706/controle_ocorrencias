@@ -86,15 +86,45 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB
 app.config["SESSION_COOKIE_HTTPONLY"] = False
+# Sessão permanente — usuário não precisa re-logar a cada abertura do app
+from datetime import timedelta
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size":    3,      # app desktop single-user — pool menor = conexão mais rápida
-    "max_overflow": 3,
-    "pool_recycle": 1800,   # recicla conexão a cada 30 min
-    "pool_pre_ping": True,  # detecta conexões mortas antes de usar
-    "pool_timeout": 30,
+    "pool_size":    5,       # conexões permanentes no pool
+    "max_overflow": 5,       # conexões extras permitidas em pico
+    "pool_recycle": 1800,    # recicla conexão a cada 30 min
+    "pool_pre_ping": True,   # detecta conexões mortas antes de usar
+    "pool_timeout": 60,      # aguarda até 60s por uma conexão (VPN tem latência maior)
+    "connect_args": {
+        "tcp_connect_timeout": 20,   # timeout TCP ao conectar no Oracle via VPN
+    },
 }
 
 db = SQLAlchemy(app)
+
+# ── Garante devolução de conexões ao pool mesmo em erros ─────────────────────
+@app.teardown_appcontext
+def _fechar_sessao_db(exc):
+    if exc is not None:
+        db.session.rollback()
+    db.session.remove()
+
+# ── Handler global para erros de banco (pool esgotado, VPN caída, etc.) ──────
+from sqlalchemy.exc import OperationalError, TimeoutError as SATimeout
+@app.errorhandler(OperationalError)
+@app.errorhandler(SATimeout)
+def _erro_banco(exc):
+    import logging
+    logging.error("Erro de banco de dados: %s", exc)
+    db.session.rollback()
+    from flask import flash, redirect, url_for, request as _req
+    flash(
+        "Erro de conexão com o banco de dados. "
+        "Se estiver usando VPN, aguarde alguns segundos e tente novamente.",
+        "danger"
+    )
+    destino = url_for("login") if not session.get("user_id") else url_for("ocorrencias")
+    return redirect(destino)
 
 # =========================
 # PERFORMANCE — cache de estáticos + gzip
@@ -799,7 +829,7 @@ class Ocorrencia(db.Model):
     site = db.Column(db.String(128), nullable=True)
     local = db.Column(db.String(120), nullable=False)
     operador = db.Column(db.String(120), nullable=False)
-    gc = db.Column(db.String(120), nullable=False)
+    gc = db.Column(db.Text, nullable=False)
     envolvido = db.Column(db.String(120), nullable=True)
     foto = db.Column(db.Text, nullable=True)
 
@@ -816,6 +846,9 @@ class Ocorrencia(db.Model):
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     boletim_ocorrencia = db.Column(db.Boolean, default=False, nullable=True)
     custo = db.Column(db.String(50), nullable=True)
+    valor_recuperado = db.Column(db.String(80), nullable=True)
+    valor_preventivo = db.Column(db.String(80), nullable=True)
+    prejuizo         = db.Column(db.String(80), nullable=True)
     responsavel_fechamento = db.Column(db.String(120), nullable=True)
     anexo_post_2      = db.Column(db.Text, nullable=True)
     anexo_post_nome_2 = db.Column(db.String(255), nullable=True)
@@ -885,6 +918,7 @@ def aplicar_filtros_anc(query):
     turno        = (request.args.get("turno")         or "").strip().upper()
     setor        = (request.args.get("setor")         or "").strip()
     natureza     = (request.args.get("natureza")      or "").strip()
+    site_filtro  = (request.args.get("site_filtro")   or "").strip()
 
     registros = query.all()
     filtrados = []
@@ -897,6 +931,7 @@ def aplicar_filtros_anc(query):
         if turno:        ok = ok and ((r.turno or "").upper() == turno)
         if setor:        ok = ok and (setor.lower() in (r.setor or "").lower())
         if natureza:     ok = ok and (natureza.lower() in (r.natureza or "").lower())
+        if site_filtro:  ok = ok and ((r.site or "") == site_filtro)
         if ok:
             filtrados.append(r)
 
@@ -904,6 +939,7 @@ def aplicar_filtros_anc(query):
         "data_inicial": data_inicial, "data_final": data_final,
         "status": status, "gravidade": gravidade,
         "turno": turno, "setor": setor, "natureza": natureza,
+        "site_filtro": site_filtro,
     }
     return filtrados, filtros
 
@@ -1977,18 +2013,48 @@ def analises():
         defer(AnaliseInvestigativa.anexo_fechamento),
     ]
     if is_admin:
-        registros = AnaliseInvestigativa.query.options(*_sem_blob).order_by(AnaliseInvestigativa.id.desc()).all()
+        query = AnaliseInvestigativa.query.options(*_sem_blob).order_by(AnaliseInvestigativa.id.desc())
     else:
-        registros = _query_filtrar_sites(
+        query = _query_filtrar_sites(
             AnaliseInvestigativa.query.options(*_sem_blob), AnaliseInvestigativa
-        ).order_by(AnaliseInvestigativa.id.desc()).all()
+        ).order_by(AnaliseInvestigativa.id.desc())
+
+    # Filtros server-side
+    data_inicial  = (request.args.get("data_inicial")  or "").strip()
+    data_final    = (request.args.get("data_final")    or "").strip()
+    status_f      = (request.args.get("status")        or "").strip().upper()
+    empresa_f     = (request.args.get("empresa")       or "").strip().lower()
+    responsavel_f = (request.args.get("responsavel")   or "").strip().lower()
+    site_filtro   = (request.args.get("site_filtro")   or "").strip()
+
+    todos = query.all()
+    registros = []
+    for r in todos:
+        data_r = r.criado_em.strftime("%Y-%m-%d") if r.criado_em else ""
+        ok = True
+        if data_inicial:  ok = ok and data_r >= data_inicial
+        if data_final:    ok = ok and data_r <= data_final
+        if status_f:      ok = ok and (r.status_analise or "").upper() == status_f
+        if empresa_f:     ok = ok and empresa_f in (r.empresa or "").lower()
+        if responsavel_f: ok = ok and responsavel_f in (r.responsavel or "").lower()
+        if site_filtro:   ok = ok and (r.site or "") == site_filtro
+        if ok:
+            registros.append(r)
+
+    filtros = {
+        "data_inicial": data_inicial, "data_final": data_final,
+        "status": status_f, "empresa": empresa_f,
+        "responsavel": responsavel_f, "site_filtro": site_filtro,
+    }
+    todos_sites_analise = sorted(set(r.site for r in todos if r.site)) if is_admin else []
 
     resumo = {
         "total":       len(registros),
         "sites":       len(set(r.site for r in registros if r.site)),
         "valor_total": _formatar_valor(sum(_parse_valor(r.valor) for r in registros if r.valor)),
     }
-    return render_template("analises.html", registros=registros, resumo=resumo, is_admin=is_admin)
+    return render_template("analises.html", registros=registros, resumo=resumo,
+                           is_admin=is_admin, filtros=filtros, todos_sites=todos_sites_analise)
 
 
 @app.route("/analises/excluir/<int:analise_id>", methods=["POST"])
@@ -2640,6 +2706,7 @@ def anc():
         "valor_total": _formatar_valor(sum(_parse_valor(r.valor) for r in registros if r.valor)),
     }
 
+    todos_sites_anc = sorted(set(r.site for r in ANC.query.with_entities(ANC.site).all() if r.site)) if is_admin else []
     return render_template(
         "anc.html",
         registros=registros, resumo=resumo, filtros=filtros,
@@ -2648,6 +2715,7 @@ def anc():
         agora=datetime.now().strftime("%Y-%m-%dT%H:%M"),
         hora_atual=datetime.now().strftime("%H:%M"),
         naturezas=_get_naturezas(),
+        todos_sites=todos_sites_anc,
     )
 
 
@@ -3210,12 +3278,30 @@ def redefinir_senha():
     return render_template("redefinir_senha.html")
 
 
+# ── Cache simples de sites (evita query no Oracle a cada carregamento do login) ─
+_sites_cache: list = []
+_sites_cache_ts: float = 0.0
+
+def _get_todos_sites() -> list:
+    """Retorna lista de sites em cache (TTL 5 min) para não bater no Oracle a cada load."""
+    import time
+    global _sites_cache, _sites_cache_ts
+    if _sites_cache and (time.time() - _sites_cache_ts) < 300:
+        return _sites_cache
+    try:
+        _sites_cache = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
+        _sites_cache_ts = time.time()
+    except Exception:
+        pass  # mantém cache anterior se falhar
+    return _sites_cache
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("user_id"):
         return redirect(url_for("ocorrencias"))
 
-    todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
+    todos_sites = _get_todos_sites()
 
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
@@ -3225,18 +3311,42 @@ def login():
             flash("Preencha e-mail e senha.", "warning")
             return render_template("login.html", todos_sites=todos_sites)
 
-        usuario = Usuario.query.filter_by(email=email, is_active=True).first()
+        try:
+            # defer foto_perfil (CLOB pesado) — não é necessário para autenticar
+            usuario = (Usuario.query
+                       .options(defer(Usuario.foto_perfil))
+                       .filter_by(email=email, is_active=True)
+                       .first())
+        except Exception as exc:
+            import logging
+            logging.error("Erro de conexão no login: %s", exc)
+            flash(
+                "Não foi possível conectar ao banco de dados. "
+                "Verifique sua conexão VPN e tente novamente.",
+                "danger"
+            )
+            return render_template("login.html", todos_sites=todos_sites)
 
         if not usuario or not usuario.check_password(senha):
             flash("E-mail ou senha inválidos.", "danger")
             return render_template("login.html", todos_sites=todos_sites)
 
-        session["user_id"] = usuario.id
-        session["user_nome"] = usuario.nome
-        session["username"] = usuario.email
-        session["user_perfil"] = usuario.perfil
-        session["user_site"] = usuario.site or ""
-        session["user_tem_foto"] = bool(usuario.foto_perfil)
+        # Verifica foto sem carregar o CLOB inteiro
+        try:
+            tem_foto = bool(
+                db.session.query(func.length(Usuario.foto_perfil))
+                .filter_by(id=usuario.id).scalar()
+            )
+        except Exception:
+            tem_foto = False
+
+        session.permanent = True          # mantém sessão por 30 dias
+        session["user_id"]        = usuario.id
+        session["user_nome"]      = usuario.nome
+        session["username"]       = usuario.email
+        session["user_perfil"]    = usuario.perfil
+        session["user_site"]      = usuario.site or ""
+        session["user_tem_foto"]  = tem_foto
         session["user_lgpd_aceito"] = usuario.lgpd_aceito or ""
 
         # Primeiro acesso: redireciona para aceite LGPD
@@ -3392,25 +3502,6 @@ def lgpd_aceite():
 @app.route("/ocorrencias", methods=["GET", "POST"])
 @login_required
 def ocorrencias():
-    registro_edicao = None
-    modo_edicao = False
-
-    editar_id = request.args.get("editar", type=int)
-    if editar_id:
-        registro_edicao = Ocorrencia.query.get_or_404(editar_id)
-        _user_perfil_oc  = (session.get("user_perfil") or "").upper()
-        _is_admin_oc     = _user_perfil_oc == "ADMIN"
-        _is_criador_oc   = registro_edicao.criado_por == session.get("user_nome", "")
-        _status_oc       = normalizar_status(registro_edicao.status)
-        _STATUS_FECHADOS = {"CONCLUIDO", "INCONCLUSIVA"}
-        if not _is_admin_oc and not _is_criador_oc:
-            flash("Você não tem permissão para editar esta ocorrência.", "danger")
-            return redirect(url_for("ocorrencias"))
-        if _status_oc in _STATUS_FECHADOS:
-            flash("Esta ocorrência já foi encerrada e não pode ser editada.", "warning")
-            return redirect(url_for("ocorrencias"))
-        modo_edicao = True
-
     site_usuario = session.get("user_site") or None
 
     if request.method == "POST":
@@ -3429,12 +3520,17 @@ def ocorrencias():
         site = (request.form.get("site") or site_usuario or "").strip()
         boletim_ocorrencia = request.form.get("boletim_ocorrencia") == "1"
         custo = (request.form.get("custo") or "").strip() or None
+        tipo_valor       = (request.form.get("tipo_valor") or "").strip()
+        valor_financeiro = (request.form.get("valor_financeiro") or "").strip() or None
+        valor_recuperado = valor_financeiro if tipo_valor == "RECUPERADO" else None
+        valor_preventivo = valor_financeiro if tipo_valor == "PREVENTIVO" else None
+        prejuizo         = valor_financeiro if tipo_valor == "PREJUIZO"   else None
 
         if not data_hora or not hora_ocorrencia or not natureza or not descricao or not local or not operador or not gc or not prioridade:
             flash("Preencha todos os campos obrigatórios.", "warning")
             if ocorrencia_id:
-                return redirect(url_for("ocorrencias", editar=ocorrencia_id))
-            return redirect(url_for("ocorrencias"))
+                return redirect(url_for("editar_ocorrencia", ocorrencia_id=ocorrencia_id))
+            return redirect(url_for("nova_investigacao"))
 
         foto = request.files.get("foto")
         nova_foto_b64 = None
@@ -3444,8 +3540,8 @@ def ocorrencias():
             if not nova_foto_b64:
                 flash("Formato de imagem inválido. Use JPG, JPEG, PNG ou WEBP.", "danger")
                 if ocorrencia_id:
-                    return redirect(url_for("ocorrencias", editar=ocorrencia_id))
-                return redirect(url_for("ocorrencias"))
+                    return redirect(url_for("editar_ocorrencia", ocorrencia_id=ocorrencia_id))
+                return redirect(url_for("nova_investigacao"))
 
         if ocorrencia_id:
             registro = Ocorrencia.query.get_or_404(ocorrencia_id)
@@ -3472,6 +3568,9 @@ def ocorrencias():
             registro.status = status
             registro.boletim_ocorrencia = boletim_ocorrencia
             registro.custo = custo
+            registro.valor_recuperado = valor_recuperado
+            registro.valor_preventivo = valor_preventivo
+            registro.prejuizo         = prejuizo
 
             if nova_foto_b64:
                 registro.foto = nova_foto_b64
@@ -3498,6 +3597,9 @@ def ocorrencias():
             status=status,
             boletim_ocorrencia=boletim_ocorrencia,
             custo=custo,
+            valor_recuperado=valor_recuperado,
+            valor_preventivo=valor_preventivo,
+            prejuizo=prejuizo,
             criado_por=session.get("user_nome")
         )
         db.session.add(nova)
@@ -3517,17 +3619,14 @@ def ocorrencias():
     total_hoje = len([r for r in registros if (r.data_hora or "").startswith(hoje_str)])
 
     resumo = {
-        "total": len(registros),
-        "hoje": total_hoje,
-        "com_foto": len([r for r in registros if r.foto]),
+        "total":     len(registros),
+        "hoje":      total_hoje,
+        "com_foto":  len([r for r in registros if r.foto]),
         "pendentes": len([r for r in registros if normalizar_status(r.status) == "PENDENTE"]),
+        "recuperado_count": len([r for r in registros if r.valor_recuperado]),
+        "preventivo_count": len([r for r in registros if r.valor_preventivo]),
+        "prejuizo_count":   len([r for r in registros if r.prejuizo]),
     }
-
-    agora = datetime.now().strftime("%Y-%m-%dT%H:%M")
-    hora_atual = datetime.now().strftime("%H:%M")
-
-    # Dados para o gráfico de colunas — investigações por local
-    por_local = Counter(r.local for r in registros if r.local)
 
     # Lista de sites para filtro (admin)
     _sites_q = db.session.query(Ocorrencia.site).distinct().all()
@@ -3537,35 +3636,15 @@ def ocorrencias():
     _ops_q = db.session.query(Ocorrencia.operador).distinct().all()
     todos_operadores = sorted(o[0] for o in _ops_q if o[0])
 
-    # Usuários do(s) site(s) acessíveis para o campo Operador no formulário
-    _sites_form = _sites_do_usuario()
-    if _sites_form:
-        usuarios_site = (
-            Usuario.query
-            .filter(Usuario.site.in_(_sites_form), Usuario.is_active == True)
-            .order_by(Usuario.nome)
-            .all()
-        )
-    else:
-        # ADMIN: mostra todos
-        usuarios_site = Usuario.query.filter_by(is_active=True).order_by(Usuario.nome).all()
-
     return render_template(
         "ocorrencias.html",
         registros=registros,
         resumo=resumo,
-        modo_edicao=modo_edicao,
-        registro_edicao=registro_edicao,
-        agora=agora,
-        hora_atual=hora_atual,
         filtros=filtros,
         site_usuario=site_usuario,
         is_admin=is_admin,
-        por_local=por_local,
         todos_sites=todos_sites,
         todos_operadores=todos_operadores,
-        usuarios_site=usuarios_site,
-        naturezas=_get_naturezas(),
     )
 
 
@@ -3586,6 +3665,40 @@ def nova_investigacao():
     else:
         usuarios_site = Usuario.query.filter_by(is_active=True).order_by(Usuario.nome).all()
     return render_template("nova_investigacao.html",
+        modo_edicao=False, registro_edicao=None,
+        site_usuario=site_usuario, agora=agora,
+        hora_atual=hora_atual, usuarios_site=usuarios_site,
+        naturezas=_get_naturezas(),
+    )
+
+
+@app.route("/ocorrencias/<int:ocorrencia_id>/editar")
+@login_required
+def editar_ocorrencia(ocorrencia_id):
+    registro = Ocorrencia.query.get_or_404(ocorrencia_id)
+    _is_admin   = (session.get("user_perfil") or "").upper() == "ADMIN"
+    _is_criador = registro.criado_por == session.get("user_nome", "")
+    if not _is_admin and not _is_criador:
+        flash("Você não tem permissão para editar esta ocorrência.", "danger")
+        return redirect(url_for("ocorrencias"))
+    if normalizar_status(registro.status) in {"CONCLUIDO", "INCONCLUSIVA"}:
+        flash("Esta ocorrência já foi encerrada e não pode ser editada.", "warning")
+        return redirect(url_for("ocorrencias"))
+    site_usuario = registro.site or session.get("user_site") or None
+    agora      = registro.data_hora or datetime.now().strftime("%Y-%m-%dT%H:%M")
+    hora_atual = registro.hora_ocorrencia or datetime.now().strftime("%H:%M")
+    _sites_form = _sites_do_usuario()
+    if _sites_form:
+        usuarios_site = (
+            Usuario.query
+            .filter(Usuario.site.in_(_sites_form), Usuario.is_active == True)
+            .order_by(Usuario.nome)
+            .all()
+        )
+    else:
+        usuarios_site = Usuario.query.filter_by(is_active=True).order_by(Usuario.nome).all()
+    return render_template("nova_investigacao.html",
+        modo_edicao=True, registro_edicao=registro,
         site_usuario=site_usuario, agora=agora,
         hora_atual=hora_atual, usuarios_site=usuarios_site,
         naturezas=_get_naturezas(),
@@ -3598,14 +3711,16 @@ def post_ocorrencia(ocorrencia_id):
     registro = Ocorrencia.query.get_or_404(ocorrencia_id)
 
     if request.method == "POST":
-        status_post = normalizar_status(request.form.get("status_post"))
-        responsavel = (request.form.get("responsavel_fechamento") or "").strip()
+        tipo_conclusao = normalizar_status(request.form.get("status_post"))
+        responsavel    = (request.form.get("responsavel_fechamento") or "").strip()
 
-        if not status_post:
+        _TIPOS_VALIDOS = {"ANALISE INVESTIGATIVA", "ANC", "LEVANTAMENTO DE IMAGENS", "INCONCLUSIVA", "CONCLUIDO"}
+
+        if not tipo_conclusao:
             flash("Selecione a conclusão da publicação.", "warning")
             return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
 
-        if status_post not in {"CONCLUIDO", "INCONCLUSIVA"}:
+        if tipo_conclusao not in _TIPOS_VALIDOS:
             flash("Opção inválida para a publicação.", "danger")
             return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
 
@@ -3613,8 +3728,10 @@ def post_ocorrencia(ocorrencia_id):
             flash("Informe o responsável pelo fechamento.", "warning")
             return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
 
+        # Status final: INCONCLUSIVA mantém, todos os outros tipos tornam CONCLUIDO
+        status_post = "INCONCLUSIVA" if tipo_conclusao == "INCONCLUSIVA" else "CONCLUIDO"
         registro.status = status_post
-        registro.situacao_investigacao = status_post
+        registro.situacao_investigacao = tipo_conclusao   # guarda o tipo específico (ANC, ANALISE INVESTIGATIVA, etc.)
         registro.responsavel_fechamento = responsavel
 
         for campo_file, campo_b64, campo_nome in [
@@ -3632,8 +3749,8 @@ def post_ocorrencia(ocorrencia_id):
                 setattr(registro, campo_nome, nome)
 
         db.session.commit()
-        flash("Publicação da ocorrência atualizada com sucesso.", "success")
-        return redirect(url_for("post_ocorrencia", ocorrencia_id=registro.id))
+        flash("Investigação encerrada com sucesso.", "success")
+        return redirect(url_for("ocorrencias"))
 
     return render_template("post_ocorrencia.html", registro=registro)
 
@@ -3697,8 +3814,14 @@ def overview():
     oc_andamento = len([r for r in ocs if normalizar_status(r.status) == "EM ANDAMENTO"])
     oc_concluidas= len([r for r in ocs if normalizar_status(r.status) == "CONCLUIDO"])
     oc_altas     = len([r for r in ocs if normalizar_prioridade(r.prioridade) == "ALTA"])
-    oc_bo        = len([r for r in ocs if r.boletim_ocorrencia])
-    oc_custo     = _formatar_valor(sum(_parse_valor(r.custo) for r in ocs if r.custo))
+    oc_bo             = len([r for r in ocs if r.boletim_ocorrencia])
+    oc_custo          = _formatar_valor(sum(_parse_valor(r.custo) for r in ocs if r.custo))
+    oc_recuperado     = _formatar_valor(sum(_parse_valor(r.valor_recuperado) for r in ocs if r.valor_recuperado))
+    oc_preventivo     = _formatar_valor(sum(_parse_valor(r.valor_preventivo) for r in ocs if r.valor_preventivo))
+    oc_prejuizo       = _formatar_valor(sum(_parse_valor(r.prejuizo)          for r in ocs if r.prejuizo))
+    oc_cnt_recuperado = len([r for r in ocs if r.valor_recuperado])
+    oc_cnt_preventivo = len([r for r in ocs if r.valor_preventivo])
+    oc_cnt_prejuizo   = len([r for r in ocs if r.prejuizo])
 
     oc_natureza  = Counter(r.natureza or "—" for r in ocs)
     oc_status_c  = Counter(normalizar_status(r.status) or "—" for r in ocs)
@@ -3751,7 +3874,14 @@ def overview():
     shifts = sh_q.all()
 
     sh_total     = len(shifts)
-    sh_assinados = len([r for r in shifts if r.status and "RECEBIDO" in r.status.upper()])
+    # Conta registros que têm assinatura_entrada preenchida (CLOB — não pode usar != '' no Oracle)
+    _sh_assin_q = db.session.query(func.count(OcorrenciaTurno.id)).filter(
+        OcorrenciaTurno.assinatura_entrada != None,
+        func.length(OcorrenciaTurno.assinatura_entrada) > 0
+    )
+    if not is_admin:
+        _sh_assin_q = _query_filtrar_sites(_sh_assin_q, OcorrenciaTurno)
+    sh_assinados = _sh_assin_q.scalar() or 0
     sh_pendentes = sh_total - sh_assinados
     sh_status_c  = Counter((r.status or "—") for r in shifts)
     sh_turno_c   = Counter((r.turno or "—") for r in shifts)
@@ -3766,6 +3896,8 @@ def overview():
         # KPIs globais
         oc_total=oc_total, oc_pendentes=oc_pendentes, oc_andamento=oc_andamento,
         oc_concluidas=oc_concluidas, oc_altas=oc_altas, oc_bo=oc_bo, oc_custo=oc_custo,
+        oc_recuperado=oc_recuperado, oc_preventivo=oc_preventivo, oc_prejuizo=oc_prejuizo,
+        oc_cnt_recuperado=oc_cnt_recuperado, oc_cnt_preventivo=oc_cnt_preventivo, oc_cnt_prejuizo=oc_cnt_prejuizo,
         anc_total=anc_total, anc_abertos=anc_abertos, anc_andamento=anc_andamento,
         anc_concluidos=anc_concluidos, anc_criticos=anc_criticos, anc_valor=anc_valor,
         an_total=an_total, an_andamento=an_andamento, an_fechadas=an_fechadas, an_valor=an_valor,
@@ -3823,6 +3955,12 @@ def dashboard():
     altas      = len([r for r in registros if normalizar_prioridade(r.prioridade) == "ALTA"])
     com_bo     = len([r for r in registros if r.boletim_ocorrencia])
     custo_total = _formatar_valor(sum(_parse_valor(r.custo) for r in registros if r.custo))
+    total_recuperado  = _formatar_valor(sum(_parse_valor(r.valor_recuperado) for r in registros if r.valor_recuperado))
+    total_preventivo  = _formatar_valor(sum(_parse_valor(r.valor_preventivo) for r in registros if r.valor_preventivo))
+    total_prejuizo    = _formatar_valor(sum(_parse_valor(r.prejuizo)          for r in registros if r.prejuizo))
+    cnt_recuperado    = len([r for r in registros if r.valor_recuperado])
+    cnt_preventivo    = len([r for r in registros if r.valor_preventivo])
+    cnt_prejuizo      = len([r for r in registros if r.prejuizo])
 
     # Taxa de resolução (%)
     taxa_resolucao = round(concluidas / total * 100) if total > 0 else 0
@@ -3910,8 +4048,14 @@ def dashboard():
             "registros_mes":  registros_mes,
             "natureza_top":   natureza_top,
             "local_top":      local_top,
-            "com_bo":         com_bo,
-            "custo_total":    custo_total,
+            "com_bo":            com_bo,
+            "custo_total":       custo_total,
+            "total_recuperado":  total_recuperado,
+            "total_preventivo":  total_preventivo,
+            "total_prejuizo":    total_prejuizo,
+            "cnt_recuperado":    cnt_recuperado,
+            "cnt_preventivo":    cnt_preventivo,
+            "cnt_prejuizo":      cnt_prejuizo,
         },
         labels_natureza=[x[0] for x in natureza_sorted],
         valores_natureza=[x[1] for x in natureza_sorted],
@@ -5717,6 +5861,15 @@ def _init_db():
             "CREATE TABLE SISTEMA_CONFIG (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, VERSAO_EXIGIDA VARCHAR2(20), DOWNLOAD_URL VARCHAR2(500), EXE_BLOB BLOB)",
             "INSERT INTO SISTEMA_CONFIG (VERSAO_EXIGIDA) SELECT '3.0' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM SISTEMA_CONFIG)",
             "UPDATE SISTEMA_CONFIG SET VERSAO_EXIGIDA = '3.0'",
+            # Ampliar GC para CLOB (Oracle não permite MODIFY direto — renomeia + recria)
+            "ALTER TABLE OCORRENCIAS ADD (GC_TMP CLOB)",
+            "UPDATE OCORRENCIAS SET GC_TMP = GC",
+            "ALTER TABLE OCORRENCIAS DROP COLUMN GC",
+            "ALTER TABLE OCORRENCIAS RENAME COLUMN GC_TMP TO GC",
+            # Colunas de valor financeiro por tipo
+            "ALTER TABLE OCORRENCIAS ADD (VALOR_RECUPERADO VARCHAR2(80))",
+            "ALTER TABLE OCORRENCIAS ADD (VALOR_PREVENTIVO VARCHAR2(80))",
+            "ALTER TABLE OCORRENCIAS ADD (PREJUIZO VARCHAR2(80))",
             "ALTER TABLE SISTEMA_CONFIG ADD (DOWNLOAD_URL VARCHAR2(500))",
             "ALTER TABLE SISTEMA_CONFIG ADD (EXE_BLOB BLOB)",
             "CREATE TABLE USUARIO_SITES (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, USUARIO_ID NUMBER NOT NULL, SITE_NOME VARCHAR2(128) NOT NULL)",

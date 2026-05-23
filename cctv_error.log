@@ -92,3 +92,91 @@
 2026-05-15 21:37:19,996 INFO: 127.0.0.1 - - [15/May/2026 21:37:19] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
 2026-05-15 21:38:39,571 INFO: 127.0.0.1 - - [15/May/2026 21:38:39] "GET /overview HTTP/1.1" 200 -
 2026-05-15 21:38:39,599 INFO: 127.0.0.1 - - [15/May/2026 21:38:39] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-22 20:43:52,803 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-22 20:43:52,804 INFO: [33mPress CTRL+C to quit[0m
+2026-05-22 20:43:52,807 INFO:  * Restarting with stat
+2026-05-22 20:44:04,899 WARNING:  * Debugger is active!
+2026-05-22 20:44:04,902 INFO:  * Debugger PIN: 229-837-400
+2026-05-22 20:45:00,866 INFO: 127.0.0.1 - - [22/May/2026 20:45:00] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 20:45:02,083 INFO: 127.0.0.1 - - [22/May/2026 20:45:02] "GET /login HTTP/1.1" 200 -
+2026-05-22 20:45:02,351 INFO: 127.0.0.1 - - [22/May/2026 20:45:02] "GET /static/panel.js HTTP/1.1" 200 -
+2026-05-22 20:45:02,356 INFO: 127.0.0.1 - - [22/May/2026 20:45:02] "GET /static/shared%20image%20(1).png HTTP/1.1" 200 -
+2026-05-22 20:45:03,553 INFO: 127.0.0.1 - - [22/May/2026 20:45:03] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-05-22 20:45:16,022 INFO: 127.0.0.1 - - [22/May/2026 20:45:16] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-05-22 20:45:25,802 INFO: 127.0.0.1 - - [22/May/2026 20:45:25] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-22 20:45:25,830 INFO: 127.0.0.1 - - [22/May/2026 20:45:25] "GET /static/htmx.min.js HTTP/1.1" 200 -
+2026-05-22 20:45:25,831 INFO: 127.0.0.1 - - [22/May/2026 20:45:25] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-22 20:45:34,854 INFO: 127.0.0.1 - - [22/May/2026 20:45:34] "GET /nova-investigacao HTTP/1.1" 200 -
+2026-05-22 20:45:42,680 INFO: 127.0.0.1 - - [22/May/2026 20:45:42] "GET /analises HTTP/1.1" 200 -
+2026-05-22 20:45:54,038 INFO: 127.0.0.1 - - [22/May/2026 20:45:54] "GET /analise-investigativa HTTP/1.1" 200 -
+2026-05-22 20:46:09,438 INFO: 127.0.0.1 - - [22/May/2026 20:46:09] "GET /anc HTTP/1.1" 200 -
+2026-05-22 20:46:19,844 INFO: 127.0.0.1 - - [22/May/2026 20:46:19] "GET /shift-handover/ HTTP/1.1" 200 -
+2026-05-22 20:50:09,146 INFO: 127.0.0.1 - - [22/May/2026 20:50:09] "GET /chaves/meu-claviculario HTTP/1.1" 200 -
+2026-05-22 20:50:18,188 INFO: 127.0.0.1 - - [22/May/2026 20:50:18] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-22 20:55:15,148 INFO: 127.0.0.1 - - [22/May/2026 20:55:15] "GET /analises HTTP/1.1" 200 -
+2026-05-22 20:55:22,685 INFO: 127.0.0.1 - - [22/May/2026 20:55:22] "GET /anc HTTP/1.1" 200 -
+2026-05-22 20:55:25,029 INFO: 127.0.0.1 - - [22/May/2026 20:55:25] "GET /nova-anc HTTP/1.1" 200 -
+2026-05-22 21:05:01,328 INFO: 127.0.0.1 - - [22/May/2026 21:05:01] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-22 21:13:30,560 INFO: 127.0.0.1 - - [22/May/2026 21:13:30] "GET /shift-handover/ HTTP/1.1" 200 -
+2026-05-22 21:13:39,223 INFO: 127.0.0.1 - - [22/May/2026 21:13:39] "GET /overview HTTP/1.1" 200 -
+2026-05-22 21:23:32,656 INFO:  * Detected change in 'C:\\Users\\deivimar\\OneDrive - DPDHL\\Documents\\GitHub\\controle_ocorrencias\\app.py', reloading
+2026-05-22 21:23:33,100 INFO:  * Restarting with stat
+2026-05-22 21:23:45,712 WARNING:  * Debugger is active!
+2026-05-22 21:23:45,727 INFO:  * Debugger PIN: 229-837-400
+2026-05-22 21:23:56,181 INFO:  * Detected change in 'C:\\Users\\deivimar\\OneDrive - DPDHL\\Documents\\GitHub\\controle_ocorrencias\\app.py', reloading
+2026-05-22 21:23:56,549 INFO:  * Restarting with stat
+2026-05-22 21:24:08,395 WARNING:  * Debugger is active!
+2026-05-22 21:24:08,407 INFO:  * Debugger PIN: 229-837-400
+2026-05-22 21:24:14,708 INFO:  * Detected change in 'C:\\Users\\deivimar\\OneDrive - DPDHL\\Documents\\GitHub\\controle_ocorrencias\\app.py', reloading
+2026-05-22 21:24:15,037 INFO:  * Restarting with stat
+2026-05-22 21:24:27,307 WARNING:  * Debugger is active!
+2026-05-22 21:24:27,320 INFO:  * Debugger PIN: 229-837-400
+2026-05-22 21:27:04,022 INFO: 127.0.0.1 - - [22/May/2026 21:27:04] "[35m[1mGET /overview HTTP/1.1[0m" 500 -
+2026-05-22 21:27:04,470 INFO: 127.0.0.1 - - [22/May/2026 21:27:04] "GET /overview?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2026-05-22 21:27:04,471 INFO: 127.0.0.1 - - [22/May/2026 21:27:04] "GET /overview?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2026-05-22 21:27:04,544 INFO: 127.0.0.1 - - [22/May/2026 21:27:04] "GET /overview?__debugger__=yes&cmd=resource&f=console.png&s=G09YvKkykR1bz77TYZvQ HTTP/1.1" 200 -
+2026-05-22 21:27:04,564 INFO: 127.0.0.1 - - [22/May/2026 21:27:04] "GET /overview?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2026-05-22 21:27:29,232 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-22 21:27:29,235 INFO: [33mPress CTRL+C to quit[0m
+2026-05-22 21:27:29,240 INFO:  * Restarting with stat
+2026-05-22 21:27:43,842 WARNING:  * Debugger is active!
+2026-05-22 21:27:43,854 INFO:  * Debugger PIN: 229-837-400
+2026-05-22 21:27:43,932 INFO: 127.0.0.1 - - [22/May/2026 21:27:43] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:27:45,165 INFO: 127.0.0.1 - - [22/May/2026 21:27:45] "[35m[1mGET /ocorrencias HTTP/1.1[0m" 500 -
+2026-05-22 21:27:45,625 INFO: 127.0.0.1 - - [22/May/2026 21:27:45] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2026-05-22 21:27:45,627 INFO: 127.0.0.1 - - [22/May/2026 21:27:45] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2026-05-22 21:27:45,689 INFO: 127.0.0.1 - - [22/May/2026 21:27:45] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=console.png&s=pqbTmZYsGDtGgRGKJ05T HTTP/1.1" 200 -
+2026-05-22 21:27:45,712 INFO: 127.0.0.1 - - [22/May/2026 21:27:45] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2026-05-22 21:28:25,930 INFO: 127.0.0.1 - - [22/May/2026 21:28:25] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:27,061 INFO: 127.0.0.1 - - [22/May/2026 21:28:27] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:27,333 INFO: 127.0.0.1 - - [22/May/2026 21:28:27] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:28,206 INFO: 127.0.0.1 - - [22/May/2026 21:28:28] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:29,341 INFO: 127.0.0.1 - - [22/May/2026 21:28:29] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:29,516 INFO: 127.0.0.1 - - [22/May/2026 21:28:29] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:29,847 INFO: 127.0.0.1 - - [22/May/2026 21:28:29] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:30,483 INFO: 127.0.0.1 - - [22/May/2026 21:28:30] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:31,645 INFO: 127.0.0.1 - - [22/May/2026 21:28:31] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:31,706 INFO: 127.0.0.1 - - [22/May/2026 21:28:31] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:31,780 INFO: 127.0.0.1 - - [22/May/2026 21:28:31] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:32,813 INFO: 127.0.0.1 - - [22/May/2026 21:28:32] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:33,136 INFO: 127.0.0.1 - - [22/May/2026 21:28:33] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:33,951 INFO: 127.0.0.1 - - [22/May/2026 21:28:33] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:34,164 INFO: 127.0.0.1 - - [22/May/2026 21:28:34] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:35,100 INFO: 127.0.0.1 - - [22/May/2026 21:28:35] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:35,331 INFO: 127.0.0.1 - - [22/May/2026 21:28:35] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:36,256 INFO: 127.0.0.1 - - [22/May/2026 21:28:36] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:36,478 INFO: 127.0.0.1 - - [22/May/2026 21:28:36] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:37,209 INFO: 127.0.0.1 - - [22/May/2026 21:28:37] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:40,449 INFO: 127.0.0.1 - - [22/May/2026 21:28:40] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-22 21:28:41,629 INFO: 127.0.0.1 - - [22/May/2026 21:28:41] "GET /login HTTP/1.1" 200 -
+2026-05-22 21:28:41,658 INFO: 127.0.0.1 - - [22/May/2026 21:28:41] "GET /static/shared%20image%20(1).png HTTP/1.1" 200 -
+2026-05-22 21:28:41,660 INFO: 127.0.0.1 - - [22/May/2026 21:28:41] "GET /static/panel.js HTTP/1.1" 200 -
+2026-05-22 21:28:43,869 INFO: 127.0.0.1 - - [22/May/2026 21:28:43] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-05-22 21:28:58,948 INFO: 127.0.0.1 - - [22/May/2026 21:28:58] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-05-22 21:28:59,841 INFO: 127.0.0.1 - - [22/May/2026 21:28:59] "[35m[1mGET /ocorrencias HTTP/1.1[0m" 500 -
+2026-05-22 21:28:59,883 INFO: 127.0.0.1 - - [22/May/2026 21:28:59] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1" 200 -
+2026-05-22 21:28:59,886 INFO: 127.0.0.1 - - [22/May/2026 21:28:59] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
+2026-05-22 21:28:59,907 INFO: 127.0.0.1 - - [22/May/2026 21:28:59] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=console.png&s=pqbTmZYsGDtGgRGKJ05T HTTP/1.1" 200 -
+2026-05-22 21:28:59,965 INFO: 127.0.0.1 - - [22/May/2026 21:28:59] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -

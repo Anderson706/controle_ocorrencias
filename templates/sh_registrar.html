@@ -343,7 +343,7 @@
 <section class="section">
   <div class="card">
     <div class="section-title"><h3>Filtros</h3><span class="section-chip">Consulta</span></div>
-    <form method="GET" action="{{ url_for('sh_index') }}">
+    <form method="GET" action="{{ url_for('sh_index') }}" hx-boost="false">
       <div class="row">
         <div class="field"><label>Data inicial</label><input type="date" name="data_inicial" value="{{ filtros['data_inicial'] }}"></div>
         <div class="field"><label>Data final</label><input type="date" name="data_final" value="{{ filtros['data_final'] }}"></div>

@@ -1,7 +1,7 @@
 {% extends "base_app.html" %}
-{% block page_title %}Nova Investigação | CCTV Control Panel{% endblock %}
-{% block topbar_title %}📋 Nova Investigação{% endblock %}
-{% block topbar_subtitle %}Registre uma nova investigação operacional{% endblock %}
+{% block page_title %}{% if modo_edicao %}Editar Investigação{% else %}Nova Investigação{% endif %} | CCTV Control Panel{% endblock %}
+{% block topbar_title %}{% if modo_edicao %}✏️ Editar Investigação{% else %}📋 Nova Investigação{% endif %}{% endblock %}
+{% block topbar_subtitle %}{% if modo_edicao %}Edite os dados da investigação{% else %}Registre uma nova investigação operacional{% endif %}{% endblock %}
 {% block topbar_actions %}
   <a href="{{ url_for('ocorrencias') }}" class="btn btn-soft btn-sm">← Controle</a>
 {% endblock %}
@@ -21,20 +21,32 @@
 </style>
 
 <section class="hero">
-  <h2>Nova Investigação</h2>
-  <p>Preencha os campos abaixo para registrar uma nova investigação. Todos os campos marcados com * são obrigatórios.</p>
+  <h2>
+    {% if modo_edicao %}Editar Investigação
+      {% if registro_edicao %}
+      <span style="display:inline-flex; margin-left:10px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); font-size:14px; font-weight:800;">
+        Nº {{ registro_edicao.numero_site or registro_edicao.id }}
+      </span>
+      {% endif %}
+    {% else %}Nova Investigação{% endif %}
+  </h2>
+  <p>{% if modo_edicao %}Altere os campos necessários e salve as modificações.{% else %}Preencha os campos abaixo para registrar uma nova investigação. Todos os campos marcados com * são obrigatórios.{% endif %}</p>
 </section>
 
 <div class="form-card">
   <div class="form-card-hdr">
     <div class="form-card-hdr-bar"></div>
     <div>
-      <div class="form-card-hdr-title">📋 NOVA INVESTIGAÇÃO OPERACIONAL</div>
-      <div class="form-card-hdr-sub">Preencha todos os campos obrigatórios (*)</div>
+      <div class="form-card-hdr-title">{% if modo_edicao %}✏️ EDITAR INVESTIGAÇÃO OPERACIONAL{% else %}📋 NOVA INVESTIGAÇÃO OPERACIONAL{% endif %}</div>
+      <div class="form-card-hdr-sub">{% if modo_edicao %}ID #{{ registro_edicao.id }} — altere e salve{% else %}Preencha todos os campos obrigatórios (*){% endif %}</div>
     </div>
   </div>
   <div class="form-card-body">
-    <form method="POST" action="{{ url_for('ocorrencias') }}" enctype="multipart/form-data">
+    <form method="POST" action="{{ url_for('ocorrencias') }}" enctype="multipart/form-data" hx-boost="false">
+      {% if modo_edicao and registro_edicao %}
+      <input type="hidden" name="ocorrencia_id" value="{{ registro_edicao.id }}">
+      {% endif %}
+
       <div class="sec-hdr">📅 Identificação</div>
       <div class="row">
         <div class="field">
@@ -58,19 +70,19 @@
           <select name="natureza" required>
             <option value="">Selecione</option>
             {% for item in naturezas %}
-            <option value="{{ item }}">{{ item }}</option>
+            <option value="{{ item }}" {% if modo_edicao and registro_edicao and registro_edicao.natureza == item %}selected{% endif %}>{{ item }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="field">
           <label>Local *</label>
-          <input type="text" name="local" placeholder="Ex: Portaria, Inbound, Pátio..." required>
+          <input type="text" name="local" placeholder="Ex: Portaria, Inbound, Pátio..." value="{% if modo_edicao and registro_edicao %}{{ registro_edicao.local or '' }}{% endif %}" required>
         </div>
       </div>
       <div class="spacer"></div>
       <div class="field">
         <label>Descrição *</label>
-        <textarea name="descricao" required placeholder="Descreva a investigação detalhadamente..."></textarea>
+        <textarea name="descricao" required placeholder="Descreva a investigação detalhadamente...">{% if modo_edicao and registro_edicao %}{{ registro_edicao.descricao or '' }}{% endif %}</textarea>
       </div>
       <div class="sec-hdr">👤 Responsáveis</div>
       <div class="row">
@@ -80,20 +92,23 @@
           <select name="operador" required>
             <option value="">Selecione o operador…</option>
             {% for u in usuarios_site %}
-            <option value="{{ u.nome }}">{{ u.nome }}</option>
+            <option value="{{ u.nome }}" {% if modo_edicao and registro_edicao and registro_edicao.operador == u.nome %}selected{% endif %}>{{ u.nome }}</option>
             {% endfor %}
+            {% if modo_edicao and registro_edicao and registro_edicao.operador and registro_edicao.operador not in usuarios_site|map(attribute='nome')|list %}
+            <option value="{{ registro_edicao.operador }}" selected>{{ registro_edicao.operador }}</option>
+            {% endif %}
           </select>
           {% else %}
-          <input type="text" name="operador" placeholder="Nome do operador" required>
+          <input type="text" name="operador" placeholder="Nome do operador" value="{% if modo_edicao and registro_edicao %}{{ registro_edicao.operador or '' }}{% endif %}" required>
           {% endif %}
         </div>
         <div class="field">
-          <label>Sub-Package Number *</label>
-          <input type="text" name="gc" required>
+          <label>Nº de Referência (nota fiscal, cód. da remessa) *</label>
+          <input type="text" name="gc" value="{% if modo_edicao and registro_edicao %}{{ registro_edicao.gc or '' }}{% endif %}" required>
         </div>
         <div class="field">
           <label>Envolvido</label>
-          <input type="text" name="envolvido" placeholder="Nome do(s) envolvido(s)">
+          <input type="text" name="envolvido" placeholder="Nome do(s) envolvido(s)" value="{% if modo_edicao and registro_edicao %}{{ registro_edicao.envolvido or '' }}{% endif %}">
         </div>
       </div>
       <div class="sec-hdr">⚡ Classificação</div>
@@ -102,43 +117,84 @@
           <label>Prioridade *</label>
           <select name="prioridade" required>
             <option value="">Selecione</option>
-            <option value="ALTA">Alta</option>
-            <option value="MEDIA">Média</option>
-            <option value="BAIXA">Baixa</option>
+            <option value="ALTA" {% if modo_edicao and registro_edicao and registro_edicao.prioridade == 'ALTA' %}selected{% endif %}>Alta</option>
+            <option value="MEDIA" {% if modo_edicao and registro_edicao and registro_edicao.prioridade == 'MEDIA' %}selected{% endif %}>Média</option>
+            <option value="BAIXA" {% if modo_edicao and registro_edicao and registro_edicao.prioridade == 'BAIXA' %}selected{% endif %}>Baixa</option>
           </select>
         </div>
         <div class="field">
           <label>Status *</label>
           <select name="status" required>
-            <option value="PENDENTE">Pendente</option>
-            <option value="EM ANDAMENTO">Em Andamento</option>
-            <option value="CONCLUIDO">Concluído</option>
+            <option value="PENDENTE" {% if modo_edicao and registro_edicao and registro_edicao.status == 'PENDENTE' %}selected{% elif not modo_edicao %}selected{% endif %}>Pendente</option>
+            <option value="EM ANDAMENTO" {% if modo_edicao and registro_edicao and registro_edicao.status == 'EM ANDAMENTO' %}selected{% endif %}>Em Andamento</option>
+            <option value="CONCLUIDO" {% if modo_edicao and registro_edicao and registro_edicao.status == 'CONCLUIDO' %}selected{% endif %}>Concluído</option>
           </select>
         </div>
         <div class="field">
-          <label>Custo Estimado</label>
-          <input type="text" name="custo" placeholder="Ex: R$ 1.500,00">
+          <label>Tipo de Valor</label>
+          <select name="tipo_valor" id="tipo_valor" onchange="toggleValor()">
+            <option value="">— Não informado —</option>
+            <option value="RECUPERADO" {% if modo_edicao and registro_edicao and registro_edicao.valor_recuperado %}selected{% endif %}>Valor Recuperado</option>
+            <option value="PREVENTIVO" {% if modo_edicao and registro_edicao and registro_edicao.valor_preventivo %}selected{% endif %}>Valor Preventivo</option>
+            <option value="PREJUIZO"   {% if modo_edicao and registro_edicao and registro_edicao.prejuizo %}selected{% endif %}>Prejuízo</option>
+          </select>
+        </div>
+        <div class="field" id="campo-valor" style="display:none;">
+          <label id="label-valor">Valor</label>
+          <input type="text" name="valor_financeiro" id="valor-financeiro" placeholder="Ex: R$ 1.500,00"
+            value="{% if modo_edicao and registro_edicao %}{{ registro_edicao.valor_recuperado or registro_edicao.valor_preventivo or registro_edicao.prejuizo or '' }}{% endif %}">
         </div>
       </div>
       <div class="spacer"></div>
       <div class="row">
         <div class="field" style="flex:none;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;text-transform:none;font-size:13px;">
-            <input type="checkbox" name="boletim_ocorrencia" value="1" style="width:16px;height:16px;accent-color:#b1030d;cursor:pointer;">
+            <input type="checkbox" name="boletim_ocorrencia" value="1" {% if modo_edicao and registro_edicao and registro_edicao.boletim_ocorrencia %}checked{% endif %} style="width:16px;height:16px;accent-color:#b1030d;cursor:pointer;">
             Boletim de Ocorrência gerado
           </label>
         </div>
       </div>
       <div class="sec-hdr">📷 Evidências</div>
       <div class="field">
-        <label>Foto (JPG, PNG, WEBP)</label>
+        <label>Foto (JPG, PNG, WEBP){% if modo_edicao %} — envie nova foto para substituir{% endif %}</label>
         <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp">
       </div>
+      {% if modo_edicao and registro_edicao and registro_edicao.foto %}
+      <div class="spacer"></div>
+      <div class="field">
+        <label>Foto atual</label>
+        <div class="thumbs">
+          <a href="{{ registro_edicao.foto }}" target="_blank">
+            <img src="{{ registro_edicao.foto }}" alt="Foto atual">
+          </a>
+        </div>
+      </div>
+      {% endif %}
       <div class="form-actions">
-        <button type="submit" class="btn btn-red">✓ Salvar Investigação</button>
-        <a href="{{ url_for('ocorrencias') }}" class="btn btn-ghost">Cancelar</a>
+        <button type="submit" class="btn btn-red">{% if modo_edicao %}✓ Salvar Alterações{% else %}✓ Salvar Investigação{% endif %}</button>
+        <a href="{{ url_for('ocorrencias') }}" class="btn btn-ghost">{% if modo_edicao %}Cancelar edição{% else %}Cancelar{% endif %}</a>
       </div>
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+const LABELS = { RECUPERADO: 'Valor Recuperado', PREVENTIVO: 'Valor Preventivo', PREJUIZO: 'Prejuízo' };
+function toggleValor() {
+  var sel   = document.getElementById('tipo_valor');
+  var campo = document.getElementById('campo-valor');
+  var lbl   = document.getElementById('label-valor');
+  if (sel.value) {
+    campo.style.display = '';
+    lbl.textContent = LABELS[sel.value] || 'Valor';
+  } else {
+    campo.style.display = 'none';
+    document.getElementById('valor-financeiro').value = '';
+  }
+}
+// Inicializa estado na edição (caso já tenha tipo selecionado)
+document.addEventListener('DOMContentLoaded', toggleValor);
+</script>
 {% endblock %}

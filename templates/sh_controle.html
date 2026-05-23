@@ -94,7 +94,7 @@
 <!-- Filtros -->
 <div class="filter-card">
   <div class="filter-title"><span></span> Filtros</div>
-  <form method="GET" action="{{ url_for('sh_controle') }}">
+  <form method="GET" action="{{ url_for('sh_controle') }}" hx-boost="false">
     <div class="filter-row">
       <div class="filter-group"><label>Data Inicial</label><input type="date" name="data_inicial" value="{{ filtros['data_inicial'] }}"></div>
       <div class="filter-group"><label>Data Final</label><input type="date" name="data_final" value="{{ filtros['data_final'] }}"></div>

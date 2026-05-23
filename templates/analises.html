@@ -41,48 +41,63 @@
   </div>
 </section>
 
+<div class="filter-card">
+  <div class="filter-head">
+    <h3>🔍 Filtros</h3>
+    <span class="section-chip">Consulta dinâmica</span>
+  </div>
+  <form method="GET" action="{{ url_for('analises') }}" hx-boost="false">
+    <div class="filters">
+      <div>
+        <label>Data inicial</label>
+        <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}">
+      </div>
+      <div>
+        <label>Data final</label>
+        <input type="date" name="data_final" value="{{ filtros.data_final }}">
+      </div>
+      <div>
+        <label>Empresa</label>
+        <input type="text" name="empresa" value="{{ filtros.empresa }}" placeholder="Nome da empresa...">
+      </div>
+      <div>
+        <label>Responsável</label>
+        <input type="text" name="responsavel" value="{{ filtros.responsavel }}" placeholder="Nome do responsável...">
+      </div>
+      <div>
+        <label>Status</label>
+        <select name="status">
+          <option value="">Todos os status</option>
+          <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>Em Andamento</option>
+          <option value="FECHADA"      {% if filtros.status == 'FECHADA'      %}selected{% endif %}>Fechada</option>
+        </select>
+      </div>
+      {% if is_admin %}
+      <div>
+        <label>Site</label>
+        <select name="site_filtro">
+          <option value="">Todos os sites</option>
+          {% for s in todos_sites %}
+          <option value="{{ s }}" {% if filtros.site_filtro == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-red">Aplicar filtros</button>
+      <a href="{{ url_for('analises') }}" class="btn btn-soft">Limpar</a>
+      {% if filtros.data_inicial or filtros.data_final or filtros.status or filtros.empresa or filtros.responsavel or filtros.site_filtro %}
+      <span style="font-size:12px;font-weight:700;color:var(--muted);">Filtro ativo</span>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
 <section class="section">
   <div class="section-title">
     <h3>Análises registradas</h3>
-    <span class="section-chip">Registros</span>
-  </div>
-  <div class="filter-bar">
-    <div class="filter-row">
-      <div class="filter-field" style="flex:2; min-width:200px;">
-        <label>Busca geral</label>
-        <input type="text" id="f-busca" placeholder="Empresa, responsável, unidade...">
-      </div>
-      {% if is_admin %}
-      <div class="filter-field">
-        <label>Site</label>
-        <input type="text" id="f-site" placeholder="Filtrar por site">
-      </div>
-      {% endif %}
-      <div class="filter-field">
-        <label>Empresa</label>
-        <input type="text" id="f-empresa" placeholder="Nome da empresa">
-      </div>
-      <div class="filter-field" style="min-width:140px;">
-        <label>Data início</label>
-        <input type="date" id="f-data-ini">
-      </div>
-      <div class="filter-field" style="min-width:140px;">
-        <label>Data fim</label>
-        <input type="date" id="f-data-fim">
-      </div>
-      <div class="filter-field" style="min-width:140px;">
-        <label>Conclusão</label>
-        <select id="f-conclusao">
-          <option value="">Todas</option>
-          <option value="concluida">Concluída</option>
-          <option value="pendente">Pendente</option>
-        </select>
-      </div>
-      <div class="filter-actions">
-        <button class="btn-clear" id="btn-limpar" type="button">Limpar</button>
-        <span class="filter-count" id="f-count"></span>
-      </div>
-    </div>
+    <span class="section-chip">{{ resumo.total }} registro{{ 's' if resumo.total != 1 else '' }}</span>
   </div>
 
   <div class="table-wrap">
@@ -93,10 +108,8 @@
           {% if is_admin %}<th>Site</th>{% endif %}
           <th>Data</th>
           <th>Empresa</th>
-          <th>Unidade</th>
-          <th>Responsável</th>
+          <th>Responsável pelo Levantamento</th>
           <th>Status</th>
-          <th>Criado por</th>
           <th style="text-align:center;">Ações</th>
         </tr>
       </thead>
@@ -107,13 +120,11 @@
           {% if is_admin %}<td><span style="font-size:12px; font-weight:700; color:#374151;">{{ r.site or '-' }}</span></td>{% endif %}
           <td style="white-space:nowrap;">{{ r.criado_em.strftime('%d/%m/%Y %H:%M') if r.criado_em else '-' }}</td>
           <td>{{ r.empresa or '-' }}</td>
-          <td style="max-width:200px;">{{ r.unidade or '-' }}</td>
           <td>{{ r.responsavel or '-' }}</td>
           <td>
             {% if r.status_analise == 'FECHADA' %}<span class="badge-fechada">✔ Fechada</span>
             {% else %}<span class="badge-andamento"> Em andamento</span>{% endif %}
           </td>
-          <td>{{ r.criado_por or '-' }}</td>
           <td style="text-align:center; white-space:nowrap; display:flex; gap:6px; justify-content:center;">
             <button type="button" class="btn btn-dark btn-sm" onclick="abrirModal(this)"
               data-id="{{ r.id }}"
@@ -145,7 +156,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="{{ 9 if is_admin else 8 }}" style="text-align:center; padding:28px; color:var(--muted); font-weight:700;">Nenhuma análise registrada.</td>
+          <td colspan="{{ 7 if is_admin else 6 }}" style="text-align:center; padding:28px; color:var(--muted); font-weight:700;">Nenhuma análise registrada.</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -277,44 +288,6 @@ function abrirModal(btn) {
 function fecharModal() { document.getElementById('modal').classList.remove('open'); }
 function fecharModalFora(e) { if (e.target === document.getElementById('modal')) fecharModal(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
-</script>
-<script>
-(function(){
-  var tbody = document.querySelector('tbody');
-  var allRows = Array.from(tbody ? tbody.querySelectorAll('tr') : []).filter(function(tr){ return !(tr.children.length === 1 && tr.children[0].colSpan > 1); });
-  var total = allRows.length;
-  function val(id){ var el = document.getElementById(id); return el ? el.value : ''; }
-  function filtrar(){
-    var busca   = val('f-busca').toLowerCase().trim();
-    var site    = val('f-site').toLowerCase().trim();
-    var empresa = val('f-empresa').toLowerCase().trim();
-    var dataIni = val('f-data-ini'); var dataFim = val('f-data-fim');
-    var conclusao = val('f-conclusao'); var visible = 0;
-    allRows.forEach(function(tr){
-      var btn = tr.querySelector('button[data-id]');
-      if(busca && tr.textContent.toLowerCase().indexOf(busca) === -1){ tr.style.display='none'; return; }
-      if(site && btn && btn.dataset.site.toLowerCase().indexOf(site) === -1){ tr.style.display='none'; return; }
-      if(empresa && btn && btn.dataset.empresa.toLowerCase().indexOf(empresa) === -1){ tr.style.display='none'; return; }
-      if(dataIni || dataFim){
-        var dm = tr.textContent.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-        if(dm){ var rowDate = new Date(+dm[3], +dm[2]-1, +dm[1]);
-          if(dataIni){ var p1=dataIni.split('-'); if(rowDate < new Date(+p1[0],+p1[1]-1,+p1[2])){ tr.style.display='none'; return; } }
-          if(dataFim){ var p2=dataFim.split('-'); if(rowDate > new Date(+p2[0],+p2[1]-1,+p2[2])){ tr.style.display='none'; return; } }
-        }
-      }
-      if(conclusao){ var badge=tr.querySelector('.badge-fechada'); var ok = !!badge;
-        if(conclusao==='concluida' && !ok){ tr.style.display='none'; return; }
-        if(conclusao==='pendente'  &&  ok){ tr.style.display='none'; return; }
-      }
-      tr.style.display=''; visible++;
-    });
-    var countEl=document.getElementById('f-count'); if(countEl) countEl.textContent=visible+' de '+total+' registros';
-    if(window.pagerReset) window.pagerReset();
-  }
-  ['f-busca','f-site','f-empresa','f-data-ini','f-data-fim','f-conclusao'].forEach(function(id){ var el=document.getElementById(id); if(el) el.addEventListener('input',filtrar); });
-  document.getElementById('btn-limpar').addEventListener('click',function(){ ['f-busca','f-site','f-empresa','f-data-ini','f-data-fim','f-conclusao'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; }); filtrar(); });
-  filtrar();
-})();
 </script>
 <script>
 (function(){

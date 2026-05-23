@@ -2,7 +2,8 @@
 {% block page_title %}Overview | CCTV Control Panel{% endblock %}
 
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/chart.umd.min.js"></script>
+<script src="/static/chartjs-plugin-datalabels.min.js"></script>
 {% endblock %}
 
 {% block topbar_title %}Overview Geral{% endblock %}
@@ -112,14 +113,34 @@
   <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Concluídas</div><div class="value" style="color:#15803d;">{{ oc_concluidas }}</div><div class="sub">Finalizadas</div></div>
   <div class="kpi" style="border-left-color:#d40511;"><div class="label">Alta prioridade</div><div class="value" style="color:#d40511;">{{ oc_altas }}</div><div class="sub">Críticas</div></div>
 </div>
-<div class="grid g2" style="margin-bottom:8px;">
+<div class="grid g4" style="margin-bottom:8px;">
   <div class="kpi" style="border-left-color:#d40511; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
-    <div style="font-size:28px;">🚨</div>
-    <div><div class="label">Com B.O. aberto</div><div class="value" style="font-size:26px;color:#d40511;">{{ oc_bo }}</div></div>
+    <div style="font-size:24px;">🚨</div>
+    <div><div class="label">Com B.O. aberto</div><div class="value" style="font-size:24px;color:#d40511;">{{ oc_bo }}</div></div>
   </div>
-  <div class="kpi" style="border-left-color:#7c3aed; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
-    <div style="font-size:28px;">💰</div>
-    <div><div class="label">Custo estimado total</div><div class="value" style="font-size:20px;color:#6d28d9;">{{ oc_custo }}</div></div>
+  <div class="kpi" style="border-left-color:#16a34a; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
+    <div style="font-size:24px;">✔</div>
+    <div>
+      <div class="label">Valor Recuperado</div>
+      <div class="value" style="font-size:18px;color:#16a34a;">{{ oc_recuperado }}</div>
+      <div class="sub">{{ oc_cnt_recuperado }} registro{{ 's' if oc_cnt_recuperado != 1 else '' }}</div>
+    </div>
+  </div>
+  <div class="kpi" style="border-left-color:#2563eb; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
+    <div style="font-size:24px;">🛡</div>
+    <div>
+      <div class="label">Valor Preventivo</div>
+      <div class="value" style="font-size:18px;color:#2563eb;">{{ oc_preventivo }}</div>
+      <div class="sub">{{ oc_cnt_preventivo }} registro{{ 's' if oc_cnt_preventivo != 1 else '' }}</div>
+    </div>
+  </div>
+  <div class="kpi" style="border-left-color:#d40511; flex-direction:row; align-items:center; gap:14px; padding:14px 20px;">
+    <div style="font-size:24px;">⚠</div>
+    <div>
+      <div class="label">Prejuízo</div>
+      <div class="value" style="font-size:18px;color:#d40511;">{{ oc_prejuizo }}</div>
+      <div class="sub">{{ oc_cnt_prejuizo }} registro{{ 's' if oc_cnt_prejuizo != 1 else '' }}</div>
+    </div>
   </div>
 </div>
 
@@ -203,7 +224,7 @@
 
 <div class="grid g3" style="margin-bottom:16px;">
   <div class="kpi"><div class="label">Total</div><div class="value">{{ sh_total }}</div><div class="sub">Registradas</div></div>
-  <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Assinadas</div><div class="value" style="color:#15803d;">{{ sh_assinados }}</div><div class="sub">Recebidas</div></div>
+  <div class="kpi" style="border-left-color:#22c55e;"><div class="label">Assinadas</div><div class="value" style="color:#15803d;">{{ sh_assinados }}</div><div class="sub">Com assinatura de recebimento</div></div>
   <div class="kpi" style="border-left-color:#f59e0b;"><div class="label">Pendentes</div><div class="value" style="color:#b45309;">{{ sh_pendentes }}</div><div class="sub">Aguardando assinatura</div></div>
 </div>
 
@@ -250,7 +271,7 @@
             </td>
             <td>
               {% set p = (r.prioridade or '')|upper %}
-              <span class="badge {% if p == 'ALTA' %}badge-red{% elif p == 'MEDIA' %}badge-warn{% else %}badge-gray{% endif %}">{{ r.prioridade }}</span>
+              <span class="badge {% if p == 'ALTA' %}badge-red{% elif p in ['MEDIA','MÉDIA'] %}badge-warn{% elif p == 'BAIXA' %}badge-ok{% else %}badge-gray{% endif %}">{{ r.prioridade }}</span>
             </td>
             <td>{% if r.boletim_ocorrencia %}<span class="badge badge-red">Sim</span>{% else %}<span style="color:#9ca3af;font-size:12px;">—</span>{% endif %}</td>
           </tr>
@@ -279,7 +300,7 @@
             <td>{{ r.responsavel or '—' }}</td>
             <td>
               {% set g = (r.gravidade or '')|upper %}
-              <span class="badge {% if g == 'CRÍTICA' %}badge-red{% elif g == 'ALTA' %}badge-warn{% elif g == 'MÉDIA' %}badge-blue{% else %}badge-gray{% endif %}">{{ r.gravidade or '—' }}</span>
+              <span class="badge {% if g in ['CRÍTICA','CRITICA'] %}badge-red{% elif g == 'ALTA' %}badge-red{% elif g in ['MÉDIA','MEDIA'] %}badge-warn{% elif g == 'BAIXA' %}badge-ok{% else %}badge-gray{% endif %}">{{ r.gravidade or '—' }}</span>
             </td>
             <td>
               {% set s = (r.status or '')|upper %}
@@ -342,7 +363,7 @@
             <td>{{ r.responsavel_entrada or '—' }}</td>
             <td>
               {% set s = (r.status or '')|upper %}
-              <span class="badge {% if 'RECEBIDO' in s %}badge-ok{% elif 'PEND' in s %}badge-warn{% else %}badge-gray{% endif %}">{{ r.status or '—' }}</span>
+              <span class="badge {% if 'RECEBIDO' in s or 'FINALIZADO' in s or 'FINALIZADA' in s %}badge-ok{% elif 'PEND' in s or 'ABERTO' in s %}badge-warn{% elif 'ACOMPANHAMENTO' in s %}badge-warn{% else %}badge-gray{% endif %}">{{ r.status or '—' }}</span>
             </td>
           </tr>
           {% else %}
@@ -365,55 +386,113 @@ function trocarTab(id, btn) {
   btn.classList.add('active');
 }
 
-// ── Chart.js helpers ──────────────────────────────────
-const PALETTE = [
-  '#d40511','#ffcc00','#0ea5e9','#22c55e','#f59e0b',
-  '#6366f1','#ec4899','#14b8a6','#8b5cf6','#f97316'
-];
+// ── Chart.js setup ───────────────────────────────────
+(function poll() {
+  if (typeof Chart === 'undefined' || typeof ChartDataLabels === 'undefined') { return setTimeout(poll, 30); }
+  try { Chart.register(ChartDataLabels); } catch(e) {}
+  Chart.defaults.font.family = 'Arial, Helvetica, sans-serif';
 
-function mkDoughnut(id, labels, data) {
-  const ctx = document.getElementById(id);
-  if (!ctx || !labels.length) return;
-  new Chart(ctx, {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data, backgroundColor: PALETTE, borderWidth: 2, borderColor: '#fff' }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'right', labels: { font: { size: 11, weight: '700' }, boxWidth: 12, padding: 10 } },
-        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed}` } }
-      }
+  // Cores semânticas por status/gravidade
+  const STATUS_MAP = {
+    'CONCLUIDO':'#22c55e','CONCLUÍDA':'#22c55e','CONCLUIDA':'#22c55e','CONCLUÍDO':'#22c55e',
+    'FECHADA':'#22c55e','FECHADO':'#22c55e','FINALIZADO':'#22c55e','FINALIZADA':'#22c55e',
+    'PENDENTE':'#d40511','ABERTO':'#d40511',
+    'EM ANDAMENTO':'#ffcc00',
+    'INCONCLUSIVA':'#9ca3af',
+    'ALTA':'#d40511','CRITICA':'#7f1d1d','CRÍTICA':'#7f1d1d',
+    'MEDIA':'#f59e0b','MÉDIA':'#f59e0b',
+    'BAIXA':'#22c55e',
+    'RECEBIDO':'#22c55e','PENDENTE DE RECEBIMENTO':'#f59e0b',
+    'MANHA':'#ffcc00','MANHÃ':'#ffcc00',
+    'TARDE':'#f59e0b','NOITE':'#6366f1',
+  };
+  const PALETTE = ['#d40511','#ffcc00','#22c55e','#0ea5e9','#f59e0b','#6366f1','#ec4899','#14b8a6','#8b5cf6','#f97316'];
+
+  function _stripAccents(s) {
+    return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+  function resolveColors(labels) {
+    return labels.map((l, i) => {
+      const key = l.trim().toUpperCase();
+      return STATUS_MAP[key] || STATUS_MAP[_stripAccents(key)] || PALETTE[i % PALETTE.length];
+    });
+  }
+
+  // Opções comuns de datalabels para doughnut (% dentro da fatia)
+  const dlDoughnut = {
+    color: '#fff',
+    font: { weight: '800', size: 12 },
+    formatter: (v, ctx) => {
+      const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+      return total > 0 && (v / total) >= 0.04 ? Math.round(v / total * 100) + '%' : '';
     }
-  });
-}
+  };
 
-function mkBar(id, labels, data, color) {
-  const ctx = document.getElementById(id);
-  if (!ctx || !labels.length) return;
-  new Chart(ctx, {
-    type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: color || '#d40511', borderRadius: 6, borderSkipped: false }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      indexAxis: 'y',
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 11 } } },
-        y: { grid: { display: false }, ticks: { font: { size: 11, weight: '700' } } }
+  // Opções comuns de datalabels para barra horizontal (valor no fim)
+  const dlBar = {
+    anchor: 'end', align: 'right', offset: 4,
+    color: '#1f2937', font: { weight: '700', size: 11 },
+    formatter: v => v
+  };
+
+  function mkDoughnut(id, labels, data) {
+    const ctx = document.getElementById(id);
+    if (!ctx || !labels.length) return;
+    const colors = resolveColors(labels);
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 3, borderColor: '#fff', hoverOffset: 8 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        cutout: '55%',
+        layout: { padding: 10 },
+        animation: { duration: 1000, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { position: 'right', labels: { font: { size: 11, weight: '700' }, boxWidth: 12, padding: 10, color: '#1f2937' } },
+          tooltip: { backgroundColor: '#1f1f1f', padding: 10, cornerRadius: 8, callbacks: { label: c => ` ${c.label}: ${c.parsed}` } },
+          datalabels: dlDoughnut
+        }
       }
-    }
-  });
-}
+    });
+  }
 
-// ── Render all charts ─────────────────────────────────
-mkDoughnut('cOcStatus',  {{ oc_st_labels  | tojson }}, {{ oc_st_vals  | tojson }});
-mkBar     ('cOcNat',     {{ oc_nat_labels | tojson }}, {{ oc_nat_vals | tojson }}, '#d40511');
-mkDoughnut('cOcPri',     {{ oc_pr_labels  | tojson }}, {{ oc_pr_vals  | tojson }});
-mkDoughnut('cAncStatus', {{ anc_st_labels | tojson }}, {{ anc_st_vals | tojson }});
-mkDoughnut('cAncGrav',   {{ anc_gv_labels | tojson }}, {{ anc_gv_vals | tojson }});
-mkDoughnut('cAnStatus',  {{ an_st_labels  | tojson }}, {{ an_st_vals  | tojson }});
-mkBar     ('cAnClass',   {{ an_cl_labels  | tojson }}, {{ an_cl_vals  | tojson }}, '#6366f1');
-mkDoughnut('cShStatus',  {{ sh_st_labels  | tojson }}, {{ sh_st_vals  | tojson }});
-mkDoughnut('cShTurno',   {{ sh_tu_labels  | tojson }}, {{ sh_tu_vals  | tojson }});
+  function mkBar(id, labels, data, color) {
+    const ctx = document.getElementById(id);
+    if (!ctx || !labels.length) return;
+    const maxVal = Math.max(...data, 1);
+    new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ data, backgroundColor: color || '#d40511', hoverBackgroundColor: color ? color + 'cc' : '#b1030d', borderRadius: 6, borderSkipped: false }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y',
+        layout: { padding: { right: 36 } },
+        animation: { duration: 1000, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: '#1f1f1f', padding: 10, cornerRadius: 8 },
+          datalabels: dlBar
+        },
+        scales: {
+          x: { grid: { color: '#f0f0f0' }, border: { display: false }, ticks: { font: { size: 11 }, color: '#9ca3af' }, max: Math.ceil(maxVal * 1.15) },
+          y: { grid: { display: false }, border: { display: false }, ticks: { font: { size: 11, weight: '700' }, color: '#1f2937' } }
+        }
+      }
+    });
+  }
+
+  // ── Render ────────────────────────────────────────────
+  document.querySelectorAll('canvas').forEach(c => { const ch = Chart.getChart(c); if (ch) ch.destroy(); });
+
+  mkDoughnut('cOcStatus',  {{ oc_st_labels  | tojson }}, {{ oc_st_vals  | tojson }});
+  mkBar     ('cOcNat',     {{ oc_nat_labels | tojson }}, {{ oc_nat_vals | tojson }}, '#d40511');
+  mkDoughnut('cOcPri',     {{ oc_pr_labels  | tojson }}, {{ oc_pr_vals  | tojson }});
+  mkDoughnut('cAncStatus', {{ anc_st_labels | tojson }}, {{ anc_st_vals | tojson }});
+  mkDoughnut('cAncGrav',   {{ anc_gv_labels | tojson }}, {{ anc_gv_vals | tojson }});
+  mkDoughnut('cAnStatus',  {{ an_st_labels  | tojson }}, {{ an_st_vals  | tojson }});
+  mkBar     ('cAnClass',   {{ an_cl_labels  | tojson }}, {{ an_cl_vals  | tojson }}, '#6366f1');
+  mkDoughnut('cShStatus',  {{ sh_st_labels  | tojson }}, {{ sh_st_vals  | tojson }});
+  mkDoughnut('cShTurno',   {{ sh_tu_labels  | tojson }}, {{ sh_tu_vals  | tojson }});
+})();
 </script>
 {% endblock %}

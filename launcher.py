@@ -135,9 +135,9 @@ def main():
     # 3. Aguarda Flask estar pronto (provavelmente já está)
     _aguardar_flask()
 
-    # 4. Migrações de schema em background
+    # 4. Migrações de schema — sincronamente, garante colunas existem antes de abrir a janela
     from app import _init_db
-    threading.Thread(target=_init_db, daemon=True).start()
+    _init_db()
 
     # 5. Fecha o splash nativo do PyInstaller
     try:

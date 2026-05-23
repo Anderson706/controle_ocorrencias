@@ -47,9 +47,13 @@
   .empty{ padding:18px; color:var(--muted); font-size:13px; }
 
   /* Modal */
-  .modal-status{ padding:10px 16px; border-radius:12px; font-size:14px; font-weight:900; text-align:center; }
+  .modal-status{ padding:10px 16px; border-radius:12px; font-size:14px; font-weight:900; text-align:center; margin-bottom:14px; }
   .modal-status.ocupado{ background:var(--danger-bg); color:var(--danger-text); }
   .modal-status.livre{ background:var(--success-bg); color:var(--success-text); }
+  .modal-row{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:10px; }
+  .modal-field{ flex:1; min-width:120px; }
+  .modal-field label{ display:block; font-size:11px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; margin-bottom:3px; }
+  .modal-field span{ font-size:13px; font-weight:700; color:var(--text); }
 
   /* Inline form inside modal */
   .ifield label{ display:block; margin-bottom:5px; font-size:11px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; }
@@ -142,7 +146,7 @@
 
 <!-- Filtros -->
 <div class="card" style="padding:16px 20px;">
-  <form method="GET" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+  <form method="GET" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;" hx-boost="false">
     <div class="filter-field">
       <label>Bloco</label>
       <select name="bloco">
@@ -231,8 +235,8 @@
 {% block modals %}
 <!-- Modal: Detalhes -->
 <div class="modal-overlay" id="modalDetalhe" onclick="fecharModal('modalDetalhe', event)">
-  <div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-header">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-head">
       <h3>🗄️ Detalhes do Armário</h3>
       <button class="modal-close" onclick="fecharModal('modalDetalhe')">✕</button>
     </div>
@@ -244,8 +248,8 @@
 
 <!-- Modal: Atribuir -->
 <div class="modal-overlay" id="modalAtribuir" onclick="fecharModal('modalAtribuir', event)">
-  <div class="modal modal-xl" onclick="event.stopPropagation()" style="max-height:92vh;overflow-y:auto;">
-    <div class="modal-header" style="position:sticky;top:0;z-index:10;">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:780px;max-height:92vh;overflow-y:auto;">
+    <div class="modal-head" style="position:sticky;top:0;z-index:10;">
       <h3>👤 Atribuir Armário — <span id="atribuirNumero"></span></h3>
       <button class="modal-close" onclick="fecharModal('modalAtribuir')">✕</button>
     </div>
@@ -294,8 +298,8 @@
 <!-- Modal: Criar em Lote -->
 {% if is_admin %}
 <div class="modal-overlay" id="modalLote" onclick="fecharModal('modalLote', event)">
-  <div class="modal modal-lg" onclick="event.stopPropagation()">
-    <div class="modal-header">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-head">
       <h3>＋ Criar Armários em Lote</h3>
       <button class="modal-close" onclick="fecharModal('modalLote')">✕</button>
     </div>

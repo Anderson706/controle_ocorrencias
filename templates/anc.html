@@ -61,37 +61,70 @@
 </div>
 
 <!-- Filtros -->
-<div class="filter-bar">
-  <form method="GET" action="{{ url_for('anc') }}">
-    <div class="filter-row">
-      <div class="filter-group"><label>Data Inicial</label><input type="date" name="data_inicial" value="{{ filtros.data_inicial }}"></div>
-      <div class="filter-group"><label>Data Final</label><input type="date" name="data_final" value="{{ filtros.data_final }}"></div>
-      <div class="filter-group">
+<div class="filter-card">
+  <div class="filter-head">
+    <h3>🔍 Filtros</h3>
+    <span class="section-chip">Consulta dinâmica</span>
+  </div>
+  <form method="GET" action="{{ url_for('anc') }}" hx-boost="false">
+    <div class="filters">
+      <div>
+        <label>Data inicial</label>
+        <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}">
+      </div>
+      <div>
+        <label>Data final</label>
+        <input type="date" name="data_final" value="{{ filtros.data_final }}">
+      </div>
+      <div>
         <label>Plano de Ação</label>
         <select name="status">
-          <option value="">Todos</option>
-          {% for s in ['ABERTO','EM ANDAMENTO','CONCLUÍDO'] %}<option value="{{ s }}" {{ 'selected' if filtros.status == s }}>{{ s }}</option>{% endfor %}
+          <option value="">Todos os status</option>
+          {% for s in ['ABERTO','EM ANDAMENTO','CONCLUÍDO'] %}
+          <option value="{{ s }}" {% if filtros.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
         </select>
       </div>
-      <div class="filter-group">
+      <div>
         <label>Gravidade</label>
         <select name="gravidade">
-          <option value="">Todas</option>
-          {% for g in ['BAIXA','MÉDIA','ALTA','CRÍTICA'] %}<option value="{{ g }}" {{ 'selected' if filtros.gravidade == g }}>{{ g }}</option>{% endfor %}
+          <option value="">Todas as gravidades</option>
+          {% for g in ['BAIXA','MÉDIA','ALTA','CRÍTICA'] %}
+          <option value="{{ g }}" {% if filtros.gravidade == g %}selected{% endif %}>{{ g }}</option>
+          {% endfor %}
         </select>
       </div>
-      <div class="filter-group">
+      <div>
         <label>Turno</label>
         <select name="turno">
-          <option value="">Todos</option>
-          {% for t in ['TURNO A','TURNO B','TURNO C','ADM'] %}<option value="{{ t }}" {{ 'selected' if filtros.turno == t }}>{{ t }}</option>{% endfor %}
+          <option value="">Todos os turnos</option>
+          {% for t in ['TURNO A','TURNO B','TURNO C','ADM'] %}
+          <option value="{{ t }}" {% if filtros.turno == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
         </select>
       </div>
-      <div class="filter-group"><label>Natureza</label><input type="text" name="natureza" placeholder="Filtrar..." value="{{ filtros.natureza }}"></div>
-      <div class="filter-actions">
-        <button type="submit" class="btn btn-red btn-sm">Filtrar</button>
-        <a href="{{ url_for('anc') }}" class="btn btn-outline btn-sm">Limpar</a>
+      <div>
+        <label>Natureza</label>
+        <input type="text" name="natureza" placeholder="Filtrar por natureza..." value="{{ filtros.natureza }}">
       </div>
+      {% if is_admin %}
+      <div>
+        <label>Site</label>
+        <select name="site_filtro">
+          <option value="">Todos os sites</option>
+          {% for s in todos_sites %}
+          <option value="{{ s }}" {% if filtros.site_filtro == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-red">Aplicar filtros</button>
+      <a href="{{ url_for('anc') }}" class="btn btn-soft">Limpar</a>
+      {% if filtros.data_inicial or filtros.data_final or filtros.status or filtros.gravidade or filtros.turno or filtros.natureza %}
+      <span style="font-size:12px;font-weight:700;color:var(--muted);">Filtro ativo</span>
+      {% endif %}
     </div>
   </form>
 </div>

@@ -2,19 +2,15 @@
 {% block page_title %}Gestão de Investigações | CCTV Control Panel{% endblock %}
 
 {% block topbar_title %}Gestão de Investigações{% endblock %}
-{% block topbar_subtitle %}Cadastro, consulta e gestão de investigações operacionais{% endblock %}
+{% block topbar_subtitle %}Consulta e gestão de investigações operacionais{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('nova_investigacao') }}" class="btn btn-red btn-sm">+ Nova Investigação</a>
+{% endblock %}
 
 {% block page_content %}
 <section class="hero">
-  <h2>
-    Gestão de Investigações
-    {% if modo_edicao and registro_edicao %}
-    <span style="display:inline-flex; margin-left:10px; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); font-size:14px; font-weight:800;">
-      Nº {{ registro_edicao.numero_site or registro_edicao.id }}
-    </span>
-    {% endif %}
-  </h2>
-  <p>Utilize este formulário para registrar investigações com data, hora, natureza, local, envolvidos, prioridade, status e evidências fotográficas.</p>
+  <h2>Gestão de Investigações</h2>
+  <p>Consulte, filtre e gerencie todas as investigações operacionais. Para registrar uma nova investigação, clique em <strong>+ Nova Investigação</strong>.</p>
 </section>
 
 <!-- KPIs -->
@@ -39,184 +35,53 @@
   </div>
 </section>
 
-<!-- Formulário -->
-<section class="section" id="nova-ocorrencia">
-  <div class="card">
-    <div class="section-title">
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <h3>{% if modo_edicao %}Editar investigação{% else %}Nova investigação{% endif %}</h3>
-        {% if modo_edicao and registro_edicao %}
-        <span class="badge badge-neutral" style="font-size:13px; padding:7px 12px;">
-          Nº {{ registro_edicao.numero_site or registro_edicao.id }}
-        </span>
-        {% endif %}
-      </div>
-      <span class="section-chip">{% if modo_edicao %}Modo edição{% else %}Cadastro{% endif %}</span>
+<!-- KPIs financeiros -->
+<section class="section" style="margin-top:-10px;">
+  <div class="grid grid-4">
+    <div class="card kpi" style="border-left:4px solid #16a34a;">
+      <div class="label" style="color:#15803d;">✔ Valor Recuperado</div>
+      <div class="value" style="color:#16a34a;">{{ resumo.recuperado_count }}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">registro{{ 's' if resumo.recuperado_count != 1 else '' }}</div>
     </div>
-
-    <form method="POST" enctype="multipart/form-data">
-      {% if modo_edicao %}
-      <input type="hidden" name="ocorrencia_id" value="{{ registro_edicao.id }}">
-      {% endif %}
-
-      {% if modo_edicao and registro_edicao %}
-      <div style="margin-bottom:16px;">
-        <div style="display:inline-flex; align-items:center; gap:8px; padding:10px 16px; border-radius:14px; background:#fff8db; border:1px solid #f0d66a; color:#7a5a00; font-weight:800; font-size:14px;">
-          Registro em edição: <strong>ID #{{ registro_edicao.id }}</strong>
-        </div>
-      </div>
-      {% endif %}
-
-      <div class="row">
-        <div class="field">
-          <label>Nº</label>
-          <input type="text" value="{% if modo_edicao %}{{ registro_edicao.numero_site or registro_edicao.id }}{% else %}Gerado automaticamente{% endif %}" readonly class="readonly-field" style="font-weight:900; font-size:16px; color:#d40511;">
-        </div>
-        <div class="field">
-          <label>Data / Hora</label>
-          <input type="datetime-local" name="data_hora" value="{% if modo_edicao %}{{ registro_edicao.data_hora }}{% else %}{{ agora }}{% endif %}" required>
-        </div>
-        <div class="field">
-          <label>Hora da Ocorrência</label>
-          <input type="time" name="hora_ocorrencia" value="{% if modo_edicao %}{{ registro_edicao.hora_ocorrencia }}{% else %}{{ hora_atual }}{% endif %}" required>
-        </div>
-      </div>
-
-      <div style="height:12px"></div>
-
-      <div class="row">
-        <div class="field">
-          <label>Site</label>
-          <input type="hidden" name="site" value="{{ (registro_edicao.site if modo_edicao else site_usuario) or '' }}">
-          <div class="field-locked">
-            <span class="lock-icon"></span>
-            {{ (registro_edicao.site if modo_edicao else site_usuario) or '— site não configurado —' }}
-          </div>
-        </div>
-        <div class="field">
-          <label>Natureza</label>
-          <select name="natureza" required>
-            <option value="">Selecione</option>
-            {% for item in naturezas %}
-            <option value="{{ item }}" {% if modo_edicao and registro_edicao.natureza == item %}selected{% endif %}>{{ item }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="field">
-          <label>Local</label>
-          <input type="text" name="local" value="{% if modo_edicao %}{{ registro_edicao.local }}{% endif %}" placeholder="Ex: Portaria, Inbound, Pátio..." required>
-        </div>
-      </div>
-
-      <div style="height:12px"></div>
-
-      <div class="field">
-        <label>Descrição</label>
-        <textarea name="descricao" required placeholder="Descreva a investigação...">{% if modo_edicao %}{{ registro_edicao.descricao }}{% endif %}</textarea>
-      </div>
-
-      <div style="height:12px"></div>
-
-      <div class="row">
-        <div class="field">
-          <label>Operador</label>
-          {% if usuarios_site %}
-          <select name="operador" required>
-            <option value="">Selecione o operador…</option>
-            {% for u in usuarios_site %}
-            <option value="{{ u.nome }}" {% if modo_edicao and registro_edicao.operador == u.nome %}selected{% endif %}>{{ u.nome }}</option>
-            {% endfor %}
-            {% if modo_edicao and registro_edicao.operador and registro_edicao.operador not in usuarios_site|map(attribute='nome')|list %}
-            <option value="{{ registro_edicao.operador }}" selected>{{ registro_edicao.operador }}</option>
-            {% endif %}
-          </select>
-          {% else %}
-          <input type="text" name="operador" value="{% if modo_edicao %}{{ registro_edicao.operador }}{% endif %}" placeholder="Nome do operador" required>
-          {% endif %}
-        </div>
-        <div class="field">
-          <label>Sub-Package Number</label>
-          <input type="text" name="gc" value="{% if modo_edicao %}{{ registro_edicao.gc }}{% endif %}" required>
-        </div>
-        <div class="field">
-          <label>Envolvido</label>
-          <input type="text" name="envolvido" value="{% if modo_edicao %}{{ registro_edicao.envolvido or '' }}{% endif %}">
-        </div>
-      </div>
-
-      <div style="height:12px"></div>
-
-      <div class="row">
-        <div class="field">
-          <label>Prioridade</label>
-          <select name="prioridade" required>
-            <option value="">Selecione</option>
-            <option value="ALTA" {% if modo_edicao and registro_edicao.prioridade == 'ALTA' %}selected{% endif %}>Alta</option>
-            <option value="MEDIA" {% if modo_edicao and registro_edicao.prioridade == 'MEDIA' %}selected{% endif %}>Média</option>
-            <option value="BAIXA" {% if modo_edicao and registro_edicao.prioridade == 'BAIXA' %}selected{% endif %}>Baixa</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Status</label>
-          <select name="status" required>
-            <option value="PENDENTE" {% if modo_edicao and registro_edicao.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
-            <option value="EM ANDAMENTO" {% if modo_edicao and registro_edicao.status == 'EM ANDAMENTO' %}selected{% endif %}>Em andamento</option>
-            <option value="CONCLUIDO" {% if modo_edicao and registro_edicao.status == 'CONCLUIDO' %}selected{% endif %}>Concluído</option>
-          </select>
-        </div>
-      </div>
-
-      <div style="height:12px"></div>
-
-      <div class="row">
-        <div class="field">
-          <label>Custo estimado</label>
-          <input type="text" name="custo" placeholder="Ex: R$ 1.500,00" value="{% if modo_edicao %}{{ registro_edicao.custo or '' }}{% endif %}">
-        </div>
-        <div class="field" style="display:flex;align-items:center;gap:10px;padding-top:22px;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
-            <input type="checkbox" name="boletim_ocorrencia" value="1" {% if modo_edicao and registro_edicao.boletim_ocorrencia %}checked{% endif %} style="width:18px;height:18px;accent-color:#b1030d;cursor:pointer;">
-            Boletim de Ocorrência gerado
-          </label>
-        </div>
-      </div>
-
-      <div style="height:12px"></div>
-
-      <div class="field">
-        <label>Foto</label>
-        <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp">
-        <div class="small">Formatos aceitos: JPG, JPEG, PNG e WEBP.</div>
-      </div>
-
-      {% if modo_edicao and registro_edicao.foto %}
-      <div style="height:12px"></div>
-      <div class="field">
-        <label>Foto atual</label>
-        <div class="thumbs">
-          <a href="{{ registro_edicao.foto }}" target="_blank">
-            <img src="{{ registro_edicao.foto }}" alt="Foto atual">
-          </a>
-        </div>
-      </div>
-      {% endif %}
-
-      <div class="actions">
-        <button type="submit" class="btn btn-red">{% if modo_edicao %}Salvar alterações{% else %}Salvar investigação{% endif %}</button>
-        {% if modo_edicao %}
-        <a href="{{ url_for('ocorrencias') }}" class="btn btn-soft">Cancelar edição</a>
-        {% endif %}
-      </div>
-    </form>
+    <div class="card kpi" style="border-left:4px solid #2563eb;">
+      <div class="label" style="color:#1d4ed8;">🛡 Valor Preventivo</div>
+      <div class="value" style="color:#2563eb;">{{ resumo.preventivo_count }}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">registro{{ 's' if resumo.preventivo_count != 1 else '' }}</div>
+    </div>
+    <div class="card kpi" style="border-left:4px solid #d40511;">
+      <div class="label" style="color:#b91c1c;">⚠ Prejuízo</div>
+      <div class="value" style="color:#d40511;">{{ resumo.prejuizo_count }}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">registro{{ 's' if resumo.prejuizo_count != 1 else '' }}</div>
+    </div>
+    <div class="card kpi" style="border-left:4px solid #f59e0b;">
+      <div class="label" style="color:#d97706;">📊 Com valor informado</div>
+      <div class="value" style="color:#f59e0b;">{{ resumo.recuperado_count + resumo.preventivo_count + resumo.prejuizo_count }}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">do total de {{ resumo.total }}</div>
+    </div>
   </div>
 </section>
 
 <!-- Filtros -->
-<div class="filter-bar">
-  <div class="filter-bar-title"> Filtrar Investigações</div>
-  <form method="GET" action="{{ url_for('ocorrencias') }}">
-    <div class="filter-row">
-      <div class="filter-field">
+<div class="filter-card">
+  <div class="filter-head">
+    <h3>🔍 Filtros</h3>
+    <span class="section-chip">Consulta dinâmica</span>
+  </div>
+  <form method="GET" action="{{ url_for('ocorrencias') }}" hx-boost="false">
+    <div class="filters">
+      <div>
+        <label>Data inicial</label>
+        <input type="date" name="data_inicial" value="{{ filtros.data_inicial or '' }}">
+      </div>
+      <div>
+        <label>Data final</label>
+        <input type="date" name="data_final" value="{{ filtros.data_final or '' }}">
+      </div>
+      <div>
+        <label>Natureza</label>
+        <input type="text" name="natureza" value="{{ filtros.natureza or '' }}" placeholder="Filtrar por natureza...">
+      </div>
+      <div>
         <label>Operador</label>
         <select name="operador">
           <option value="">Todos os operadores</option>
@@ -225,8 +90,18 @@
           {% endfor %}
         </select>
       </div>
+      <div>
+        <label>Status</label>
+        <select name="status">
+          <option value="">Todos os status</option>
+          <option value="PENDENTE"     {% if filtros.status == 'PENDENTE'     %}selected{% endif %}>Pendente</option>
+          <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>Em Andamento</option>
+          <option value="CONCLUIDO"    {% if filtros.status == 'CONCLUIDO'    %}selected{% endif %}>Concluído</option>
+          <option value="INCONCLUSIVA" {% if filtros.status == 'INCONCLUSIVA' %}selected{% endif %}>Inconclusivo</option>
+        </select>
+      </div>
       {% if is_admin %}
-      <div class="filter-field">
+      <div>
         <label>Site</label>
         <select name="site_filtro">
           <option value="">Todos os sites</option>
@@ -236,27 +111,13 @@
         </select>
       </div>
       {% endif %}
-      <div class="filter-field">
-        <label>Data inicial</label>
-        <input type="date" name="data_inicial" value="{{ filtros.data_inicial or '' }}">
-      </div>
-      <div class="filter-field">
-        <label>Data final</label>
-        <input type="date" name="data_final" value="{{ filtros.data_final or '' }}">
-      </div>
-      <div class="filter-field">
-        <label>Status</label>
-        <select name="status">
-          <option value="">Todos</option>
-          <option value="PENDENTE" {% if filtros.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
-          <option value="EM ANDAMENTO" {% if filtros.status == 'EM ANDAMENTO' %}selected{% endif %}>Em Andamento</option>
-          <option value="CONCLUIDO" {% if filtros.status == 'CONCLUIDO' %}selected{% endif %}>Concluído</option>
-        </select>
-      </div>
-      <div class="filter-actions">
-        <button type="submit" class="btn btn-red" style="padding:9px 18px;">Filtrar</button>
-        <a href="{{ url_for('ocorrencias') }}" class="btn btn-ghost" style="padding:9px 14px;">Limpar</a>
-      </div>
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn btn-red">Aplicar filtros</button>
+      <a href="{{ url_for('ocorrencias') }}" class="btn btn-soft">Limpar</a>
+      {% if filtros.data_inicial or filtros.data_final or filtros.status or filtros.operador or filtros.local or filtros.natureza or filtros.site_filtro %}
+      <span style="font-size:12px;font-weight:700;color:var(--muted);">Filtro ativo</span>
+      {% endif %}
     </div>
   </form>
 </div>
@@ -323,8 +184,10 @@
               data-anexo3_nome="{{ r.anexo_post_nome_3 or '' }}"
               data-boletim="{{ 'Sim' if r.boletim_ocorrencia else 'Não' }}"
               data-custo="{{ r.custo or '—' }}"
+              data-tipo_valor="{% if r.valor_recuperado %}RECUPERADO{% elif r.valor_preventivo %}PREVENTIVO{% elif r.prejuizo %}PREJUIZO{% else %}{% endif %}"
+              data-valor_financeiro="{{ r.valor_recuperado or r.valor_preventivo or r.prejuizo or '—' }}"
               data-url_post="{{ url_for('post_ocorrencia', ocorrencia_id=r.id) }}"
-              data-url_editar="{{ url_for('ocorrencias', editar=r.id) }}"
+              data-url_editar="{{ url_for('editar_ocorrencia', ocorrencia_id=r.id) }}"
               data-url_excluir="{{ url_for('excluir_ocorrencia', ocorrencia_id=r.id) }}"
               data-url_fechar="{{ url_for('post_ocorrencia', ocorrencia_id=r.id) }}"
               data-url_pdf="{{ url_for('exportar_ocorrencia_pdf', ocorrencia_id=r.id) }}"
@@ -369,12 +232,12 @@
         <div class="modal-item"><div class="modal-lbl">Natureza</div><div class="modal-val" id="m-natureza"></div></div>
         <div class="modal-item"><div class="modal-lbl">Local</div><div class="modal-val" id="m-local"></div></div>
         <div class="modal-item"><div class="modal-lbl">Operador</div><div class="modal-val" id="m-operador"></div></div>
-        <div class="modal-item"><div class="modal-lbl">Sub-Package Nº</div><div class="modal-val" id="m-gc"></div></div>
+        <div class="modal-item"><div class="modal-lbl">Nº de Referência</div><div class="modal-val" id="m-gc"></div></div>
         <div class="modal-item"><div class="modal-lbl">Envolvido</div><div class="modal-val" id="m-envolvido"></div></div>
         <div class="modal-item"><div class="modal-lbl">Prioridade</div><div class="modal-val" id="m-prioridade"></div></div>
         <div class="modal-item"><div class="modal-lbl">Status</div><div class="modal-val" id="m-status"></div></div>
         <div class="modal-item"><div class="modal-lbl">Boletim de Ocorrência</div><div class="modal-val" id="m-boletim"></div></div>
-        <div class="modal-item"><div class="modal-lbl">Custo estimado</div><div class="modal-val" id="m-custo"></div></div>
+        <div class="modal-item"><div class="modal-lbl" id="m-lbl-valor">Valor</div><div class="modal-val" id="m-valor-financeiro" style="font-weight:800;"></div></div>
         <div class="modal-item"><div class="modal-lbl">Criado por</div><div class="modal-val" id="m-criado_por"></div></div>
         <div class="modal-item full"><div class="modal-lbl">Descrição</div><div class="modal-val" id="m-descricao" style="font-weight:500; color:#374151; white-space:pre-wrap;"></div></div>
       </div>
@@ -385,7 +248,7 @@
       </div>
       <div id="m-form-fechar-wrap" style="display:none;">
         <div style="font-size:13px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:10px; border-top:1px solid var(--line); padding-top:14px;">Encerrar investigação</div>
-        <form id="m-form-fechar" method="POST" action="" enctype="multipart/form-data">
+        <form id="m-form-fechar" method="POST" action="" enctype="multipart/form-data" hx-boost="false">
           <div class="fechar-field">
             <label>Conclusão *</label>
             <select name="status_post" required>
@@ -450,8 +313,20 @@ function abrirModal(btn) {
   document.getElementById('m-status').textContent     = d.status;
   document.getElementById('m-criado_por').textContent = d.criado_por;
   document.getElementById('m-boletim').textContent    = d.boletim || 'Não';
-  document.getElementById('m-custo').textContent      = d.custo  || '—';
   document.getElementById('m-descricao').textContent  = d.descricao || '—';
+  const TIPO_LABELS = { RECUPERADO: '✔ Valor Recuperado', PREVENTIVO: '🛡 Valor Preventivo', PREJUIZO: '⚠ Prejuízo' };
+  const TIPO_COLORS = { RECUPERADO: '#16a34a', PREVENTIVO: '#2563eb', PREJUIZO: '#d40511' };
+  var lblValor = document.getElementById('m-lbl-valor');
+  var valValor = document.getElementById('m-valor-financeiro');
+  if (d.tipo_valor) {
+    lblValor.textContent = TIPO_LABELS[d.tipo_valor] || 'Valor';
+    valValor.textContent = d.valor_financeiro || '—';
+    valValor.style.color = TIPO_COLORS[d.tipo_valor] || 'inherit';
+  } else {
+    lblValor.textContent = 'Valor';
+    valValor.textContent = '—';
+    valValor.style.color = 'inherit';
+  }
 
   document.getElementById('m-btn-post').href = d.url_post;
   var btnPdf = document.getElementById('m-btn-pdf');

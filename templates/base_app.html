@@ -112,7 +112,17 @@
   .kpi .value{ font-size:34px; font-weight:900; color:var(--dhl-red); line-height:1; }
   .kpi .delta{ font-size:12px; font-weight:700; color:var(--muted); }
 
-  /* ══ Filter bar ═════════════════════════════════════════════ */
+  /* ══ Filter card (dashboard-style — usado em todas as telas) ═ */
+  .filter-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); margin-bottom:20px; }
+  .filter-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .filter-head h3{ margin:0; font-size:16px; font-weight:900; color:var(--text); }
+  .filters{ display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:10px; }
+  .filters label{ display:block; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px; }
+  .filters input,.filters select{ width:100%; padding:9px 12px; border:1px solid #d6dae1; border-radius:10px; background:#f8fafc; font-size:13px; font-family:inherit; color:var(--text); outline:none; transition:border-color .15s,box-shadow .15s; }
+  .filters input:focus,.filters select:focus{ border-color:var(--dhl-red); background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+  .filter-actions{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+
+  /* ══ Filter bar (legado — mantido para compatibilidade) ══════ */
   .filter-bar{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px 20px; box-shadow:var(--shadow); margin-bottom:20px; }
   .filter-bar-title{ font-size:13px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:14px; }
   .filter-row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
@@ -120,7 +130,6 @@
   .filter-field label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
   .filter-field input,.filter-field select{ border:1px solid #d6dae1; border-radius:10px; padding:9px 12px; font-size:13px; font-family:inherit; background:#f8fafc; color:var(--text); transition:.15s; outline:none; width:100%; }
   .filter-field input:focus,.filter-field select:focus{ border-color:var(--dhl-red); background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.08); }
-  .filter-actions{ display:flex; gap:8px; align-items:flex-end; flex-shrink:0; }
   .filter-count{ font-size:12px; font-weight:800; color:var(--muted); white-space:nowrap; }
 
   /* ══ Chart (overview/dashboards) ════════════════════════════ */
@@ -432,6 +441,11 @@ document.addEventListener('click', function(){
   var m = document.getElementById('spMenu');
   if(m) m.classList.remove('open');
 });
+
+/* ── Helpers globais de modal ── */
+function abrirModal(id){ var el=document.getElementById(id); if(el) el.classList.add('open'); }
+function fecharModal(id, e){ var el=document.getElementById(id); if(el) el.classList.remove('open'); }
+document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ document.querySelectorAll('.modal-overlay.open').forEach(function(m){ m.classList.remove('open'); }); } });
 </script>
 
 {% block page_scripts %}{% endblock %}
