@@ -78,7 +78,7 @@
   <h3 style="margin:0 0 6px;font-size:17px;">Sua assinatura de recebimento</h3>
   <p style="margin:0 0 18px;font-size:13px;color:var(--muted);">Assine normalmente para confirmar o recebimento, ou use <strong>"Assinar com Ressalva"</strong> caso queira registrar uma observação.</p>
 
-  <form method="POST" action="{{ url_for('sh_assinar', oc_id=ocorrencia.id) }}" enctype="multipart/form-data" id="form-assinar">
+  <form method="POST" action="{{ url_for('sh_assinar', oc_id=ocorrencia.id) }}" enctype="multipart/form-data" hx-boost="false" id="form-assinar">
     <div class="signature-card">
       <h4>✍️ Assinatura — Responsável de entrada</h4>
       <canvas id="sig-pad" class="signature-pad"></canvas>

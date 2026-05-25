@@ -61,7 +61,7 @@
   <p>Altere os campos necessários. As imagens marcadas para remoção serão excluídas ao salvar. Você pode adicionar novas imagens abaixo das existentes. O DOCX será regenerado no próximo download.</p>
 </div>
 
-<form id="form-editar" method="POST" action="{{ url_for('editar_analise', analise_id=registro.id) }}" enctype="multipart/form-data">
+<form id="form-editar" method="POST" action="{{ url_for('editar_analise', analise_id=registro.id) }}" enctype="multipart/form-data" hx-boost="false">
 
   <!-- DADOS DA OPERAÇÃO -->
   <section class="section">

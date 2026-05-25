@@ -257,7 +257,7 @@
       </div>
       <div id="m-form-fechar-wrap" style="display:none; margin-top:14px;">
         <div style="font-size:12px; font-weight:800; color:var(--dhl-black); margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--line);">️ Fechar ANC — Plano de Ação</div>
-        <form id="m-form-fechar" method="POST" action="" enctype="multipart/form-data" onsubmit="return validarFechamento();" style="margin:0;">
+        <form id="m-form-fechar" method="POST" action="" enctype="multipart/form-data" hx-boost="false" onsubmit="return validarFechamento();" style="margin:0;">
           <div style="margin-bottom:10px;">
             <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; display:block; margin-bottom:4px;">Plano de Ação / Texto de Fechamento *</label>
             <textarea name="texto_fechamento" id="m-txt-fechamento" rows="4" placeholder="Descreva as ações tomadas, medidas corretivas, plano de ação..." style="width:100%; border:1.5px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; resize:vertical; outline:none;" onfocus="this.style.borderColor='var(--dhl-red)'" onblur="this.style.borderColor='var(--line)'"></textarea>

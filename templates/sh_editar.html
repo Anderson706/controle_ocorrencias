@@ -52,7 +52,7 @@
 
   <div class="card">
     <div class="section-title"><h3>Dados da passagem</h3></div>
-    <form method="POST" action="{{ url_for('sh_editar', oc_id=oc.id) }}" enctype="multipart/form-data" id="edit-form">
+    <form method="POST" action="{{ url_for('sh_editar', oc_id=oc.id) }}" enctype="multipart/form-data" hx-boost="false" id="edit-form">
 
       <div class="row">
         <div class="field">

@@ -113,7 +113,7 @@
         <h3>Nova passagem de turno</h3>
         <span class="section-chip">Registro</span>
       </div>
-      <form method="POST" action="{{ url_for('sh_salvar') }}" enctype="multipart/form-data">
+      <form method="POST" action="{{ url_for('sh_salvar') }}" enctype="multipart/form-data" hx-boost="false">
         <div class="row">
           <div class="field">
             <label>ID previsto</label>
