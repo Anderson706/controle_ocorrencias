@@ -50,8 +50,9 @@
         <label>Perfil de acesso</label>
         <select name="perfil">
           <option value="OPERACIONAL" {{ 'selected' if (dados.perfil if dados else '') == 'OPERACIONAL' }}>Operacional</option>
-          <option value="SUPERVISOR" {{ 'selected' if (dados.perfil if dados else '') == 'SUPERVISOR' }}>Supervisor</option>
-          <option value="ADMIN" {{ 'selected' if (dados.perfil if dados else '') == 'ADMIN' }}>Admin</option>
+          <option value="SUPERVISOR"  {{ 'selected' if (dados.perfil if dados else '') == 'SUPERVISOR' }}>Supervisor</option>
+          <option value="MULTISITES"  {{ 'selected' if (dados.perfil if dados else '') == 'MULTISITES' }}>Multisites</option>
+          <option value="ADMIN"       {{ 'selected' if (dados.perfil if dados else '') == 'ADMIN' }}>Admin</option>
         </select>
       </div>
       <div class="field">

@@ -85,11 +85,15 @@ def _login_required(f):
         return f(*a, **kw)
     return dec
 
+def _is_privileged():
+    """Retorna True se o usuário for ADMIN ou SUPERVISOR."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN", "SUPERVISOR")
+
 def _admin_required(f):
     @wraps(f)
     def dec(*a, **kw):
-        if (session.get("user_perfil") or "").upper() != "ADMIN":
-            flash("Acesso restrito a administradores.", "danger")
+        if not _is_privileged():
+            flash("Acesso restrito a administradores e supervisores.", "danger")
             return redirect(url_for("armarios.painel"))
         return f(*a, **kw)
     return dec
@@ -111,22 +115,35 @@ def _chave_ativa(armario_id):
 @_login_required
 def painel():
     site     = session.get("user_site", "")
-    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    is_admin = _is_privileged()
 
     bloco_filtro  = request.args.get("bloco",  "")
     status_filtro = request.args.get("status", "")
+    site_filtro   = request.args.get("site",   "") if is_admin else ""
 
-    # ── Uma query para TODOS os armários do site (KPIs + blocos + lista) ────
-    todos    = Armario.query.filter_by(site=site, ativo=True).order_by(Armario.bloco, Armario.numero).all()
+    # ── Uma query para TODOS os armários (KPIs + blocos + lista) ────
+    if is_admin:
+        todos = (Armario.query
+                 .filter_by(ativo=True)
+                 .order_by(Armario.site, Armario.bloco, Armario.numero)
+                 .all())
+    else:
+        todos = (Armario.query
+                 .filter_by(site=site, ativo=True)
+                 .order_by(Armario.bloco, Armario.numero)
+                 .all())
+
     total    = len(todos)
     ocupados = sum(1 for a in todos if a.status == 'OCUPADO')
     livres   = sum(1 for a in todos if a.status == 'LIVRE')
     blocos   = sorted({a.bloco for a in todos if a.bloco})
+    sites_lista = sorted({a.site for a in todos if a.site}) if is_admin else []
 
     # Filtragem em Python (evita segunda query ao banco)
     armarios = [a for a in todos
                 if (not bloco_filtro  or a.bloco  == bloco_filtro)
-                and (not status_filtro or a.status == status_filtro)]
+                and (not status_filtro or a.status == status_filtro)
+                and (not site_filtro  or a.site   == site_filtro)]
 
     # ── UMA query para todas as chaves reserva ativas (elimina N+1) ──────────
     arm_ids      = [a.id for a in todos]
@@ -160,6 +177,8 @@ def painel():
         blocos=blocos,
         bloco_filtro=bloco_filtro,
         status_filtro=status_filtro,
+        site_filtro=site_filtro,
+        sites_lista=sites_lista,
         site=site,
         is_admin=is_admin,
         total=total, ocupados=ocupados, livres=livres, chave_fora=chave_fora,
@@ -172,7 +191,7 @@ def painel():
 def detalhe(arm_id):
     arm  = Armario.query.get_or_404(arm_id)
     site = session.get("user_site", "")
-    if arm.site != site and (session.get("user_perfil") or "").upper() != "ADMIN":
+    if arm.site != site and not _is_privileged():
         return jsonify({"erro": "Acesso negado"}), 403
     ch = _chave_ativa(arm.id)
     return jsonify({
@@ -345,6 +364,90 @@ def excluir(arm_id):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# EXCLUIR EM LOTE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@armarios_bp.route("/excluir-lote", methods=["POST"])
+@_login_required
+@_admin_required
+def excluir_lote():
+    ids      = request.form.getlist("ids")
+    site     = session.get("user_site", "")
+    is_admin = _is_privileged()
+    if not ids:
+        flash("Nenhum armário selecionado.", "warning")
+        return redirect(url_for("armarios.painel"))
+    removidos = ignorados = 0
+    for arm_id in ids:
+        q = Armario.query.filter_by(id=arm_id, ativo=True)
+        if not is_admin:
+            q = q.filter_by(site=site)
+        arm = q.first()
+        if not arm:
+            continue
+        if arm.status == 'OCUPADO':
+            ignorados += 1
+            continue
+        if _chave_ativa(arm.id):
+            ignorados += 1
+            continue
+        arm.ativo = False
+        removidos += 1
+    try:
+        _db.session.commit()
+        msg = f"{removidos} armário(s) removido(s)."
+        if ignorados:
+            msg += f" {ignorados} ignorado(s) (ocupados ou com chave retirada)."
+        flash(msg, "success" if removidos else "warning")
+    except Exception as e:
+        _db.session.rollback()
+        flash(f"Erro ao remover armários: {e}", "danger")
+    return redirect(url_for("armarios.painel"))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EDITAR COLABORADOR DE UM ARMÁRIO OCUPADO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@armarios_bp.route("/editar-colaborador/<int:arm_id>", methods=["POST"])
+@_login_required
+@_admin_required
+def editar_colaborador(arm_id):
+    arm  = Armario.query.get_or_404(arm_id)
+    site = session.get("user_site", "")
+
+    if arm.site != site and not _is_privileged():
+        flash("Acesso negado.", "danger")
+        return redirect(url_for("armarios.painel"))
+
+    nome = request.form.get("colaborador_nome", "").strip()
+    cpf  = request.form.get("colaborador_cpf",  "").strip()
+
+    if not nome or not cpf:
+        flash("Informe o nome e CPF/matrícula do colaborador.", "warning")
+        return redirect(url_for("armarios.painel"))
+
+    # Verifica duplicidade de CPF em outro armário do mesmo site
+    existente = Armario.query.filter_by(
+        colaborador_cpf=cpf, site=arm.site, status='OCUPADO', ativo=True
+    ).first()
+    if existente and existente.id != arm_id:
+        flash(f"Este CPF/matrícula já está atribuído ao armário {existente.numero}.", "danger")
+        return redirect(url_for("armarios.painel"))
+
+    try:
+        arm.colaborador_nome = nome
+        arm.colaborador_cpf  = cpf
+        _db.session.commit()
+        flash(f"Dados do colaborador do armário {arm.numero} atualizados!", "success")
+    except Exception as e:
+        _db.session.rollback()
+        flash(f"Erro ao editar: {e}", "danger")
+
+    return redirect(url_for("armarios.painel"))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CHAVE RESERVA
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -475,7 +578,7 @@ def termo_atribuicao(arm_id):
 
     arm = Armario.query.get_or_404(arm_id)
     site = session.get("user_site", "")
-    if arm.site != site and (session.get("user_perfil") or "").upper() != "ADMIN":
+    if arm.site != site and not _is_privileged():
         flash("Acesso negado.", "danger")
         return redirect(url_for("armarios.painel"))
 
@@ -837,7 +940,7 @@ def exportar_situacao_excel():
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
     site     = session.get("user_site", "")
-    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    is_admin = _is_privileged()
 
     # Filtros opcionais (query string)
     bloco_f   = request.args.get("bloco",    "").strip()

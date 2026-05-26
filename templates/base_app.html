@@ -237,7 +237,7 @@
   <script src="/static/htmx.min.js"></script>
   <script src="/static/panel.js"></script>
 </head>
-<body hx-boost="true">
+<body hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="outerHTML">
 
 <div id="loading-overlay"></div>
 
@@ -259,114 +259,100 @@
       {%- set sec_cam = request.endpoint in ['cameras_index','cameras_cadastrar','cameras_checklist_novo','cameras_checklist_ver'] -%}
       {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
 
-      <a href="{{ url_for('overview') }}" hx-boost="false"
-         class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}">
+      <a href="{{ url_for('overview') }}"
+         class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}" data-sec="ov">
         <span class="nav-icon">🌐</span><span>Overview</span>
       </a>
 
       <a href="{{ url_for('ocorrencias') }}"
-         class="nav-section{{ ' active' if sec_oc else '' }}">
+         class="nav-section{{ ' active' if sec_oc else '' }}" data-sec="oc">
         <span class="nav-icon">📋</span><span>Investigações</span>
-        {% if sec_oc %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-chevron">▾</span>
       </a>
-      {% if sec_oc %}
-      <div class="sub-nav">
+      <div class="sub-nav" data-sec="oc"{% if not sec_oc %} style="display:none"{% endif %}>
         <a href="{{ url_for('nova_investigacao') }}" class="sub-link{{ ' cur' if request.endpoint=='nova_investigacao' else '' }}">Nova Investigação</a>
         <a href="{{ url_for('ocorrencias') }}"       class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle</a>
-        <a href="{{ url_for('dashboard') }}" hx-boost="false" class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+        <a href="{{ url_for('dashboard') }}"         class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
       </div>
-      {% endif %}
 
       <a href="{{ url_for('analises') }}"
-         class="nav-section{{ ' active' if sec_an else '' }}">
+         class="nav-section{{ ' active' if sec_an else '' }}" data-sec="an">
         <span class="nav-icon">🔍</span><span>Análises Investigativas</span>
-        {% if sec_an %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-chevron">▾</span>
       </a>
-      {% if sec_an %}
-      <div class="sub-nav">
+      <div class="sub-nav" data-sec="an"{% if not sec_an %} style="display:none"{% endif %}>
         <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
         <a href="{{ url_for('analises') }}"              class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle</a>
-        <a href="{{ url_for('dashboard_analise') }}" hx-boost="false" class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
+        <a href="{{ url_for('dashboard_analise') }}"     class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
       </div>
-      {% endif %}
 
       <a href="{{ url_for('anc') }}"
-         class="nav-section{{ ' active' if sec_anc else '' }}">
+         class="nav-section{{ ' active' if sec_anc else '' }}" data-sec="anc">
         <span class="nav-icon">⚠️</span><span>ANC</span>
-        {% if sec_anc %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-chevron">▾</span>
       </a>
-      {% if sec_anc %}
-      <div class="sub-nav">
+      <div class="sub-nav" data-sec="anc"{% if not sec_anc %} style="display:none"{% endif %}>
         <a href="{{ url_for('nova_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='nova_anc' else '' }}">Nova ANC</a>
         <a href="{{ url_for('anc') }}"      class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle</a>
-        <a href="{{ url_for('dashboard_anc') }}" hx-boost="false" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
+        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
       </div>
-      {% endif %}
 
       <a href="{{ url_for('sh_index') }}"
-         class="nav-section{{ ' active' if sec_sh else '' }}">
+         class="nav-section{{ ' active' if sec_sh else '' }}" data-sec="sh">
         <span class="nav-icon">🔄</span><span>Shift Handover</span>
-        {% if sec_sh %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-chevron">▾</span>
       </a>
-      {% if sec_sh %}
-      <div class="sub-nav">
-        <a href="{{ url_for('sh_index') }}"    class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Nova Passagem</a>
-        <a href="{{ url_for('sh_controle') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_controle' else '' }}">Controle</a>
-        <a href="{{ url_for('sh_dashboard') }}" hx-boost="false" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
+      <div class="sub-nav" data-sec="sh"{% if not sec_sh %} style="display:none"{% endif %}>
+        <a href="{{ url_for('sh_index') }}"     class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Nova Passagem</a>
+        <a href="{{ url_for('sh_controle') }}"  class="sub-link{{ ' cur' if request.endpoint=='sh_controle' else '' }}">Controle</a>
+        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
       </div>
-      {% endif %}
 
       <a href="{{ url_for('chaves.meu_claviculario') }}"
-         class="nav-section{{ ' active' if sec_chv else '' }}">
+         class="nav-section{{ ' active' if sec_chv else '' }}" data-sec="chv">
         <span class="nav-icon">🔑</span><span>Controle de Chaves</span>
-        {% if sec_chv %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-chevron">▾</span>
       </a>
-      {% if sec_chv %}
-      <div class="sub-nav">
-        <a href="{{ url_for('chaves.meu_claviculario') }}"  class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
-        <a href="{{ url_for('chaves.realizar_retirada') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
+      <div class="sub-nav" data-sec="chv"{% if not sec_chv %} style="display:none"{% endif %}>
+        <a href="{{ url_for('chaves.meu_claviculario') }}"   class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
+        <a href="{{ url_for('chaves.realizar_retirada') }}"  class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
         <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
       </div>
-      {% endif %}
 
       <a href="{{ url_for('armarios.painel') }}"
-         class="nav-section{{ ' active' if sec_arm else '' }}">
+         class="nav-section{{ ' active' if sec_arm else '' }}" data-sec="arm">
         <span class="nav-icon">🗄️</span><span>Gestão de Armários</span>
-        {% if sec_arm %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-chevron">▾</span>
       </a>
-      {% if sec_arm %}
-      <div class="sub-nav">
-        <a href="{{ url_for('armarios.painel') }}"       class="sub-link{{ ' cur' if request.endpoint=='armarios.painel' else '' }}">Painel de Armários</a>
+      <div class="sub-nav" data-sec="arm"{% if not sec_arm %} style="display:none"{% endif %}>
+        <a href="{{ url_for('armarios.painel') }}"        class="sub-link{{ ' cur' if request.endpoint=='armarios.painel' else '' }}">Painel de Armários</a>
         <a href="{{ url_for('armarios.chave_reserva') }}" class="sub-link{{ ' cur' if request.endpoint=='armarios.chave_reserva' else '' }}">Chave Reserva</a>
       </div>
-      {% endif %}
 
       <a href="{{ url_for('cameras_index') }}"
-         class="nav-section{{ ' active' if sec_cam else '' }}">
+         class="nav-section{{ ' active' if sec_cam else '' }}" data-sec="cam">
         <span class="nav-icon">📷</span><span>Checklist de Câmeras</span>
-        {% if sec_cam %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-chevron">▾</span>
       </a>
-      {% if sec_cam %}
-      <div class="sub-nav">
+      <div class="sub-nav" data-sec="cam"{% if not sec_cam %} style="display:none"{% endif %}>
         <a href="{{ url_for('cameras_checklist_novo') }}" class="sub-link{{ ' cur' if request.endpoint=='cameras_checklist_novo' else '' }}">Novo Checklist</a>
         <a href="{{ url_for('cameras_index') }}"          class="sub-link{{ ' cur' if request.endpoint=='cameras_index' else '' }}">Controle</a>
         <a href="{{ url_for('cameras_cadastrar') }}"      class="sub-link{{ ' cur' if request.endpoint=='cameras_cadastrar' else '' }}">Cadastrar Câmeras</a>
       </div>
-      {% endif %}
 
       {% if session.get('user_perfil','') == 'ADMIN' %}
+      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites','admin_multisites','admin_releases','admin_release_download'] -%}
       <a href="{{ url_for('admin_usuarios') }}"
-         class="nav-section{{ ' active' if sec_adm else '' }}">
+         class="nav-section{{ ' active' if sec_adm else '' }}" data-sec="adm">
         <span class="nav-icon">⚙️</span><span>Administração</span>
-        {% if sec_adm %}<span class="nav-chevron">▾</span>{% endif %}
+        <span class="nav-chevron">▾</span>
       </a>
-      {% if sec_adm %}
-      <div class="sub-nav">
-        <a href="{{ url_for('admin_usuarios') }}"    class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
+      <div class="sub-nav" data-sec="adm"{% if not sec_adm %} style="display:none"{% endif %}>
+        <a href="{{ url_for('admin_usuarios') }}"     class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
         <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
-        <a href="{{ url_for('vincular_sites') }}"    class="sub-link{{ ' cur' if request.endpoint=='vincular_sites' else '' }}">Sites OVERHEAD</a>
+        <a href="{{ url_for('admin_multisites') }}"   class="sub-link{{ ' cur' if request.endpoint=='admin_multisites' else '' }}">Gestão Multisites</a>
+        <a href="{{ url_for('admin_releases') }}"     class="sub-link{{ ' cur' if request.endpoint in ['admin_releases','admin_release_download'] else '' }}">📦 Releases</a>
       </div>
-      {% endif %}
       {% endif %}
     </nav>
 
@@ -384,6 +370,13 @@
       </div>
       <div class="sp-menu" id="spMenu">
         <a href="{{ url_for('meu_perfil') }}" class="sp-item">👤 Meu Perfil</a>
+        {% if session.get('user_perfil','').upper() == 'MULTISITES' %}
+        <button type="button" class="sp-item" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;font-family:inherit;"
+          onclick="document.getElementById('spMenu').classList.remove('open');document.getElementById('modal-trocar-site').classList.add('open')">
+          🌐 Trocar Site
+          <small style="display:block;font-size:10px;color:#9ca3af;font-weight:600;margin-top:1px;">Ativo: {{ session.get('user_site','—') }}</small>
+        </button>
+        {% endif %}
         <hr class="sp-sep">
         <a href="{{ url_for('logout') }}" class="sp-item sp-item-red" hx-boost="false">🚪 Sair</a>
       </div>
@@ -391,7 +384,7 @@
   </aside>
   <!-- ═══ FIM SIDEBAR ════════════════════════════════════════════ -->
 
-  <main class="main">
+  <main class="main" id="main-content">
     <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-left">
@@ -421,14 +414,46 @@
       {% block page_content %}{% endblock %}
     </div>
 
+    {% if session.get('user_perfil','').upper() == 'MULTISITES' and multisites_lista %}
+    <!-- Modal Trocar Site (MULTISITES) -->
+    <div class="modal-overlay" id="modal-trocar-site" onclick="if(event.target===this)this.classList.remove('open')">
+      <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px">
+        <div class="modal-head" style="background:#0369a1">
+          <div><h3>🌐 Trocar Site Ativo</h3>
+          <div class="modal-sub">Site atual: <strong>{{ session.get('user_site','—') }}</strong></div></div>
+          <button class="modal-close" onclick="document.getElementById('modal-trocar-site').classList.remove('open')">✕</button>
+        </div>
+        <form action="{{ url_for('trocar_site') }}" method="POST" hx-boost="false">
+          <input type="hidden" name="next" value="">
+          <div class="modal-body">
+            <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Selecione o site que deseja ativar. Novos registros serão associados a este site.</p>
+            <div class="field">
+              <label>Site</label>
+              <select name="site" required>
+                {% for s in multisites_lista %}
+                <option value="{{ s }}" {{ 'selected' if s == session.get('user_site') }}>{{ s }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('modal-trocar-site').classList.remove('open')">Cancelar</button>
+            <button type="submit" class="btn btn-sm" style="background:#0369a1;color:#fff">🌐 Ativar Site</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
     <footer class="app-footer">
       <span>FERRAMENTA ELABORADA PELO DEPARTAMENTO DE SEGURANÇA PATRIMONIAL</span>
       <span>DHL SUPPLY CHAIN — USO INTERNO</span>
     </footer>
+
+    {% block modals %}{% endblock %}
+    {% block page_scripts %}{% endblock %}
   </main>
 </div>
-
-{% block modals %}{% endblock %}
 
 {% include "_translate.html" %}
 
@@ -446,9 +471,58 @@ document.addEventListener('click', function(){
 function abrirModal(id){ var el=document.getElementById(id); if(el) el.classList.add('open'); }
 function fecharModal(id, e){ var el=document.getElementById(id); if(el) el.classList.remove('open'); }
 document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ document.querySelectorAll('.modal-overlay.open').forEach(function(m){ m.classList.remove('open'); }); } });
+
+/* ── Atualização da sidebar após partial swap ── */
+(function(){
+  /* Mapa de prefixos de URL → seção */
+  var _map = [
+    { key:'oc',  test:function(p){ return p.startsWith('/ocorrencias')||p.startsWith('/nova-investigacao')||p==='/dashboard'||p.startsWith('/post/')||p.startsWith('/excluir/'); } },
+    { key:'an',  test:function(p){ return p.startsWith('/analise')||p==='/gerar_docx'; } },
+    { key:'anc', test:function(p){ return p.startsWith('/anc')||p.startsWith('/nova-anc'); } },
+    { key:'sh',  test:function(p){ return p.startsWith('/shift-handover'); } },
+    { key:'chv', test:function(p){ return p.startsWith('/chaves'); } },
+    { key:'arm', test:function(p){ return p.startsWith('/armarios'); } },
+    { key:'cam', test:function(p){ return p.startsWith('/cameras'); } },
+    { key:'adm', test:function(p){ return p.startsWith('/admin'); } },
+  ];
+
+  function _secAtual(path){
+    if(path==='/overview') return 'ov';
+    for(var i=0;i<_map.length;i++){ if(_map[i].test(path)) return _map[i].key; }
+    return null;
+  }
+
+  function _navUpdate(){
+    var path = window.location.pathname;
+    var sec  = _secAtual(path);
+
+    /* Atualiza classe active dos itens principais */
+    document.querySelectorAll('.nav-section[data-sec]').forEach(function(el){
+      el.classList.toggle('active', el.getAttribute('data-sec')===sec);
+    });
+
+    /* Mostra/oculta sub-navs */
+    document.querySelectorAll('.sub-nav[data-sec]').forEach(function(el){
+      el.style.display = (el.getAttribute('data-sec')===sec) ? '' : 'none';
+    });
+
+    /* Atualiza classe cur dos sub-links */
+    document.querySelectorAll('.sub-link').forEach(function(el){
+      var href = el.getAttribute('href');
+      if(!href) return;
+      try {
+        var lp = new URL(href, window.location.origin).pathname;
+        el.classList.toggle('cur', lp===path);
+      } catch(e){}
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', _navUpdate);
+  document.addEventListener('htmx:afterSettle', _navUpdate);
+  document.addEventListener('htmx:historyRestore', _navUpdate);
+})();
 </script>
 
-{% block page_scripts %}{% endblock %}
 
 </body>
 </html>

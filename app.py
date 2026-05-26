@@ -371,6 +371,30 @@ class UsuarioSite(db.Model):
     site_nome   = db.Column(db.String(128), nullable=False)
 
 
+class AppRelease(db.Model):
+    """Cada linha é uma versão publicada do CCTV_ControlPanel.exe."""
+    __tablename__ = "APP_RELEASES"
+    id            = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    versao        = db.Column(db.String(20),  nullable=False)
+    nome_arquivo  = db.Column(db.String(255), nullable=True)
+    tamanho_bytes = db.Column(db.Integer,     nullable=True)
+    exe_blob      = db.Column(db.LargeBinary, nullable=True)
+    publicado_em  = db.Column(db.DateTime,    nullable=False, default=datetime.utcnow)
+    publicado_por = db.Column(db.String(120), nullable=True)
+    ativo         = db.Column(db.String(1),   nullable=False, default='N')
+
+
+def _fmt_size(n):
+    """Formata bytes em KB / MB."""
+    if n is None:
+        return "—"
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 ** 2:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / 1024 ** 2:.1f} MB"
+
+
 class SiteCompleto(db.Model):
     __tablename__ = "SITES_COMPLETO"
 
@@ -1621,22 +1645,34 @@ def perfil_required(*perfis):
 @app.route("/cameras")
 @login_required
 def cameras_index():
-    site = session.get("user_site") or ""
-    cameras = Camera.query.filter_by(site=site).order_by(Camera.ativo.desc(), Camera.numero).all()
-    checklists = (ChecklistCamera.query
-                  .filter_by(site=site)
-                  .order_by(ChecklistCamera.criado_em.desc())
-                  .limit(50).all())
+    site     = session.get("user_site") or ""
+    is_admin = _is_privileged()
+
+    if is_admin:
+        cameras    = Camera.query.order_by(Camera.site, Camera.ativo.desc(), Camera.numero).all()
+        checklists = (ChecklistCamera.query
+                      .order_by(ChecklistCamera.criado_em.desc())
+                      .limit(50).all())
+    else:
+        cameras    = Camera.query.filter_by(site=site).order_by(Camera.ativo.desc(), Camera.numero).all()
+        checklists = (ChecklistCamera.query
+                      .filter_by(site=site)
+                      .order_by(ChecklistCamera.criado_em.desc())
+                      .limit(50).all())
+
     ativas   = sum(1 for c in cameras if c.ativo)
     inativas = sum(1 for c in cameras if not c.ativo)
     return render_template("cameras.html",
         cameras=cameras, checklists=checklists,
-        ativas=ativas, inativas=inativas, site=site)
+        ativas=ativas, inativas=inativas, site=site, is_admin=is_admin)
 
 
 @app.route("/cameras/cadastrar", methods=["GET", "POST"])
 @login_required
 def cameras_cadastrar():
+    if not _is_privileged():
+        flash("Acesso restrito a administradores e supervisores.", "danger")
+        return redirect(url_for("cameras_index"))
     site = session.get("user_site") or ""
     if request.method == "POST":
         modo = request.form.get("modo", "individual")
@@ -1690,6 +1726,9 @@ def cameras_cadastrar():
 @app.route("/cameras/<int:cam_id>/toggle", methods=["POST"])
 @login_required
 def cameras_toggle(cam_id):
+    if not _is_privileged():
+        flash("Acesso restrito a administradores e supervisores.", "danger")
+        return redirect(url_for("cameras_index"))
     site = session.get("user_site") or ""
     cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
     cam.ativo = 0 if cam.ativo else 1
@@ -1701,12 +1740,45 @@ def cameras_toggle(cam_id):
 @app.route("/cameras/<int:cam_id>/editar", methods=["POST"])
 @login_required
 def cameras_editar(cam_id):
+    if not _is_privileged():
+        flash("Acesso restrito a administradores e supervisores.", "danger")
+        return redirect(url_for("cameras_index"))
     site = session.get("user_site") or ""
     cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
     cam.numero = (request.form.get("numero") or cam.numero).strip()
     cam.nome   = (request.form.get("nome") or "").strip() or None
     db.session.commit()
     flash(f"Câmera {cam.numero} atualizada.", "success")
+    return redirect(url_for("cameras_index"))
+
+
+@app.route("/cameras/excluir-lote", methods=["POST"])
+@login_required
+def cameras_excluir_lote():
+    if not _is_privileged():
+        flash("Acesso restrito a administradores e supervisores.", "danger")
+        return redirect(url_for("cameras_index"))
+    ids  = request.form.getlist("ids")
+    site = session.get("user_site") or ""
+    is_admin = _is_privileged()
+    if not ids:
+        flash("Nenhuma câmera selecionada.", "warning")
+        return redirect(url_for("cameras_index"))
+    removidas = 0
+    for cam_id in ids:
+        q = Camera.query.filter_by(id=cam_id)
+        if not is_admin:
+            q = q.filter_by(site=site)
+        cam = q.first()
+        if cam:
+            cam.ativo = False
+            removidas += 1
+    try:
+        db.session.commit()
+        flash(f"{removidas} câmera(s) desativada(s) com sucesso.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Erro ao desativar câmeras: {e}", "danger")
     return redirect(url_for("cameras_index"))
 
 
@@ -1807,6 +1879,23 @@ def cameras_checklist_anexo(chk_id):
     return send_file(BytesIO(chk.anexo_dados), as_attachment=True,
                      download_name=chk.anexo_nome or "anexo")
 
+
+def _is_privileged():
+    """Retorna True se o usuário logado for ADMIN, SUPERVISOR ou MULTISITES."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN", "SUPERVISOR", "MULTISITES")
+
+
+@app.context_processor
+def _ctx_multisites():
+    """Injeta multisites_lista (sites autorizados) em todos os templates."""
+    lista = []
+    if (session.get("user_perfil") or "").upper() == "MULTISITES":
+        uid = session.get("user_id")
+        if uid:
+            lista = [v.site_nome for v in
+                     UsuarioSite.query.filter_by(usuario_id=uid)
+                     .order_by(UsuarioSite.site_nome).all()]
+    return {"multisites_lista": lista}
 
 def normalizar_status(valor):
     return (valor or "").strip().upper()
@@ -3139,7 +3228,35 @@ def meu_perfil():
         return redirect(url_for("meu_perfil"))
 
     is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
-    return render_template("perfil.html", user=user, is_admin=is_admin)
+    sites_autorizados = []
+    if (session.get("user_perfil") or "").upper() == "MULTISITES":
+        sites_autorizados = [v.site_nome for v in
+                             UsuarioSite.query.filter_by(usuario_id=user.id)
+                             .order_by(UsuarioSite.site_nome).all()]
+    return render_template("perfil.html", user=user, is_admin=is_admin,
+                           sites_autorizados=sites_autorizados)
+
+
+@app.route("/trocar-site", methods=["POST"])
+@login_required
+def trocar_site():
+    """Permite que usuário MULTISITES troque o site ativo da sessão."""
+    if (session.get("user_perfil") or "").upper() != "MULTISITES":
+        flash("Permissão negada.", "danger")
+        return redirect(url_for("ocorrencias"))
+
+    novo_site = (request.form.get("site") or "").strip()
+    uid = session.get("user_id")
+
+    # Verifica se o site está autorizado para este usuário
+    if not UsuarioSite.query.filter_by(usuario_id=uid, site_nome=novo_site).first():
+        flash("Site não autorizado para o seu usuário.", "danger")
+        return redirect(request.referrer or url_for("ocorrencias"))
+
+    session["user_site"] = novo_site
+    flash(f"Site ativo alterado para {novo_site}.", "success")
+    next_url = request.form.get("next") or request.referrer or url_for("ocorrencias")
+    return redirect(next_url)
 
 
 # =========================
@@ -3800,14 +3917,62 @@ def overview():
     from datetime import datetime as _dt
     from collections import Counter
 
-    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    is_admin = _is_privileged()
     _hoje = _dt.now()
+
+    # ── Filtros GET ──────────────────────────────────────────────────
+    f_ini_str = (request.args.get("data_ini") or "").strip()
+    f_fim_str = (request.args.get("data_fim") or "").strip()
+    f_site    = (request.args.get("site")     or "").strip() if is_admin else ""
+
+    def _parse_date(s):
+        try:    return _dt.strptime(s, "%Y-%m-%d")
+        except: return None
+
+    f_ini = _parse_date(f_ini_str)
+    f_fim = _parse_date(f_fim_str)
+    if f_fim:
+        f_fim = f_fim.replace(hour=23, minute=59, second=59)
+
+    def _get_date(r, *campos):
+        for c in campos:
+            v = getattr(r, c, None)
+            if not v: continue
+            if isinstance(v, _dt): return v
+            try:    return _dt.strptime(str(v)[:10], "%Y-%m-%d")
+            except: pass
+        return None
+
+    def _filtrar_data(lista, *campos_data):
+        """Filtra por intervalo de datas em Python (não acessa CLOBs)."""
+        if not f_ini and not f_fim:
+            return lista
+        out = []
+        for r in lista:
+            d = _get_date(r, *campos_data)
+            if d is None:
+                continue
+            if f_ini and d < f_ini:
+                continue
+            if f_fim and d > f_fim:
+                continue
+            out.append(r)
+        return out
+
+    # Lista de sites para o dropdown — uma só query
+    todos_sites = []
+    if is_admin:
+        todos_sites = sorted(
+            s[0] for s in db.session.query(Ocorrencia.site).distinct().all() if s[0]
+        )
 
     # ── Ocorrências ─────────────────────────────────────────────────
     oc_q = Ocorrencia.query.order_by(Ocorrencia.id.desc())
     if not is_admin:
         oc_q = _query_filtrar_sites(oc_q, Ocorrencia)
-    ocs = oc_q.all()
+    if f_site:
+        oc_q = oc_q.filter(Ocorrencia.site == f_site)
+    ocs = _filtrar_data(oc_q.all(), "data_hora")
 
     oc_total     = len(ocs)
     oc_pendentes = len([r for r in ocs if normalizar_status(r.status) == "PENDENTE"])
@@ -3834,7 +3999,9 @@ def overview():
     anc_q = ANC.query.options(*_anc_sem).order_by(ANC.id.desc())
     if not is_admin:
         anc_q = _query_filtrar_sites(anc_q, ANC)
-    ancs = anc_q.all()
+    if f_site:
+        anc_q = anc_q.filter(ANC.site == f_site)
+    ancs = _filtrar_data(anc_q.all(), "data_nc")
 
     anc_total    = len(ancs)
     anc_abertos  = len([r for r in ancs if (r.status or "").upper() == "ABERTO"])
@@ -3851,7 +4018,9 @@ def overview():
     an_q = AnaliseInvestigativa.query.options(*_an_sem).order_by(AnaliseInvestigativa.id.desc())
     if not is_admin:
         an_q = _query_filtrar_sites(an_q, AnaliseInvestigativa)
-    analises = an_q.all()
+    if f_site:
+        an_q = an_q.filter(AnaliseInvestigativa.site == f_site)
+    analises = _filtrar_data(an_q.all(), "data_ocorrencia")
 
     an_total    = len(analises)
     an_andamento= len([r for r in analises if (r.status_analise or "").upper() == "EM ANDAMENTO"])
@@ -3861,7 +4030,7 @@ def overview():
     an_status_c  = Counter((r.status_analise or "—").upper() for r in analises)
     an_classif_c = Counter(r.classificacao or "—" for r in analises)
 
-    # ── Shift Handover (Passagem de turno) ──────────────────────────
+    # ── Shift Handover ──────────────────────────────────────────────
     sh_q = OcorrenciaTurno.query.options(
         defer(OcorrenciaTurno.assinatura_saida),
         defer(OcorrenciaTurno.assinatura_entrada),
@@ -3871,17 +4040,31 @@ def overview():
     ).order_by(OcorrenciaTurno.id.desc())
     if not is_admin:
         sh_q = _query_filtrar_sites(sh_q, OcorrenciaTurno)
+    if f_site:
+        sh_q = sh_q.filter(OcorrenciaTurno.site == f_site)
+    if f_ini:
+        sh_q = sh_q.filter(OcorrenciaTurno.data_ocorrencia >= f_ini)
+    if f_fim:
+        sh_q = sh_q.filter(OcorrenciaTurno.data_ocorrencia <= f_fim)
     shifts = sh_q.all()
 
     sh_total     = len(shifts)
-    # Conta registros que têm assinatura_entrada preenchida (CLOB — não pode usar != '' no Oracle)
+
+    # sh_assinados via SQL COUNT para não tocar no CLOB deferred
     _sh_assin_q = db.session.query(func.count(OcorrenciaTurno.id)).filter(
         OcorrenciaTurno.assinatura_entrada != None,
-        func.length(OcorrenciaTurno.assinatura_entrada) > 0
+        func.length(OcorrenciaTurno.assinatura_entrada) > 0,
     )
     if not is_admin:
         _sh_assin_q = _query_filtrar_sites(_sh_assin_q, OcorrenciaTurno)
+    if f_site:
+        _sh_assin_q = _sh_assin_q.filter(OcorrenciaTurno.site == f_site)
+    if f_ini:
+        _sh_assin_q = _sh_assin_q.filter(OcorrenciaTurno.data_ocorrencia >= f_ini)
+    if f_fim:
+        _sh_assin_q = _sh_assin_q.filter(OcorrenciaTurno.data_ocorrencia <= f_fim)
     sh_assinados = _sh_assin_q.scalar() or 0
+
     sh_pendentes = sh_total - sh_assinados
     sh_status_c  = Counter((r.status or "—") for r in shifts)
     sh_turno_c   = Counter((r.turno or "—") for r in shifts)
@@ -3890,9 +4073,14 @@ def overview():
         items = counter.most_common(limit)
         return [x[0] for x in items], [x[1] for x in items]
 
+    filtros_ativos = bool(f_ini_str or f_fim_str or f_site)
+
     return render_template(
         "overview.html",
         is_admin=is_admin,
+        # Filtros ativos
+        f_ini=f_ini_str, f_fim=f_fim_str, f_site=f_site,
+        filtros_ativos=filtros_ativos, todos_sites=todos_sites,
         # KPIs globais
         oc_total=oc_total, oc_pendentes=oc_pendentes, oc_andamento=oc_andamento,
         oc_concluidas=oc_concluidas, oc_altas=oc_altas, oc_bo=oc_bo, oc_custo=oc_custo,
@@ -4474,25 +4662,30 @@ def exportar_ocorrencia_pdf(ocorrencia_id):
                      mimetype="application/pdf")
 
 
-@app.route("/admin/vincular-sites", methods=["GET", "POST"])
+@app.route("/admin/vincular-sites")
 @login_required
 @perfil_required("ADMIN")
 def vincular_sites():
-    """Gerencia os sites vinculados a usuários que precisam ver múltiplos sites."""
+    """Redireciona a URL antiga para a nova página de Gestão Multisites."""
+    return redirect(url_for("admin_multisites"))
 
-    # Todos os usuários ativos não-admin (qualquer perfil pode ter múltiplos sites)
+
+@app.route("/admin/multisites", methods=["GET", "POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_multisites():
+    """Gerencia usuários MULTISITES e os sites que cada um pode acessar."""
+
+    # Apenas usuários MULTISITES ativos
     todos_usuarios = (
         Usuario.query
-        .filter(
-            Usuario.is_active == True,
-            func.upper(Usuario.perfil) != "ADMIN"
-        )
+        .filter(Usuario.is_active == True, func.upper(Usuario.perfil) == "MULTISITES")
         .order_by(Usuario.nome)
         .all()
     )
 
-    # Todos os sites cadastrados
     todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
+    pendentes   = _admin_pendentes()
 
     if request.method == "POST":
         action     = request.form.get("action")
@@ -4501,7 +4694,7 @@ def vincular_sites():
 
         if not usuario_id:
             flash("Usuário não selecionado.", "danger")
-            return redirect(url_for("vincular_sites"))
+            return redirect(url_for("admin_multisites"))
 
         usuario = Usuario.query.get_or_404(usuario_id)
 
@@ -4513,35 +4706,36 @@ def vincular_sites():
             else:
                 db.session.add(UsuarioSite(usuario_id=usuario_id, site_nome=site_nome))
                 db.session.commit()
-                flash(f"Site '{site_nome}' vinculado a {usuario.nome} com sucesso.", "success")
+                flash(f"✅ Site '{site_nome}' vinculado a {usuario.nome}.", "success")
 
         elif action == "remover":
             vinculo = UsuarioSite.query.filter_by(usuario_id=usuario_id, site_nome=site_nome).first()
             if vinculo:
                 db.session.delete(vinculo)
                 db.session.commit()
-                flash(f"Vínculo '{site_nome}' removido de {usuario.nome}.", "success")
+                flash(f"Site '{site_nome}' removido de {usuario.nome}.", "success")
             else:
                 flash("Vínculo não encontrado.", "warning")
 
         elif action == "remover_todos":
             UsuarioSite.query.filter_by(usuario_id=usuario_id).delete()
             db.session.commit()
-            flash(f"Todos os vínculos de {usuario.nome} foram removidos. Ele voltará a ver apenas o próprio site.", "success")
+            flash(f"Todos os sites de {usuario.nome} foram removidos.", "success")
 
-        return redirect(url_for("vincular_sites"))
+        return redirect(url_for("admin_multisites"))
 
-    # GET — carrega vínculos de todos os usuários
+    # GET — carrega vínculos de todos os usuários MULTISITES
     vinculos_por_usuario = {}
     for u in todos_usuarios:
         vinculos = UsuarioSite.query.filter_by(usuario_id=u.id).order_by(UsuarioSite.site_nome).all()
         vinculos_por_usuario[u.id] = [v.site_nome for v in vinculos]
 
     return render_template(
-        "vincular_sites.html",
+        "admin_multisites.html",
         todos_usuarios=todos_usuarios,
         todos_sites=todos_sites,
         vinculos_por_usuario=vinculos_por_usuario,
+        pendentes=pendentes,
     )
 
 
@@ -5770,6 +5964,104 @@ def admin_rejeitar_solicitacao(sid):
 
 
 # =========================
+# ADMIN — RELEASES / AUTO-UPDATE
+# =========================
+
+@app.route("/admin/releases", methods=["GET", "POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_releases():
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip()
+
+        # ── Upload de novo release ──────────────────────────────────────────
+        if action == "upload":
+            versao  = (request.form.get("versao") or "").strip()
+            arquivo = request.files.get("exe_file")
+            ativar  = request.form.get("ativar_agora") == "1"
+
+            if not versao:
+                flash("Informe a versão antes de publicar.", "danger")
+                return redirect(url_for("admin_releases"))
+            if not arquivo or not arquivo.filename:
+                flash("Selecione o arquivo .exe para upload.", "danger")
+                return redirect(url_for("admin_releases"))
+
+            exe_data      = arquivo.read()
+            nome_arquivo  = arquivo.filename
+            tamanho_bytes = len(exe_data)
+
+            if ativar:
+                db.session.query(AppRelease).update({"ativo": "N"})
+                db.session.flush()
+
+            novo = AppRelease(
+                versao        = versao,
+                nome_arquivo  = nome_arquivo,
+                tamanho_bytes = tamanho_bytes,
+                exe_blob      = exe_data,
+                publicado_por = session.get("user_nome"),
+                ativo         = "S" if ativar else "N",
+            )
+            db.session.add(novo)
+            db.session.commit()
+            flash(
+                f"Versão {versao} publicada com sucesso "
+                f"({_fmt_size(tamanho_bytes)}"
+                + (" · marcada como ativa" if ativar else "")
+                + ").",
+                "success",
+            )
+            return redirect(url_for("admin_releases"))
+
+        # ── Ativar release ──────────────────────────────────────────────────
+        elif action == "ativar":
+            rid = int(request.form.get("release_id") or 0)
+            rel = AppRelease.query.get_or_404(rid)
+            db.session.query(AppRelease).update({"ativo": "N"})
+            rel.ativo = "S"
+            db.session.commit()
+            flash(f"Versão {rel.versao} definida como versão ativa.", "success")
+            return redirect(url_for("admin_releases"))
+
+        # ── Excluir release ─────────────────────────────────────────────────
+        elif action == "excluir":
+            rid = int(request.form.get("release_id") or 0)
+            rel = AppRelease.query.get_or_404(rid)
+            versao_rm = rel.versao
+            db.session.delete(rel)
+            db.session.commit()
+            flash(f"Versão {versao_rm} excluída.", "success")
+            return redirect(url_for("admin_releases"))
+
+    releases = AppRelease.query.order_by(AppRelease.publicado_em.desc()).all()
+    return render_template(
+        "admin_releases.html",
+        releases  = releases,
+        fmt_size  = _fmt_size,
+    )
+
+
+@app.route("/admin/releases/<int:rid>/download")
+@login_required
+@perfil_required("ADMIN")
+def admin_release_download(rid):
+    rel = AppRelease.query.get_or_404(rid)
+    if not rel.exe_blob:
+        flash("Arquivo não encontrado.", "danger")
+        return redirect(url_for("admin_releases"))
+    blob = rel.exe_blob
+    if hasattr(blob, "read"):
+        blob = blob.read()
+    return send_file(
+        BytesIO(blob),
+        download_name = rel.nome_arquivo or "CCTV_ControlPanel.exe",
+        as_attachment = True,
+        mimetype      = "application/octet-stream",
+    )
+
+
+# =========================
 # CONTROLE DE CHAVES — Blueprint
 # =========================
 from chaves_blueprint import chaves_bp, setup_chaves
@@ -5876,6 +6168,8 @@ def _init_db():
             "ALTER TABLE CLAVICULARIO_RETIRADA ADD (NOME_RETIRADOR VARCHAR2(150))",
             "ALTER TABLE CLAVICULARIO_RETIRADA ADD (RESPONSAVEL_ENTREGA VARCHAR2(150))",
             "ALTER TABLE CLAVICULARIO_RETIRADA ADD (ASSINATURA CLOB)",
+            # Tabela de releases para o sistema de auto-atualização
+            "CREATE TABLE APP_RELEASES (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, VERSAO VARCHAR2(20) NOT NULL, NOME_ARQUIVO VARCHAR2(255), TAMANHO_BYTES NUMBER, EXE_BLOB BLOB, PUBLICADO_EM TIMESTAMP DEFAULT SYSTIMESTAMP, PUBLICADO_POR VARCHAR2(120), ATIVO VARCHAR2(1) DEFAULT 'N')",
         ]:
             try:
                 db.session.execute(db.text(_col_sql))

@@ -108,11 +108,15 @@ def login_required_chaves(f):
     return decorated
 
 
+def _is_privileged():
+    """Retorna True se o usuário for ADMIN ou SUPERVISOR."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN", "SUPERVISOR")
+
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if (session.get("user_perfil") or "").upper() != "ADMIN":
-            flash("Acesso restrito a administradores.", "danger")
+        if not _is_privileged():
+            flash("Acesso restrito a administradores e supervisores.", "danger")
             return redirect(url_for("chaves.meu_claviculario"))
         return f(*args, **kwargs)
     return decorated
@@ -134,11 +138,11 @@ def index():
 @login_required_chaves
 def meu_claviculario():
     site     = session.get("user_site", "")
-    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    is_admin = _is_privileged()
 
     if request.method == "POST":
         if not is_admin:
-            flash("Apenas administradores podem adicionar chaves ao claviculário.", "danger")
+            flash("Apenas administradores e supervisores podem adicionar chaves ao claviculário.", "danger")
             return redirect(url_for("chaves.meu_claviculario"))
 
         numero_chave = request.form.get("numero_chave", "").strip()
@@ -170,10 +174,18 @@ def meu_claviculario():
 
         return redirect(url_for("chaves.meu_claviculario"))
 
-    chaves = (ClavicularioChave.query
-              .filter_by(site=site, ativa=True)
-              .order_by(ClavicularioChave.id)
-              .all())
+    site_filtro = request.args.get("site", "") if is_admin else ""
+
+    if is_admin:
+        chaves = (ClavicularioChave.query
+                  .filter_by(ativa=True)
+                  .order_by(ClavicularioChave.site, ClavicularioChave.id)
+                  .all())
+    else:
+        chaves = (ClavicularioChave.query
+                  .filter_by(site=site, ativa=True)
+                  .order_by(ClavicularioChave.id)
+                  .all())
 
     agora           = datetime.now()
     tres_dias_atras = agora - timedelta(days=3)
@@ -199,6 +211,8 @@ def meu_claviculario():
         else:
             disponiveis += 1
 
+    sites_lista = sorted({c.site for c in chaves if c.site}) if is_admin else []
+
     resumo = {
         "em_uso":        em_uso,
         "disponiveis":   disponiveis,
@@ -207,6 +221,7 @@ def meu_claviculario():
     return render_template(
         "chaves/meu_claviculario.html",
         chaves=chaves, resumo=resumo, site=site, is_admin=is_admin,
+        site_filtro=site_filtro, sites_lista=sites_lista,
     )
 
 
@@ -215,7 +230,7 @@ def meu_claviculario():
 def detalhe_chave_clav(chave_id):
     chave    = ClavicularioChave.query.get_or_404(chave_id)
     site     = session.get("user_site", "")
-    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    is_admin = _is_privileged()
 
     if chave.site != site and not is_admin:
         return jsonify({"erro": "Acesso negado"}), 403
@@ -254,6 +269,48 @@ def excluir_chave_clav(chave_id):
     chave.ativa = False
     _db.session.commit()
     flash("Chave removida do claviculário.", "success")
+    return redirect(url_for("chaves.meu_claviculario"))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EXCLUIR EM LOTE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@chaves_bp.route("/meu-claviculario/excluir-lote", methods=["POST"])
+@login_required_chaves
+@admin_required
+def excluir_lote_chaves():
+    ids      = request.form.getlist("ids")
+    site     = session.get("user_site", "")
+    is_admin = _is_privileged()
+    if not ids:
+        flash("Nenhuma chave selecionada.", "warning")
+        return redirect(url_for("chaves.meu_claviculario"))
+    removidas = ignoradas = 0
+    for chave_id in ids:
+        q = ClavicularioChave.query.filter_by(id=chave_id, ativa=True)
+        if not is_admin:
+            q = q.filter_by(site=site)
+        chave = q.first()
+        if not chave:
+            continue
+        em_uso = (ClavicularioRetirada.query
+                  .filter_by(chave_id=chave.id, status="EM USO")
+                  .first())
+        if em_uso:
+            ignoradas += 1
+            continue
+        chave.ativa = False
+        removidas += 1
+    try:
+        _db.session.commit()
+        msg = f"{removidas} chave(s) removida(s)."
+        if ignoradas:
+            msg += f" {ignoradas} ignorada(s) (em uso)."
+        flash(msg, "success" if removidas else "warning")
+    except Exception as e:
+        _db.session.rollback()
+        flash(f"Erro ao remover chaves: {e}", "danger")
     return redirect(url_for("chaves.meu_claviculario"))
 
 

@@ -69,6 +69,17 @@
   .form-actions{ margin-top:14px; display:flex; gap:10px; }
 
   @media(max-width:600px){ .grid-3{ grid-template-columns:1fr; } }
+
+  /* ── Seleção em lote ── */
+  .bulk-bar{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:#1f2937; color:#fff; border-radius:14px; padding:12px 20px;
+    display:none; align-items:center; gap:16px; box-shadow:0 8px 32px rgba(0,0,0,.25);
+    z-index:500; white-space:nowrap;
+  }
+  .bulk-bar.show{ display:flex; }
+  .bulk-count span{ color:#fbbf24; font-weight:900; }
+  .chk-sel{ width:16px; height:16px; cursor:pointer; accent-color:#d40511; }
 </style>
 
 <!-- Export filter panel (outside max-width) -->
@@ -159,19 +170,35 @@
 <div>
   <div class="section-head">
     <h2 class="section-title">Chaves Cadastradas</h2>
-    <span class="section-chip">{{ site }}</span>
+    <span class="section-chip">{{ 'Todos os sites' if is_admin else site }}</span>
   </div>
+  {% if is_admin and chaves %}
+  <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <input type="text" id="inp-chaves" placeholder="🔍 Buscar por número, local ou criador..."
+           oninput="filtrarChaves()"
+           style="flex:1;min-width:180px;padding:9px 13px;border:1px solid var(--line);border-radius:10px;font-size:13px;font-family:inherit;outline:none;">
+    <select id="sel-site-chaves" onchange="filtrarChaves()"
+            style="padding:9px 13px;border:1px solid var(--line);border-radius:10px;font-size:13px;font-family:inherit;outline:none;background:#fff;cursor:pointer;">
+      <option value="">Todos os sites</option>
+      {% for s in sites_lista %}<option value="{{ s|lower }}">{{ s }}</option>{% endfor %}
+    </select>
+  </div>
+  {% endif %}
   {% if chaves %}
+  <form method="POST" action="{{ url_for('chaves.excluir_lote_chaves') }}" id="form-lote-chaves" hx-boost="false">
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
+          {% if is_admin %}<th style="width:36px"><input type="checkbox" class="chk-sel" id="chk-all-chaves" onchange="selecionarTodos('tb-chaves','chk-all-chaves','bulk-chaves')"></th>{% endif %}
           <th>Nº da Chave</th><th>Local</th><th>Site</th><th>Criador</th><th>Status</th><th>Ações</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="tb-chaves">
         {% for chave in chaves %}
-        <tr>
+        <tr data-search="{{ chave.numero_chave|lower }} {{ chave.local|lower }} {{ (chave.criador_nome or '')|lower }}"
+            data-site="{{ (chave.site or '')|lower }}">
+          {% if is_admin %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ chave.id }}" onchange="atualizarBulk('tb-chaves','chk-all-chaves','bulk-chaves')"></td>{% endif %}
           <td><strong>{{ chave.numero_chave }}</strong></td>
           <td>{{ chave.local }}</td>
           <td>{{ chave.site }}</td>
@@ -198,10 +225,21 @@
       </tbody>
     </table>
   </div>
+  {% if is_admin %}</form>{% endif %}
   {% else %}
   <div class="card"><p class="empty">Nenhuma chave cadastrada para o site <strong>{{ site }}</strong>.{% if is_admin %} Use o formulário acima para adicionar.{% endif %}</p></div>
   {% endif %}
 </div>
+
+{% if is_admin %}
+<div class="bulk-bar" id="bulk-chaves">
+  <span class="bulk-count"><span id="bulk-chaves-cnt">0</span> selecionada(s)</span>
+  <button type="button" class="btn btn-red btn-sm"
+    onclick="confirmarLote('form-lote-chaves','chave','remover')">🗑 Remover selecionadas</button>
+  <button type="button" class="btn btn-soft btn-sm"
+    onclick="limparSelecao('tb-chaves','chk-all-chaves','bulk-chaves')">✕</button>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block modals %}
@@ -261,6 +299,47 @@ function fecharModal(e){
   if(!e || e.target === document.getElementById('modalOverlay')){
     document.getElementById('modalOverlay').classList.remove('open');
   }
+}
+
+/* ── Seleção em lote ── */
+function atualizarBulk(tbodyId, allId, barId){
+  var checked = document.querySelectorAll('#' + tbodyId + ' .chk-row:checked');
+  var visible  = document.querySelectorAll('#' + tbodyId + ' tr:not([style*="display:none"]) .chk-row');
+  var bar = document.getElementById(barId);
+  var cnt = document.getElementById(barId + '-cnt');
+  var allChk = document.getElementById(allId);
+  if(cnt) cnt.textContent = checked.length;
+  if(bar) bar.classList.toggle('show', checked.length > 0);
+  if(allChk) allChk.indeterminate = checked.length > 0 && checked.length < visible.length;
+  if(allChk && checked.length > 0 && checked.length === visible.length) allChk.checked = true;
+  if(allChk && checked.length === 0) allChk.checked = false;
+}
+function selecionarTodos(tbodyId, allId, barId){
+  var allChk = document.getElementById(allId);
+  document.querySelectorAll('#' + tbodyId + ' tr:not([style*="display:none"]) .chk-row').forEach(c => c.checked = allChk.checked);
+  atualizarBulk(tbodyId, allId, barId);
+}
+function limparSelecao(tbodyId, allId, barId){
+  document.querySelectorAll('#' + tbodyId + ' .chk-row').forEach(c => c.checked = false);
+  var a = document.getElementById(allId); if(a){ a.checked=false; a.indeterminate=false; }
+  var b = document.getElementById(barId); if(b) b.classList.remove('show');
+}
+function confirmarLote(formId, tipo, acao){
+  var n = document.querySelectorAll('#' + formId + ' .chk-row:checked').length;
+  if(!n){ alert('Nenhum item selecionado.'); return; }
+  if(confirm('Tem certeza que deseja ' + acao + ' ' + n + ' ' + tipo + '(s)?\nChaves em uso serão ignoradas.')){
+    document.getElementById(formId).submit();
+  }
+}
+
+function filtrarChaves(){
+  const q    = (document.getElementById('inp-chaves')?.value || '').toLowerCase();
+  const site = (document.getElementById('sel-site-chaves')?.value || '').toLowerCase();
+  document.querySelectorAll('#tb-chaves tr').forEach(tr=>{
+    const okQ    = !q    || tr.dataset.search.includes(q);
+    const okSite = !site || tr.dataset.site === site;
+    tr.style.display = okQ && okSite ? '' : 'none';
+  });
 }
 
 function gerarLinkExport(e){

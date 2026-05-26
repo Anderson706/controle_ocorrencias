@@ -1,0 +1,225 @@
+{% extends "base_app.html" %}
+{% block page_title %}Releases | CCTV Control Panel{% endblock %}
+{% block topbar_title %}📦 Releases — Auto-Update{% endblock %}
+{% block topbar_subtitle %}Publique novas versões do CCTV_ControlPanel.exe para distribuição automática{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-soft btn-sm">← Admin</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  /* ── Info box ── */
+  .info-box{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px 18px; font-size:13px; color:#1e40af; margin-bottom:22px; line-height:1.65; }
+  .info-box code{ background:#dbeafe; border-radius:4px; padding:2px 6px; font-size:12px; font-family:monospace; }
+
+  /* ── Upload card ── */
+  .upload-card{ background:#fff; border:1px solid var(--line); border-radius:18px; padding:28px 30px; box-shadow:0 4px 16px rgba(0,0,0,.06); margin-bottom:28px; }
+  .upload-card-title{ font-size:16px; font-weight:900; margin:0 0 2px; color:var(--text); }
+  .upload-card-sub{ font-size:12px; color:var(--muted); margin:0 0 22px; }
+
+  /* Linha de campos: versão + arquivo lado a lado */
+  .upload-row{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
+  .upload-row .field-versao{ flex:0 0 160px; }
+  .upload-row .field-arquivo{ flex:1 1 260px; }
+
+  .up-label{ display:block; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:7px; }
+
+  /* Input de texto */
+  .up-input{ width:100%; padding:11px 14px; border:1.5px solid var(--line); border-radius:11px; font-size:13px; font-family:inherit; background:#fafbfc; color:var(--text); outline:none; transition:.15s; box-sizing:border-box; }
+  .up-input:focus{ border-color:var(--dhl-red); background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.07); }
+
+  /* Botão de arquivo customizado */
+  .file-wrapper{ position:relative; }
+  .file-wrapper input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .file-display{ display:flex; align-items:center; gap:10px; padding:10px 14px; border:1.5px dashed var(--line); border-radius:11px; background:#fafbfc; cursor:pointer; transition:.15s; min-height:46px; }
+  .file-display:hover{ border-color:var(--dhl-red); background:#fff9f9; }
+  .file-display .file-icon{ font-size:18px; flex-shrink:0; }
+  .file-display .file-text{ font-size:13px; color:var(--muted); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .file-display .file-text.chosen{ color:var(--text); font-weight:700; }
+
+  /* Separador vertical */
+  .upload-divider{ width:1px; background:var(--line); align-self:stretch; margin:0 6px; flex-shrink:0; }
+
+  /* Botão publicar */
+  .btn-publicar{ flex-shrink:0; display:inline-flex; align-items:center; gap:8px; padding:11px 22px; background:var(--dhl-red); color:#fff; border:none; border-radius:11px; font-size:13px; font-weight:800; cursor:pointer; font-family:inherit; transition:.15s; white-space:nowrap; }
+  .btn-publicar:hover{ background:var(--dhl-red-dark); }
+
+  /* Checkbox ativar */
+  .check-row{ display:flex; align-items:center; gap:9px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+  .check-row input[type=checkbox]{ accent-color:var(--dhl-red); width:16px; height:16px; cursor:pointer; flex-shrink:0; }
+  .check-row label{ font-size:13px; font-weight:600; color:var(--text); cursor:pointer; line-height:1.4; }
+
+  /* ── Releases table ── */
+  .table-card{ background:#fff; border:1px solid var(--line); border-radius:18px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.05); }
+  .table-head-bar{ display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--line); }
+  .table-head-bar h3{ font-size:15px; font-weight:900; margin:0; color:var(--text); }
+  table{ width:100%; border-collapse:collapse; }
+  th{ padding:10px 16px; text-align:left; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; background:#f9fafb; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td{ padding:13px 16px; border-bottom:1px solid var(--line); font-size:13px; color:var(--text); vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  tr:hover td{ background:#fafafa; }
+  .badge{ display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; }
+  .badge-ativa{ background:#dcfce7; color:#166534; }
+  .badge-inativa{ background:#f1f5f9; color:#6b7280; }
+  .tbl-actions{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .btn-del{ background:#fee2e2; color:#991b1b; border:none; cursor:pointer; padding:6px 11px; border-radius:8px; font-size:12px; font-weight:700; font-family:inherit; transition:.12s; }
+  .btn-del:hover{ background:#fca5a5; }
+  .empty{ text-align:center; padding:48px 20px; color:var(--muted); font-size:14px; font-weight:700; }
+  .empty .icon{ font-size:40px; margin-bottom:12px; }
+</style>
+
+<!-- Info box -->
+<div class="info-box">
+  ℹ️ O <strong>CCTV_Updater.exe</strong> conecta ao banco, baixa o EXE marcado como <em>ativo</em> e instala em
+  <code>%LOCALAPPDATA%\CCTV_ControlPanel\CCTV_ControlPanel.exe</code>, criando um atalho na Área de Trabalho.<br>
+  Marque uma versão como <strong>ativa</strong> para que o Updater a distribua automaticamente.
+</div>
+
+<!-- Upload form -->
+<div class="upload-card">
+  <p class="upload-card-title">➕ Publicar nova versão</p>
+  <p class="upload-card-sub">Selecione o executável compilado e informe a versão. O arquivo pode ter até 100 MB.</p>
+
+  <form method="POST" enctype="multipart/form-data" id="form-upload"
+        onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+    <input type="hidden" name="action" value="upload">
+
+    <div class="upload-row">
+      <!-- Versão -->
+      <div class="field-versao">
+        <label class="up-label">Versão *</label>
+        <input type="text" name="versao" class="up-input" placeholder="ex.: 3.6" required maxlength="20">
+      </div>
+
+      <!-- Arquivo -->
+      <div class="field-arquivo">
+        <label class="up-label">Arquivo .exe *</label>
+        <div class="file-wrapper">
+          <div class="file-display" id="file-display">
+            <span class="file-icon">📂</span>
+            <span class="file-text" id="file-text">Clique para escolher o arquivo...</span>
+          </div>
+          <input type="file" name="exe_file" accept=".exe" required
+                 onchange="atualizarArquivo(this)">
+        </div>
+      </div>
+
+      <div class="upload-divider"></div>
+
+      <!-- Botão -->
+      <div style="align-self:flex-end">
+        <button type="submit" class="btn-publicar">
+          <span>📤</span> Publicar
+        </button>
+      </div>
+    </div>
+
+    <div class="check-row">
+      <input type="checkbox" name="ativar_agora" id="chk-ativar" value="1" checked>
+      <label for="chk-ativar">
+        Marcar como <strong>versão ativa</strong> imediatamente — o Updater passará a distribuir esta versão
+      </label>
+    </div>
+  </form>
+</div>
+
+<!-- Releases table -->
+<div class="table-card">
+  <div class="table-head-bar">
+    <h3>{{ releases|length }} versão(ões) publicada(s)</h3>
+  </div>
+  {% if releases %}
+  <table>
+    <thead>
+      <tr>
+        <th>Versão</th>
+        <th>Arquivo</th>
+        <th>Tamanho</th>
+        <th>Publicado em</th>
+        <th>Publicado por</th>
+        <th>Status</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in releases %}
+      <tr>
+        <td><strong>{{ r.versao }}</strong></td>
+        <td style="color:var(--muted);font-size:12px">{{ r.nome_arquivo or '—' }}</td>
+        <td style="white-space:nowrap">{{ fmt_size(r.tamanho_bytes) }}</td>
+        <td style="white-space:nowrap;color:var(--muted)">
+          {{ r.publicado_em.strftime('%d/%m/%Y %H:%M') if r.publicado_em else '—' }}
+        </td>
+        <td>{{ r.publicado_por or '—' }}</td>
+        <td>
+          {% if r.ativo == 'S' %}
+            <span class="badge badge-ativa">✔ Ativa</span>
+          {% else %}
+            <span class="badge badge-inativa">Inativa</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="tbl-actions">
+            <!-- Download -->
+            <a href="{{ url_for('admin_release_download', rid=r.id) }}"
+               class="btn btn-soft btn-sm" title="Baixar EXE">⬇ Download</a>
+
+            <!-- Ativar -->
+            {% if r.ativo != 'S' %}
+            <form method="POST" style="display:inline" hx-boost="false">
+              <input type="hidden" name="action" value="ativar">
+              <input type="hidden" name="release_id" value="{{ r.id }}">
+              <button type="submit" class="btn btn-green btn-sm">✔ Ativar</button>
+            </form>
+            {% endif %}
+
+            <!-- Excluir -->
+            <form method="POST" style="display:inline" hx-boost="false">
+              <input type="hidden" name="action" value="excluir">
+              <input type="hidden" name="release_id" value="{{ r.id }}">
+              <button type="submit" class="btn-del"
+                onclick="return confirm('Excluir versão {{ r.versao }}? Esta ação não pode ser desfeita.')">
+                🗑 Excluir
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <div class="icon">📦</div>
+    <p>Nenhuma versão publicada ainda.</p>
+    <p style="font-size:13px;font-weight:500;margin-top:6px">Use o formulário acima para publicar o primeiro release.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function atualizarArquivo(input) {
+  var display = document.getElementById('file-display');
+  var text    = document.getElementById('file-text');
+  if (input.files && input.files[0]) {
+    var nome  = input.files[0].name;
+    var mb    = (input.files[0].size / 1048576).toFixed(1);
+    text.textContent = nome + '  (' + mb + ' MB)';
+    text.classList.add('chosen');
+    display.style.borderColor    = '#16a34a';
+    display.style.borderStyle    = 'solid';
+    display.style.background     = '#f0fdf4';
+    display.querySelector('.file-icon').textContent = '✔';
+  } else {
+    text.textContent = 'Clique para escolher o arquivo...';
+    text.classList.remove('chosen');
+    display.style.borderColor = '';
+    display.style.borderStyle = 'dashed';
+    display.style.background  = '';
+    display.querySelector('.file-icon').textContent = '📂';
+  }
+}
+</script>
+{% endblock %}

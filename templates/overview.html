@@ -1,11 +1,6 @@
 {% extends "base_app.html" %}
 {% block page_title %}Overview | CCTV Control Panel{% endblock %}
 
-{% block extra_head %}
-<script src="/static/chart.umd.min.js"></script>
-<script src="/static/chartjs-plugin-datalabels.min.js"></script>
-{% endblock %}
-
 {% block topbar_title %}Overview Geral{% endblock %}
 {% block topbar_subtitle %}Visão consolidada de todos os módulos{% endblock %}
 {% block topbar_actions %}
@@ -77,7 +72,88 @@
 
   @media(max-width:1100px){ .g4,.g5{ grid-template-columns:repeat(2,1fr); } }
   @media(max-width:700px){ .g2,.g3,.g4,.g5{ grid-template-columns:1fr; } }
+
+  /* ── Filter bars ── */
+  .filter-bar{
+    display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    padding:10px 16px; background:#f9fafb;
+    border:1px solid var(--line); border-top:none; border-bottom:none;
+  }
+  .filter-bar input{
+    flex:1; min-width:160px; padding:7px 11px;
+    border:1px solid var(--line); border-radius:9px;
+    font-size:12px; font-family:inherit; outline:none; background:#fff;
+  }
+  .filter-bar input:focus{ border-color:var(--dhl-red); }
+  .filter-bar select{
+    padding:7px 11px; border:1px solid var(--line); border-radius:9px;
+    font-size:12px; font-family:inherit; outline:none;
+    background:#fff; cursor:pointer; color:var(--text);
+  }
+  .filter-bar select:focus{ border-color:var(--dhl-red); }
+  .f-count{ font-size:11px; font-weight:700; color:var(--muted); white-space:nowrap; margin-left:auto; }
+  .f-count span{ color:var(--dhl-red); font-weight:900; }
+  .f-clear{ font-size:11px; font-weight:700; color:var(--muted); background:none; border:none;
+            cursor:pointer; font-family:inherit; padding:4px 8px; border-radius:6px; }
+  .f-clear:hover{ background:#fee2e2; color:var(--dhl-red); }
 </style>
+
+<!-- ── BARRA DE FILTROS ───────────────────────── -->
+<style>
+  .ov-filter-bar{
+    background:#fff; border:1px solid var(--line); border-radius:14px;
+    padding:14px 20px; display:flex; gap:12px; flex-wrap:wrap;
+    align-items:flex-end; margin-bottom:20px; box-shadow:var(--shadow);
+  }
+  .ov-filter-bar .ff{ display:flex; flex-direction:column; gap:4px; }
+  .ov-filter-bar label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .ov-filter-bar input[type=date],
+  .ov-filter-bar select{
+    padding:8px 12px; border:1px solid var(--line); border-radius:10px;
+    font-size:13px; font-family:inherit; outline:none; background:#fff; cursor:pointer;
+  }
+  .ov-filter-bar input[type=date]:focus,
+  .ov-filter-bar select:focus{ border-color:var(--dhl-red); }
+  .ov-filtros-ativos{
+    display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
+    background:#fde8ea; border-radius:999px; font-size:11px; font-weight:800; color:#b42318;
+    margin-left:6px;
+  }
+</style>
+
+<form method="GET" action="{{ url_for('overview') }}" hx-boost="false">
+<div class="ov-filter-bar">
+  <div class="ff">
+    <label>De</label>
+    <input type="date" name="data_ini" value="{{ f_ini }}">
+  </div>
+  <div class="ff">
+    <label>Até</label>
+    <input type="date" name="data_fim" value="{{ f_fim }}">
+  </div>
+  {% if is_admin %}
+  <div class="ff">
+    <label>Site</label>
+    <select name="site">
+      <option value="">Todos os sites</option>
+      {% for s in todos_sites %}
+      <option value="{{ s }}" {{ 'selected' if f_site == s else '' }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <button type="submit" class="btn btn-red btn-sm" style="align-self:flex-end;">🔍 Filtrar</button>
+  {% if filtros_ativos %}
+  <a href="{{ url_for('overview') }}" class="btn btn-soft btn-sm" style="align-self:flex-end;">✕ Limpar</a>
+  <span class="ov-filtros-ativos">
+    ⚡ Filtrado
+    {% if f_ini %} · De {{ f_ini }}{% endif %}
+    {% if f_fim %} · Até {{ f_fim }}{% endif %}
+    {% if f_site %} · {{ f_site }}{% endif %}
+  </span>
+  {% endif %}
+</div>
+</form>
 
 <!-- ── HERO STRIP ─────────────────────────────── -->
 <div class="hero-strip">
@@ -242,6 +318,7 @@
   <div class="line"></div>
 </div>
 
+
 <div style="margin-top:14px;">
   <div class="tab-bar">
     <button class="tab-btn active" onclick="trocarTab('oc',this)">📋 Investigações <span style="background:rgba(255,255,255,.2);border-radius:999px;padding:1px 7px;font-size:10px;">{{ ultimas_ocs|length }}</span></button>
@@ -252,14 +329,25 @@
 
   <!-- Tab: Investigações -->
   <div class="tab-panel active" id="tab-oc">
+    <div class="filter-bar">
+      <input type="text" id="fi-oc-q" placeholder="🔍 Código, natureza, local, operador..." oninput="filtrar('oc')">
+      <select id="fi-oc-nat"    onchange="filtrar('oc')"><option value="">Todas as naturezas</option></select>
+      <select id="fi-oc-status" onchange="filtrar('oc')"><option value="">Todos os status</option></select>
+      <select id="fi-oc-prio"   onchange="filtrar('oc')"><option value="">Todas as prioridades</option></select>
+      <span class="f-count" id="fc-oc"><span id="fc-oc-n">{{ ultimas_ocs|length }}</span> / {{ ultimas_ocs|length }}</span>
+      <button class="f-clear" onclick="limparFiltro('oc')">✕ Limpar</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
           <th>Código</th><th>Data</th><th>Natureza</th><th>Local</th><th>Operador</th><th>Status</th><th>Prioridade</th><th>B.O.</th>
         </tr></thead>
-        <tbody>
+        <tbody id="tb-oc">
           {% for r in ultimas_ocs %}
-          <tr>
+          <tr data-q="{{ ((r.codigo or '') ~ ' ' ~ (r.natureza or '') ~ ' ' ~ (r.local or '') ~ ' ' ~ (r.operador or ''))|lower }}"
+              data-status="{{ (r.status or '')|upper }}"
+              data-nat="{{ (r.natureza or '')|upper }}"
+              data-prio="{{ (r.prioridade or '')|upper }}">
             <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
             <td style="white-space:nowrap;">{{ (r.data_hora or '')[:10] }}</td>
             <td>{{ r.natureza or '—' }}</td>
@@ -285,14 +373,23 @@
 
   <!-- Tab: ANCs -->
   <div class="tab-panel" id="tab-anc">
+    <div class="filter-bar">
+      <input type="text" id="fi-anc-q" placeholder="🔍 Código, tipo, setor, responsável..." oninput="filtrar('anc')">
+      <select id="fi-anc-grav"   onchange="filtrar('anc')"><option value="">Todas as gravidades</option></select>
+      <select id="fi-anc-status" onchange="filtrar('anc')"><option value="">Todos os status</option></select>
+      <span class="f-count" id="fc-anc"><span id="fc-anc-n">{{ ultimas_ancs|length }}</span> / {{ ultimas_ancs|length }}</span>
+      <button class="f-clear" onclick="limparFiltro('anc')">✕ Limpar</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
           <th>Código</th><th>Data</th><th>Tipo</th><th>Setor</th><th>Responsável</th><th>Gravidade</th><th>Status</th><th>Valor</th>
         </tr></thead>
-        <tbody>
+        <tbody id="tb-anc">
           {% for r in ultimas_ancs %}
-          <tr>
+          <tr data-q="{{ ((r.codigo or '') ~ ' ' ~ (r.tipo_ocorrencia or '') ~ ' ' ~ (r.setor or '') ~ ' ' ~ (r.responsavel or ''))|lower }}"
+              data-status="{{ (r.status or '')|upper }}"
+              data-grav="{{ (r.gravidade or '')|upper }}">
             <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
             <td style="white-space:nowrap;">{{ (r.data_nc or '')[:10] }}</td>
             <td>{{ r.tipo_ocorrencia or '—' }}</td>
@@ -318,14 +415,21 @@
 
   <!-- Tab: Análises -->
   <div class="tab-panel" id="tab-an">
+    <div class="filter-bar">
+      <input type="text" id="fi-an-q" placeholder="🔍 Código, classificação, site, criado por..." oninput="filtrar('an')">
+      <select id="fi-an-status" onchange="filtrar('an')"><option value="">Todos os status</option></select>
+      <span class="f-count" id="fc-an"><span id="fc-an-n">{{ ultimas_analises|length }}</span> / {{ ultimas_analises|length }}</span>
+      <button class="f-clear" onclick="limparFiltro('an')">✕ Limpar</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
           <th>Código</th><th>Data</th><th>Classificação</th><th>Site</th><th>Criado por</th><th>Status</th><th>Valor</th>
         </tr></thead>
-        <tbody>
+        <tbody id="tb-an">
           {% for r in ultimas_analises %}
-          <tr>
+          <tr data-q="{{ ((r.codigo or '') ~ ' ' ~ (r.classificacao or '') ~ ' ' ~ (r.site or '') ~ ' ' ~ (r.criado_por or ''))|lower }}"
+              data-status="{{ (r.status_analise or '')|upper }}">
             <td><span class="code">{{ r.codigo or '#'+r.id|string }}</span></td>
             <td style="white-space:nowrap;">{{ (r.data_ocorrencia or '')[:10] }}</td>
             <td>{{ r.classificacao or '—' }}</td>
@@ -347,14 +451,23 @@
 
   <!-- Tab: Shift Handover -->
   <div class="tab-panel" id="tab-sh">
+    <div class="filter-bar">
+      <input type="text" id="fi-sh-q" placeholder="🔍 Site, setor, responsável saída/entrada..." oninput="filtrar('sh')">
+      <select id="fi-sh-turno"  onchange="filtrar('sh')"><option value="">Todos os turnos</option></select>
+      <select id="fi-sh-status" onchange="filtrar('sh')"><option value="">Todos os status</option></select>
+      <span class="f-count" id="fc-sh"><span id="fc-sh-n">{{ ultimos_shifts|length }}</span> / {{ ultimos_shifts|length }}</span>
+      <button class="f-clear" onclick="limparFiltro('sh')">✕ Limpar</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
           <th>Data</th><th>Site</th><th>Turno</th><th>Setor</th><th>Saída</th><th>Entrada</th><th>Status</th>
         </tr></thead>
-        <tbody>
+        <tbody id="tb-sh">
           {% for r in ultimos_shifts %}
-          <tr>
+          <tr data-q="{{ ((r.site or '') ~ ' ' ~ (r.setor or '') ~ ' ' ~ (r.responsavel_saida or '') ~ ' ' ~ (r.responsavel_entrada or ''))|lower }}"
+              data-turno="{{ (r.turno or '')|upper }}"
+              data-status="{{ (r.status or '')|upper }}">
             <td style="white-space:nowrap;">{{ r.data_ocorrencia.strftime('%d/%m/%Y') if r.data_ocorrencia else '—' }}</td>
             <td>{{ r.site or '—' }}</td>
             <td><span class="badge badge-gray">{{ r.turno or '—' }}</span></td>
@@ -377,6 +490,8 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="/static/chart.umd.min.js"></script>
+<script src="/static/chartjs-plugin-datalabels.min.js"></script>
 <script>
 // ── Tabs ─────────────────────────────────────────────
 function trocarTab(id, btn) {
@@ -384,6 +499,87 @@ function trocarTab(id, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
   btn.classList.add('active');
+}
+
+// ── Inicializa selects dos filtros dinamicamente ──────
+function initFiltros() {
+  // Mapeia: [tbodyId, [{selectId, dataAttr, label}]]
+  const cfg = [
+    { tb:'tb-oc',  selects:[
+      { id:'fi-oc-nat',    attr:'nat',    lbl:'Todas as naturezas'   },
+      { id:'fi-oc-status', attr:'status', lbl:'Todos os status'       },
+      { id:'fi-oc-prio',   attr:'prio',   lbl:'Todas as prioridades'  },
+    ]},
+    { tb:'tb-anc', selects:[
+      { id:'fi-anc-grav',   attr:'grav',   lbl:'Todas as gravidades'  },
+      { id:'fi-anc-status', attr:'status', lbl:'Todos os status'      },
+    ]},
+    { tb:'tb-an',  selects:[
+      { id:'fi-an-status',  attr:'status', lbl:'Todos os status'      },
+    ]},
+    { tb:'tb-sh',  selects:[
+      { id:'fi-sh-turno',  attr:'turno',  lbl:'Todos os turnos'       },
+      { id:'fi-sh-status', attr:'status', lbl:'Todos os status'       },
+    ]},
+  ];
+  cfg.forEach(({ tb, selects }) => {
+    const rows = document.querySelectorAll('#' + tb + ' tr:not(.empty-row)');
+    selects.forEach(({ id, attr, lbl }) => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const vals = new Set();
+      rows.forEach(tr => { const v = tr.dataset[attr]; if (v) vals.add(v); });
+      const sorted = [...vals].sort();
+      sel.innerHTML = `<option value="">${lbl}</option>`;
+      sorted.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        sel.appendChild(opt);
+      });
+    });
+  });
+}
+document.addEventListener('DOMContentLoaded', initFiltros);
+
+// ── Filtros ───────────────────────────────────────────
+
+function filtrar(tab) {
+  const q      = (document.getElementById('fi-'+tab+'-q')?.value      || '').toLowerCase().trim();
+  const status = (document.getElementById('fi-'+tab+'-status')?.value  || '').toUpperCase().trim();
+  const nat    = (document.getElementById('fi-'+tab+'-nat')?.value     || '').toUpperCase().trim();
+  const prio   = (document.getElementById('fi-'+tab+'-prio')?.value    || '').toUpperCase().trim();
+  const grav   = (document.getElementById('fi-'+tab+'-grav')?.value    || '').toUpperCase().trim();
+  const turno  = (document.getElementById('fi-'+tab+'-turno')?.value   || '').toUpperCase().trim();
+
+  let shown = 0;
+  document.querySelectorAll('#tb-'+tab+' tr:not(.empty-row)').forEach(tr => {
+    const d = tr.dataset;
+    const okQ      = !q      || (d.q      || '').includes(q);
+    const okStatus = !status || (d.status || '') === status;
+    const okNat    = !nat    || (d.nat    || '') === nat;
+    const okPrio   = !prio   || (d.prio   || '') === prio;
+    const okGrav   = !grav   || (d.grav   || '') === grav;
+    const okTurno  = !turno  || (d.turno  || '') === turno;
+    const show = okQ && okStatus && okNat && okPrio && okGrav && okTurno;
+    tr.style.display = show ? '' : 'none';
+    if (show) shown++;
+  });
+
+  // Atualiza contador
+  const el = document.getElementById('fc-'+tab+'-n');
+  if (el) el.textContent = shown;
+
+  // Exibe "empty" se nenhuma linha
+  const emptyRow = document.querySelector('#tb-'+tab+' .empty-row');
+  if (emptyRow) emptyRow.style.display = shown === 0 ? '' : 'none';
+}
+
+function limparFiltro(tab) {
+  ['q','nat','status','prio','grav','turno'].forEach(f => {
+    const el = document.getElementById('fi-'+tab+'-'+f);
+    if (el) el.value = '';
+  });
+  filtrar(tab);
 }
 
 // ── Chart.js setup ───────────────────────────────────

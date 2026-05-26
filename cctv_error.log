@@ -180,3 +180,103 @@
 2026-05-22 21:28:59,886 INFO: 127.0.0.1 - - [22/May/2026 21:28:59] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1" 200 -
 2026-05-22 21:28:59,907 INFO: 127.0.0.1 - - [22/May/2026 21:28:59] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=console.png&s=pqbTmZYsGDtGgRGKJ05T HTTP/1.1" 200 -
 2026-05-22 21:28:59,965 INFO: 127.0.0.1 - - [22/May/2026 21:28:59] "GET /ocorrencias?__debugger__=yes&cmd=resource&f=console.png HTTP/1.1" 200 -
+2026-05-25 09:23:13,336 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-25 09:23:13,338 INFO: [33mPress CTRL+C to quit[0m
+2026-05-25 09:23:13,341 INFO:  * Restarting with stat
+2026-05-25 09:23:27,122 WARNING:  * Debugger is active!
+2026-05-25 09:23:27,131 INFO:  * Debugger PIN: 229-837-400
+2026-05-25 09:23:27,184 INFO: 127.0.0.1 - - [25/May/2026 09:23:27] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-25 09:23:28,495 INFO: 127.0.0.1 - - [25/May/2026 09:23:28] "GET /login HTTP/1.1" 200 -
+2026-05-25 09:23:28,739 INFO: 127.0.0.1 - - [25/May/2026 09:23:28] "GET /static/panel.js HTTP/1.1" 200 -
+2026-05-25 09:23:28,741 INFO: 127.0.0.1 - - [25/May/2026 09:23:28] "GET /static/shared%20image%20(1).png HTTP/1.1" 200 -
+2026-05-25 09:23:29,549 INFO: 127.0.0.1 - - [25/May/2026 09:23:29] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-05-25 09:23:40,356 INFO: 127.0.0.1 - - [25/May/2026 09:23:40] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-05-25 09:23:50,212 INFO: 127.0.0.1 - - [25/May/2026 09:23:50] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-25 09:23:50,252 INFO: 127.0.0.1 - - [25/May/2026 09:23:50] "GET /static/htmx.min.js HTTP/1.1" 200 -
+2026-05-25 09:23:50,253 INFO: 127.0.0.1 - - [25/May/2026 09:23:50] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-25 09:24:14,863 INFO: 127.0.0.1 - - [25/May/2026 09:24:14] "GET /cameras HTTP/1.1" 200 -
+2026-05-25 09:24:52,254 INFO: 127.0.0.1 - - [25/May/2026 09:24:52] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 09:25:17,970 INFO: 127.0.0.1 - - [25/May/2026 09:25:17] "GET /chaves/meu-claviculario HTTP/1.1" 200 -
+2026-05-25 09:25:20,193 INFO: 127.0.0.1 - - [25/May/2026 09:25:20] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 09:27:20,253 INFO:  * Detected change in 'C:\\Users\\deivimar\\OneDrive - DPDHL\\Documents\\GitHub\\controle_ocorrencias\\armarios_blueprint.py', reloading
+2026-05-25 09:27:20,558 INFO:  * Restarting with stat
+2026-05-25 09:27:33,604 WARNING:  * Debugger is active!
+2026-05-25 09:27:33,611 INFO:  * Debugger PIN: 229-837-400
+2026-05-25 09:27:56,289 INFO:  * Detected change in 'C:\\Users\\deivimar\\OneDrive - DPDHL\\Documents\\GitHub\\controle_ocorrencias\\chaves_blueprint.py', reloading
+2026-05-25 09:27:56,568 INFO:  * Restarting with stat
+2026-05-25 09:28:10,322 WARNING:  * Debugger is active!
+2026-05-25 09:28:10,335 INFO:  * Debugger PIN: 229-837-400
+2026-05-25 09:29:34,886 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-25 09:29:34,887 INFO: [33mPress CTRL+C to quit[0m
+2026-05-25 09:29:34,890 INFO:  * Restarting with stat
+2026-05-25 09:29:46,754 WARNING:  * Debugger is active!
+2026-05-25 09:29:46,759 INFO:  * Debugger PIN: 229-837-400
+2026-05-25 09:29:48,562 INFO: 127.0.0.1 - - [25/May/2026 09:29:48] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 09:29:50,012 INFO: 127.0.0.1 - - [25/May/2026 09:29:50] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 09:29:50,013 INFO: 127.0.0.1 - - [25/May/2026 09:29:50] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 09:29:57,164 INFO: 127.0.0.1 - - [25/May/2026 09:29:57] "GET /armarios/detalhe/162 HTTP/1.1" 200 -
+2026-05-25 09:30:14,636 INFO: 127.0.0.1 - - [25/May/2026 09:30:14] "[32mPOST /armarios/atribuir/162 HTTP/1.1[0m" 302 -
+2026-05-25 09:30:15,673 INFO: 127.0.0.1 - - [25/May/2026 09:30:15] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 09:30:20,248 INFO: 127.0.0.1 - - [25/May/2026 09:30:20] "GET /armarios/detalhe/161 HTTP/1.1" 200 -
+2026-05-25 09:31:02,448 INFO: 127.0.0.1 - - [25/May/2026 09:31:02] "GET /armarios/detalhe/162 HTTP/1.1" 200 -
+2026-05-25 09:32:28,514 INFO: 127.0.0.1 - - [25/May/2026 09:32:28] "GET /armarios/detalhe/161 HTTP/1.1" 200 -
+2026-05-25 09:32:34,209 INFO: 127.0.0.1 - - [25/May/2026 09:32:34] "GET /armarios/chave-reserva HTTP/1.1" 200 -
+2026-05-25 09:32:36,039 INFO: 127.0.0.1 - - [25/May/2026 09:32:36] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 09:38:58,970 INFO:  * Detected change in 'C:\\Users\\deivimar\\OneDrive - DPDHL\\Documents\\GitHub\\controle_ocorrencias\\armarios_blueprint.py', reloading
+2026-05-25 09:38:59,278 INFO:  * Restarting with stat
+2026-05-25 09:39:11,281 WARNING:  * Debugger is active!
+2026-05-25 09:39:11,289 INFO:  * Debugger PIN: 229-837-400
+2026-05-25 10:13:34,558 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-25 10:13:34,559 INFO: [33mPress CTRL+C to quit[0m
+2026-05-25 10:13:34,562 INFO:  * Restarting with stat
+2026-05-25 10:13:47,050 WARNING:  * Debugger is active!
+2026-05-25 10:13:47,053 INFO:  * Debugger PIN: 229-837-400
+2026-05-25 10:13:51,268 INFO: 127.0.0.1 - - [25/May/2026 10:13:51] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-25 10:13:52,103 INFO: 127.0.0.1 - - [25/May/2026 10:13:52] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-25 10:14:13,091 INFO: 127.0.0.1 - - [25/May/2026 10:14:13] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-25 10:14:33,810 INFO: 127.0.0.1 - - [25/May/2026 10:14:33] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-25 10:14:34,088 INFO: 127.0.0.1 - - [25/May/2026 10:14:34] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-25 10:14:34,093 INFO: 127.0.0.1 - - [25/May/2026 10:14:34] "[36mGET /static/htmx.min.js HTTP/1.1[0m" 304 -
+2026-05-25 10:14:55,079 INFO: 127.0.0.1 - - [25/May/2026 10:14:55] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 10:15:31,423 INFO: 127.0.0.1 - - [25/May/2026 10:15:31] "GET /cameras HTTP/1.1" 200 -
+2026-05-25 10:16:06,941 INFO: 127.0.0.1 - - [25/May/2026 10:16:06] "GET /armarios/ HTTP/1.1" 200 -
+2026-05-25 10:17:26,163 INFO: 127.0.0.1 - - [25/May/2026 10:17:26] "GET /overview HTTP/1.1" 200 -
+2026-05-25 10:17:26,193 INFO: 127.0.0.1 - - [25/May/2026 10:17:26] "GET /static/chart.umd.min.js HTTP/1.1" 200 -
+2026-05-25 10:17:26,198 INFO: 127.0.0.1 - - [25/May/2026 10:17:26] "GET /static/chartjs-plugin-datalabels.min.js HTTP/1.1" 200 -
+2026-05-25 10:24:35,858 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-25 10:24:35,859 INFO: [33mPress CTRL+C to quit[0m
+2026-05-25 10:24:35,862 INFO:  * Restarting with stat
+2026-05-25 10:24:47,898 WARNING:  * Debugger is active!
+2026-05-25 10:24:47,905 INFO:  * Debugger PIN: 229-837-400
+2026-05-25 10:24:56,925 INFO: 127.0.0.1 - - [25/May/2026 10:24:56] "GET /overview HTTP/1.1" 200 -
+2026-05-25 10:24:57,281 INFO: 127.0.0.1 - - [25/May/2026 10:24:57] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-25 10:24:57,288 INFO: 127.0.0.1 - - [25/May/2026 10:24:57] "[36mGET /static/chartjs-plugin-datalabels.min.js HTTP/1.1[0m" 304 -
+2026-05-25 10:24:57,300 INFO: 127.0.0.1 - - [25/May/2026 10:24:57] "[36mGET /static/htmx.min.js HTTP/1.1[0m" 304 -
+2026-05-25 10:24:57,301 INFO: 127.0.0.1 - - [25/May/2026 10:24:57] "[36mGET /static/chart.umd.min.js HTTP/1.1[0m" 304 -
+2026-05-25 10:24:57,315 INFO: 127.0.0.1 - - [25/May/2026 10:24:57] "[36mGET /static/panel.js HTTP/1.1[0m" 304 -
+2026-05-25 10:25:30,645 INFO: 127.0.0.1 - - [25/May/2026 10:25:30] "GET /overview HTTP/1.1" 200 -
+2026-05-25 10:25:30,675 INFO: 127.0.0.1 - - [25/May/2026 10:25:30] "[36mGET /static/panel.js HTTP/1.1[0m" 304 -
+2026-05-25 10:25:46,683 INFO: 127.0.0.1 - - [25/May/2026 10:25:46] "GET /overview HTTP/1.1" 200 -
+2026-05-25 11:28:57,454 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-05-25 11:28:57,456 INFO: [33mPress CTRL+C to quit[0m
+2026-05-25 11:28:57,460 INFO:  * Restarting with stat
+2026-05-25 11:29:12,878 WARNING:  * Debugger is active!
+2026-05-25 11:29:12,895 INFO:  * Debugger PIN: 229-837-400
+2026-05-25 11:29:12,987 INFO: 127.0.0.1 - - [25/May/2026 11:29:12] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-25 11:29:22,952 INFO: 127.0.0.1 - - [25/May/2026 11:29:22] "GET /ocorrencias HTTP/1.1" 200 -
+2026-05-25 11:29:23,857 INFO: 127.0.0.1 - - [25/May/2026 11:29:23] "[36mGET /static/panel.js HTTP/1.1[0m" 304 -
+2026-05-25 11:29:23,889 INFO: 127.0.0.1 - - [25/May/2026 11:29:23] "[36mGET /static/htmx.min.js HTTP/1.1[0m" 304 -
+2026-05-25 11:29:23,893 INFO: 127.0.0.1 - - [25/May/2026 11:29:23] "[36mGET /static/shared%20image.png HTTP/1.1[0m" 304 -
+2026-05-25 11:29:47,622 INFO: 127.0.0.1 - - [25/May/2026 11:29:47] "GET /overview HTTP/1.1" 200 -
+2026-05-25 11:29:47,674 INFO: 127.0.0.1 - - [25/May/2026 11:29:47] "[36mGET /static/chart.umd.min.js HTTP/1.1[0m" 304 -
+2026-05-25 11:29:47,698 INFO: 127.0.0.1 - - [25/May/2026 11:29:47] "[36mGET /static/chartjs-plugin-datalabels.min.js HTTP/1.1[0m" 304 -
+2026-05-25 11:29:51,866 INFO: 127.0.0.1 - - [25/May/2026 11:29:51] "[32mGET / HTTP/1.1[0m" 302 -
+2026-05-25 11:29:52,977 INFO: 127.0.0.1 - - [25/May/2026 11:29:52] "GET /login HTTP/1.1" 200 -
+2026-05-25 11:29:53,023 INFO: 127.0.0.1 - - [25/May/2026 11:29:53] "GET /static/shared%20image%20(1).png HTTP/1.1" 200 -
+2026-05-25 11:29:53,024 INFO: 127.0.0.1 - - [25/May/2026 11:29:53] "GET /static/panel.js HTTP/1.1" 200 -
+2026-05-25 11:29:55,172 INFO: 127.0.0.1 - - [25/May/2026 11:29:55] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -

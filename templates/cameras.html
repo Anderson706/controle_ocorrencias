@@ -42,13 +42,29 @@
   .badge-warn{ background:#fff4db; color:#92400e; }
   .badge-off { background:#f3f4f6; color:#6b7280; }
 
-  .search-bar{ display:flex; gap:10px; margin-bottom:12px; }
-  .search-bar input{ flex:1; padding:9px 13px; border:1px solid var(--line);
+  .search-bar{ display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .search-bar input{ flex:1; min-width:180px; padding:9px 13px; border:1px solid var(--line);
                      border-radius:10px; font-size:13px; font-family:inherit; outline:none; }
   .search-bar input:focus{ border-color:var(--dhl-red); }
+  .search-bar select{ padding:9px 13px; border:1px solid var(--line); border-radius:10px;
+                      font-size:13px; font-family:inherit; outline:none; background:#fff;
+                      color:var(--text); cursor:pointer; }
+  .search-bar select:focus{ border-color:var(--dhl-red); }
 
   .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); }
   .empty-state p{ font-size:14px; }
+
+  /* ── Seleção em lote ── */
+  .bulk-bar{
+    display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:#1f2937; color:#fff; border-radius:14px; padding:12px 20px;
+    display:none; align-items:center; gap:16px; box-shadow:0 8px 32px rgba(0,0,0,.25);
+    z-index:500; white-space:nowrap;
+  }
+  .bulk-bar.show{ display:flex; }
+  .bulk-count{ font-size:13px; font-weight:700; }
+  .bulk-count span{ color:#fbbf24; font-weight:900; }
+  .chk-sel{ width:16px; height:16px; cursor:pointer; accent-color:var(--dhl-red); }
 
   /* modal editar câmera */
   .modal-edit-body{ display:grid; grid-template-columns:1fr 2fr; gap:12px; }
@@ -70,6 +86,11 @@
   </div>
 </div>
 
+{% if is_admin %}
+  {% set sites_cam = cameras   | map(attribute='site') | select | unique | sort | list %}
+  {% set sites_chk = checklists| map(attribute='site') | select | unique | sort | list %}
+{% endif %}
+
 <!-- Tab bar -->
 <div class="tab-bar">
   <button class="tab-btn active" onclick="trocarTab('cams',this)">Câmeras ({{ cameras|length }})</button>
@@ -79,15 +100,24 @@
 <!-- Tab: Câmeras -->
 <div id="tab-cams">
   <div class="search-bar">
-    <input type="text" placeholder="🔍 Buscar câmera por número ou nome..." oninput="filtrar(this.value)">
+    <input type="text" id="inp-cams" placeholder="🔍 Buscar câmera por número ou nome..." oninput="filtrarCams()">
+    {% if is_admin %}
+    <select id="sel-site-cams" onchange="filtrarCams()">
+      <option value="">Todos os sites</option>
+      {% for s in sites_cam %}<option value="{{ s|lower }}">{{ s }}</option>{% endfor %}
+    </select>
+    {% endif %}
   </div>
   <div class="table-card">
     {% if cameras %}
+    <form method="POST" action="{{ url_for('cameras_excluir_lote') }}" id="form-lote-cams" hx-boost="false">
     <table>
       <thead>
         <tr>
+          {% if is_admin %}<th style="width:36px"><input type="checkbox" class="chk-sel" id="chk-all-cams" onchange="selecionarTodos('tb-cams','chk-all-cams','bulk-cams',{{ cameras|length }})"></th>{% endif %}
           <th>Número</th>
           <th>Nome</th>
+          {% if is_admin %}<th>Site</th>{% endif %}
           <th>Status</th>
           <th>Cadastrada em</th>
           <th>Ações</th>
@@ -95,9 +125,12 @@
       </thead>
       <tbody id="tb-cams">
         {% for cam in cameras %}
-        <tr data-search="{{ cam.numero|lower }} {{ (cam.nome or '')|lower }}">
+        <tr data-search="{{ cam.numero|lower }} {{ (cam.nome or '')|lower }} {{ (cam.site or '')|lower }}"
+            data-site="{{ (cam.site or '')|lower }}">
+          {% if is_admin %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ cam.id }}" onchange="atualizarBulk('tb-cams','chk-all-cams','bulk-cams')"></td>{% endif %}
           <td><strong>{{ cam.numero }}</strong></td>
           <td>{{ cam.nome or '<span style="color:var(--muted)">—</span>' }}</td>
+          {% if is_admin %}<td style="color:var(--muted);font-size:12px;">{{ cam.site or '—' }}</td>{% endif %}
           <td>
             {% if cam.ativo %}
               <span class="badge badge-ok">● Ativa</span>
@@ -128,11 +161,31 @@
       <a href="{{ url_for('cameras_cadastrar') }}" class="btn btn-red" style="margin-top:12px;display:inline-block">+ Cadastrar Câmeras</a>
     </div>
     {% endif %}
+    {% if is_admin %}</form>{% endif %}
   </div>
 </div>
 
+{% if is_admin %}
+<div class="bulk-bar" id="bulk-cams">
+  <span class="bulk-count"><span id="bulk-cams-cnt">0</span> selecionada(s)</span>
+  <button type="button" class="btn btn-red btn-sm"
+    onclick="confirmarLote('form-lote-cams','câmera','desativar')">🗑 Desativar selecionadas</button>
+  <button type="button" class="btn btn-soft btn-sm"
+    onclick="limparSelecao('tb-cams','chk-all-cams','bulk-cams')">✕</button>
+</div>
+{% endif %}
+
 <!-- Tab: Histórico -->
 <div id="tab-hist" style="display:none">
+  {% if is_admin and checklists %}
+  <div class="search-bar">
+    <input type="text" id="inp-hist" placeholder="🔍 Buscar por operador ou data..." oninput="filtrarHist()">
+    <select id="sel-site-hist" onchange="filtrarHist()">
+      <option value="">Todos os sites</option>
+      {% for s in sites_chk %}<option value="{{ s|lower }}">{{ s }}</option>{% endfor %}
+    </select>
+  </div>
+  {% endif %}
   <div class="table-card">
     {% if checklists %}
     <table>
@@ -140,6 +193,7 @@
         <tr>
           <th>Data</th>
           <th>Hora</th>
+          {% if is_admin %}<th>Site</th>{% endif %}
           <th>Operador</th>
           <th>Total</th>
           <th>Funcionais</th>
@@ -147,11 +201,13 @@
           <th>Ações</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="tb-hist">
         {% for chk in checklists %}
-        <tr>
+        <tr data-search="{{ (chk.operador or '')|lower }} {{ (chk.data_checklist or '')|lower }}"
+            data-site="{{ (chk.site or '')|lower }}">
           <td><strong>{{ chk.data_checklist }}</strong></td>
           <td>{{ chk.hora_checklist or '—' }}</td>
+          {% if is_admin %}<td style="color:var(--muted);font-size:12px;">{{ chk.site or '—' }}</td>{% endif %}
           <td>{{ chk.operador or '—' }}</td>
           <td>{{ chk.total }}</td>
           <td><span class="badge badge-ok">{{ chk.funcionais }}</span></td>
@@ -220,11 +276,62 @@ function trocarTab(id, btn){
   btn.classList.add('active');
 }
 
-function filtrar(q){
-  q = q.toLowerCase();
+function filtrarCams(){
+  const q    = (document.getElementById('inp-cams')?.value || '').toLowerCase();
+  const site = (document.getElementById('sel-site-cams')?.value || '').toLowerCase();
   document.querySelectorAll('#tb-cams tr').forEach(tr=>{
-    tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none';
+    const okQ    = !q    || tr.dataset.search.includes(q);
+    const okSite = !site || tr.dataset.site === site;
+    tr.style.display = okQ && okSite ? '' : 'none';
   });
+}
+
+function filtrarHist(){
+  const q    = (document.getElementById('inp-hist')?.value || '').toLowerCase();
+  const site = (document.getElementById('sel-site-hist')?.value || '').toLowerCase();
+  document.querySelectorAll('#tb-hist tr').forEach(tr=>{
+    const okQ    = !q    || tr.dataset.search.includes(q);
+    const okSite = !site || tr.dataset.site === site;
+    tr.style.display = okQ && okSite ? '' : 'none';
+  });
+}
+
+/* ── Seleção em lote ── */
+function atualizarBulk(tbodyId, allId, barId){
+  var checked = document.querySelectorAll('#' + tbodyId + ' .chk-row:checked:not([style*="display:none"])');
+  var visible = document.querySelectorAll('#' + tbodyId + ' tr:not([style*="display:none"]) .chk-row');
+  var bar = document.getElementById(barId);
+  var cnt = document.getElementById(barId + '-cnt');
+  var allChk = document.getElementById(allId);
+  if(cnt) cnt.textContent = checked.length;
+  if(bar) bar.classList.toggle('show', checked.length > 0);
+  if(allChk) allChk.indeterminate = checked.length > 0 && checked.length < visible.length;
+  if(allChk && checked.length === visible.length && visible.length > 0) allChk.checked = true;
+  if(allChk && checked.length === 0) allChk.checked = false;
+}
+
+function selecionarTodos(tbodyId, allId, barId, total){
+  var allChk = document.getElementById(allId);
+  document.querySelectorAll('#' + tbodyId + ' tr:not([style*="display:none"]) .chk-row').forEach(c => {
+    c.checked = allChk.checked;
+  });
+  atualizarBulk(tbodyId, allId, barId);
+}
+
+function limparSelecao(tbodyId, allId, barId){
+  document.querySelectorAll('#' + tbodyId + ' .chk-row').forEach(c => c.checked = false);
+  var allChk = document.getElementById(allId);
+  if(allChk){ allChk.checked = false; allChk.indeterminate = false; }
+  var bar = document.getElementById(barId);
+  if(bar) bar.classList.remove('show');
+}
+
+function confirmarLote(formId, tipo, acao){
+  var n = document.querySelectorAll('#' + formId + ' .chk-row:checked').length;
+  if(!n){ alert('Nenhum item selecionado.'); return; }
+  if(confirm('Tem certeza que deseja ' + acao + ' ' + n + ' ' + tipo + '(s) selecionado(s)? Esta ação não pode ser desfeita.')){
+    document.getElementById(formId).submit();
+  }
 }
 
 function abrirEditar(id, numero, nome){

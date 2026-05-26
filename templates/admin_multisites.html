@@ -1,0 +1,130 @@
+{% extends "base_app.html" %}
+{% block page_title %}Gestão Multisites | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🌐 Gestão Multisites{% endblock %}
+{% block topbar_subtitle %}Gerencie quais sites cada usuário Multisites pode acessar{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-soft btn-sm">← Usuários</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .search-bar{ width:100%; max-width:420px; padding:11px 16px; border:1.5px solid var(--line); border-radius:12px; font-size:13px; font-family:inherit; background:#fff; outline:none; transition:.18s; margin-bottom:20px; }
+  .search-bar:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
+
+  .user-card{ background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 26px; margin-bottom:16px; }
+  .user-card-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  .user-info{ display:flex; align-items:center; gap:14px; }
+  .user-avatar{ width:44px; height:44px; border-radius:50%; background:#1a1a1a; color:#ffcc00; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:900; flex-shrink:0; }
+  .user-name{ font-size:15px; font-weight:800; color:var(--text); }
+  .user-meta{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .badge-multisites{ background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; border-radius:999px; padding:3px 10px; font-size:11px; font-weight:800; }
+
+  .sites-section{ margin-top:2px; }
+  .sites-label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }
+  .sites-list{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; min-height:28px; }
+  .site-chip{ display:inline-flex; align-items:center; gap:6px; background:#f1f5f9; border:1px solid var(--line); border-radius:999px; padding:4px 12px; font-size:12px; font-weight:700; color:var(--text); }
+  .site-chip .rm{ background:none; border:none; color:#9ca3af; cursor:pointer; font-size:14px; padding:0; line-height:1; transition:.12s; }
+  .site-chip .rm:hover{ color:var(--dhl-red); }
+  .no-sites{ font-size:12px; color:#9ca3af; font-style:italic; }
+
+  .add-site-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .add-site-row select{ flex:1; min-width:180px; padding:9px 12px; border:1.5px solid var(--line); border-radius:10px; font-size:13px; font-family:inherit; background:#f8fafc; color:var(--text); outline:none; transition:.15s; }
+  .add-site-row select:focus{ border-color:var(--dhl-red); background:#fff; }
+
+  .rm-all{ font-size:11px; font-weight:700; color:#9ca3af; background:none; border:none; cursor:pointer; text-decoration:underline; padding:0; font-family:inherit; transition:.12s; }
+  .rm-all:hover{ color:var(--dhl-red); }
+
+  .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-state .icon{ font-size:48px; margin-bottom:16px; }
+  .empty-state p{ font-size:14px; font-weight:700; }
+</style>
+
+{% if not todos_usuarios %}
+<div class="empty-state">
+  <div class="icon">🌐</div>
+  <p>Nenhum usuário com perfil <strong>Multisites</strong> encontrado.</p>
+  <p style="font-size:13px;font-weight:500;margin-top:8px;">Crie um usuário com perfil <em>Multisites</em> na página de <a href="{{ url_for('admin_usuario_novo') }}" style="color:var(--dhl-red);">Usuários</a>.</p>
+</div>
+{% else %}
+
+<input type="text" class="search-bar" id="busca" placeholder="🔍 Buscar usuário por nome ou e-mail..." oninput="filtrarUsuarios()" autocomplete="off">
+
+<div id="lista-usuarios">
+{% for u in todos_usuarios %}
+{% set sites_u = vinculos_por_usuario.get(u.id, []) %}
+<div class="user-card" data-nome="{{ u.nome|lower }}" data-email="{{ u.email|lower }}">
+  <div class="user-card-head">
+    <div class="user-info">
+      <div class="user-avatar">{{ u.nome[0]|upper }}</div>
+      <div>
+        <div class="user-name">{{ u.nome }}</div>
+        <div class="user-meta">{{ u.email }} · Site base: <strong>{{ u.site or '—' }}</strong></div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="badge-multisites">🌐 Multisites</span>
+      {% if sites_u %}
+      <form method="POST" hx-boost="false" style="display:inline">
+        <input type="hidden" name="action" value="remover_todos">
+        <input type="hidden" name="usuario_id" value="{{ u.id }}">
+        <button type="submit" class="rm-all"
+          onclick="return confirm('Remover todos os sites de {{ u.nome|e }}?')">
+          Remover todos
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="sites-section">
+    <div class="sites-label">Sites autorizados ({{ sites_u|length }})</div>
+    <div class="sites-list">
+      {% if sites_u %}
+        {% for s in sites_u %}
+        <form method="POST" hx-boost="false" style="display:inline">
+          <input type="hidden" name="action" value="remover">
+          <input type="hidden" name="usuario_id" value="{{ u.id }}">
+          <input type="hidden" name="site_nome" value="{{ s }}">
+          <span class="site-chip">
+            {{ s }}
+            <button type="submit" class="rm" title="Remover {{ s }}"
+              onclick="return confirm('Remover {{ s }} de {{ u.nome|e }}?')">✕</button>
+          </span>
+        </form>
+        {% endfor %}
+      {% else %}
+        <span class="no-sites">Nenhum site vinculado — o usuário verá apenas o site base.</span>
+      {% endif %}
+    </div>
+
+    <form method="POST" hx-boost="false" class="add-site-row">
+      <input type="hidden" name="action" value="adicionar">
+      <input type="hidden" name="usuario_id" value="{{ u.id }}">
+      <select name="site_nome" required>
+        <option value="">+ Adicionar site...</option>
+        {% for s in todos_sites %}
+          {% if s not in sites_u %}
+          <option value="{{ s }}">{{ s }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-green btn-sm">Vincular</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function filtrarUsuarios() {
+  var q = document.getElementById('busca').value.toLowerCase();
+  document.querySelectorAll('#lista-usuarios .user-card').forEach(function(c) {
+    var match = c.dataset.nome.includes(q) || c.dataset.email.includes(q);
+    c.style.display = match ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

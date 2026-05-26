@@ -1,8 +1,6 @@
 {% extends "base_app.html" %}
 {% block page_title %}Shift Handover — Dashboard | CCTV Control Panel{% endblock %}
 
-{% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block topbar_title %}Dashboard — Shift Handover{% endblock %}
@@ -60,6 +58,7 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="/static/chart.umd.min.js"></script>
 <script>
 const _opt = {
   responsive:true, maintainAspectRatio:false,

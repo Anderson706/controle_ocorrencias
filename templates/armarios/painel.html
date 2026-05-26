@@ -12,7 +12,7 @@
 
 {% block page_content %}
 <style>
-  .content{ max-width:1100px; margin:0 auto; }
+  .content{ max-width:1600px; margin:0 auto; }
 
   /* KPI */
   .grid-4{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
@@ -71,6 +71,17 @@
 
   @media(max-width:1024px){ .grid-4{ grid-template-columns:repeat(2,1fr); } }
   @media(max-width:600px){ .grid-4{ grid-template-columns:1fr 1fr; } }
+
+  /* ── Seleção em lote ── */
+  .bulk-bar{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:#1f2937; color:#fff; border-radius:14px; padding:12px 20px;
+    display:none; align-items:center; gap:16px; box-shadow:0 8px 32px rgba(0,0,0,.25);
+    z-index:500; white-space:nowrap;
+  }
+  .bulk-bar.show{ display:flex; }
+  .bulk-count span{ color:#fbbf24; font-weight:900; }
+  .chk-sel{ width:16px; height:16px; cursor:pointer; accent-color:#d40511; }
 </style>
 
 <!-- Export filter panel (outside .content so it spans full width) -->
@@ -147,6 +158,17 @@
 <!-- Filtros -->
 <div class="card" style="padding:16px 20px;">
   <form method="GET" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;" hx-boost="false">
+    {% if is_admin %}
+    <div class="filter-field">
+      <label>Site</label>
+      <select name="site">
+        <option value="">Todos os sites</option>
+        {% for s in sites_lista %}
+        <option value="{{ s }}" {{ 'selected' if site_filtro == s else '' }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div class="filter-field">
       <label>Bloco</label>
       <select name="bloco">
@@ -165,7 +187,7 @@
       </select>
     </div>
     <button type="submit" class="btn btn-soft btn-sm">🔍 Filtrar</button>
-    {% if bloco_filtro or status_filtro %}
+    {% if bloco_filtro or status_filtro or site_filtro %}
     <a href="{{ url_for('armarios.painel') }}" class="btn btn-soft btn-sm">✕ Limpar</a>
     {% endif %}
   </form>
@@ -178,12 +200,15 @@
     <span class="section-chip">{{ armarios|length }} resultado{{ 's' if armarios|length != 1 else '' }}</span>
   </div>
   {% if armarios %}
+  <form method="POST" action="{{ url_for('armarios.excluir_lote') }}" id="form-lote-arm" hx-boost="false">
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
+          {% if is_admin %}<th style="width:36px"><input type="checkbox" class="chk-sel" id="chk-all-arm" onchange="selecionarTodos('tb-arm','chk-all-arm','bulk-arm')"></th>{% endif %}
           <th>Nº Armário</th>
           <th>Bloco</th>
+          {% if is_admin %}<th>Site</th>{% endif %}
           <th>Status</th>
           <th>Colaborador</th>
           <th>CPF/Matrícula</th>
@@ -192,11 +217,13 @@
           <th>Ações</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="tb-arm">
         {% for arm in armarios %}
         <tr>
+          {% if is_admin %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ arm.id }}" onchange="atualizarBulk('tb-arm','chk-all-arm','bulk-arm')"></td>{% endif %}
           <td><strong>{{ arm.numero }}</strong></td>
           <td>{{ arm.bloco or '—' }}</td>
+          {% if is_admin %}<td style="color:var(--muted);font-size:12px;">{{ arm.site or '—' }}</td>{% endif %}
           <td>
             {% if arm.status == 'OCUPADO' %}
             <span class="badge badge-danger">OCUPADO</span>
@@ -224,12 +251,23 @@
       </tbody>
     </table>
   </div>
+  {% if is_admin %}</form>{% endif %}
   {% else %}
   <div class="card">
     <p class="empty">Nenhum armário encontrado para os filtros selecionados.{% if is_admin %} Use o botão <strong>Criar Armários</strong> para adicionar.{% endif %}</p>
   </div>
   {% endif %}
 </div>
+
+{% if is_admin %}
+<div class="bulk-bar" id="bulk-arm">
+  <span class="bulk-count"><span id="bulk-arm-cnt">0</span> selecionado(s)</span>
+  <button type="button" class="btn btn-red btn-sm"
+    onclick="confirmarLote('form-lote-arm','armário','remover')">🗑 Remover selecionados</button>
+  <button type="button" class="btn btn-soft btn-sm"
+    onclick="limparSelecao('tb-arm','chk-all-arm','bulk-arm')">✕</button>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block modals %}
@@ -295,6 +333,36 @@
   </div>
 </div>
 
+<!-- Modal: Editar Colaborador -->
+{% if is_admin %}
+<div class="modal-overlay" id="modalEditarColab" onclick="fecharModal('modalEditarColab', event)">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:440px">
+    <div class="modal-head">
+      <h3>✏️ Editar Colaborador — <span id="editColabNumero"></span></h3>
+      <button class="modal-close" onclick="fecharModal('modalEditarColab')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" id="formEditarColab" hx-boost="false">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div class="ifield">
+            <label>Nome do Colaborador *</label>
+            <input type="text" name="colaborador_nome" id="editColabNome" placeholder="Nome completo" required>
+          </div>
+          <div class="ifield">
+            <label>CPF / Matrícula *</label>
+            <input type="text" name="colaborador_cpf" id="editColabCpf" placeholder="000.000.000-00" required>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px;">
+            <button type="submit" class="btn btn-red" style="flex:1;" onclick="mostrarLoading()">✓ Salvar</button>
+            <button type="button" class="btn btn-soft" onclick="fecharModal('modalEditarColab')" style="flex:1;">Cancelar</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Modal: Criar em Lote -->
 {% if is_admin %}
 <div class="modal-overlay" id="modalLote" onclick="fecharModal('modalLote', event)">
@@ -349,11 +417,52 @@
 
 {% block page_scripts %}
 <script>
+  /* ── Seleção em lote ── */
+  function atualizarBulk(tbodyId, allId, barId){
+    var checked = document.querySelectorAll('#' + tbodyId + ' .chk-row:checked');
+    var visible  = document.querySelectorAll('#' + tbodyId + ' .chk-row');
+    var bar = document.getElementById(barId);
+    var cnt = document.getElementById(barId + '-cnt');
+    var allChk = document.getElementById(allId);
+    if(cnt) cnt.textContent = checked.length;
+    if(bar) bar.classList.toggle('show', checked.length > 0);
+    if(allChk) allChk.indeterminate = checked.length > 0 && checked.length < visible.length;
+    if(allChk && checked.length > 0 && checked.length === visible.length) allChk.checked = true;
+    if(allChk && checked.length === 0) allChk.checked = false;
+  }
+  function selecionarTodos(tbodyId, allId, barId){
+    var allChk = document.getElementById(allId);
+    document.querySelectorAll('#' + tbodyId + ' .chk-row').forEach(c => c.checked = allChk.checked);
+    atualizarBulk(tbodyId, allId, barId);
+  }
+  function limparSelecao(tbodyId, allId, barId){
+    document.querySelectorAll('#' + tbodyId + ' .chk-row').forEach(c => c.checked = false);
+    var a = document.getElementById(allId);
+    if(a){ a.checked = false; a.indeterminate = false; }
+    var b = document.getElementById(barId);
+    if(b) b.classList.remove('show');
+  }
+  function confirmarLote(formId, tipo, acao){
+    var n = document.querySelectorAll('#' + formId + ' .chk-row:checked').length;
+    if(!n){ alert('Nenhum item selecionado.'); return; }
+    if(confirm('Tem certeza que deseja ' + acao + ' ' + n + ' ' + tipo + '(s)?\nArmários ocupados ou com chave retirada serão ignorados.')){
+      document.getElementById(formId).submit();
+    }
+  }
+
   function abrirModalLote(){ abrirModal('modalLote'); }
 
   function mostrarLoading(){
     var ov = document.getElementById('loading-overlay');
     if(ov) ov.classList.add('show');
+  }
+
+  function abrirEditarColab(armId, numero, nome, cpf){
+    document.getElementById('editColabNumero').textContent = numero;
+    document.getElementById('editColabNome').value = nome !== '—' ? nome : '';
+    document.getElementById('editColabCpf').value  = cpf  !== '—' ? cpf  : '';
+    document.getElementById('formEditarColab').action = URL_EDITAR_COLAB + armId;
+    abrirModal('modalEditarColab');
   }
 
   function abrirAtribuir(armId, numero){
@@ -444,10 +553,11 @@
   });
 
   const IS_ADMIN    = {{ 'true' if is_admin else 'false' }};
-  const URL_ATRIBUIR  = "{{ url_for('armarios.atribuir',  arm_id=0) }}".replace(/\/0$/, '/');
-  const URL_LIBERAR   = "{{ url_for('armarios.liberar',   arm_id=0) }}".replace(/\/0$/, '/');
-  const URL_EXCLUIR   = "{{ url_for('armarios.excluir',   arm_id=0) }}".replace(/\/0$/, '/');
-  const URL_TERMO     = "{{ url_for('armarios.termo_atribuicao', arm_id=0) }}".replace(/\/0$/, '/');
+  const URL_ATRIBUIR       = "{{ url_for('armarios.atribuir',          arm_id=0) }}".replace(/\/0$/, '/');
+  const URL_LIBERAR        = "{{ url_for('armarios.liberar',           arm_id=0) }}".replace(/\/0$/, '/');
+  const URL_EXCLUIR        = "{{ url_for('armarios.excluir',           arm_id=0) }}".replace(/\/0$/, '/');
+  const URL_EDITAR_COLAB   = "{{ url_for('armarios.editar_colaborador',arm_id=0) }}".replace(/\/0$/, '/');
+  const URL_TERMO          = "{{ url_for('armarios.termo_atribuicao',  arm_id=0) }}".replace(/\/0$/, '/');
 
   function verDetalhe(armId){
     abrirModal('modalDetalhe');
@@ -502,6 +612,8 @@
             html += `<button onclick="fecharModal('modalDetalhe');abrirAtribuir(${d.id},'${d.numero}')"
                        style="padding:8px 13px;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">👤 Atribuir</button>`;
           } else {
+            html += `<button onclick="fecharModal('modalDetalhe');abrirEditarColab(${d.id},'${d.numero}','${d.colaborador_nome}','${d.colaborador_cpf}')"
+                       style="padding:8px 13px;background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">✏️ Editar</button>`;
             html += `<form method="POST" action="${URL_LIBERAR}${d.id}" style="display:inline;" hx-boost="false" onsubmit="mostrarLoading()">
                        <button type="submit" style="padding:8px 13px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">↩ Liberar</button>
                      </form>`;

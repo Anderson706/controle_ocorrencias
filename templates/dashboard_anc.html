@@ -1,9 +1,6 @@
 {% extends "base_app.html" %}
 {% block page_title %}Dashboard · ANC | CCTV Control Panel{% endblock %}
 
-{% block extra_head %}
-<script src="/static/chart.umd.min.js"></script>
-<script src="/static/chartjs-plugin-datalabels.min.js"></script>
 {% endblock %}
 
 {% block topbar_title %}Dashboard · ANC{% endblock %}
@@ -266,6 +263,8 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="/static/chart.umd.min.js"></script>
+<script src="/static/chartjs-plugin-datalabels.min.js"></script>
 <script>
 (function poll(){
   if(typeof Chart==='undefined'||typeof ChartDataLabels==='undefined'){ return setTimeout(poll,30); }
