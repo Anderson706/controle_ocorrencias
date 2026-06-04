@@ -1,0 +1,96 @@
+{% extends "base_app.html" %}
+{% block page_title %}Portas de Emergência | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🚪 Portas de Emergência{% endblock %}
+{% block topbar_subtitle %}Cadastro, inspeção e conformidade das portas de emergência{% endblock %}
+{% block topbar_actions %}
+  {% include 'pe_nav.html' %}
+  {% if is_gestor %}
+  <a href="{{ url_for('pe.portas_lote') }}" class="btn btn-soft btn-sm">📋 Importar em lote</a>
+  <a href="{{ url_for('pe.nova_porta') }}" class="btn btn-red btn-sm">+ Nova Porta</a>
+  {% endif %}
+{% endblock %}
+
+{% block page_content %}
+
+<!-- KPIs -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;">
+  <div class="card" style="padding:18px 20px;">
+    <span style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Total de portas</span>
+    <div style="font-size:28px;font-weight:900;color:var(--dhl-black);margin-top:4px;">{{ total }}</div>
+  </div>
+  <div class="card" style="padding:18px 20px;">
+    <span style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Portas ativas</span>
+    <div style="font-size:28px;font-weight:900;color:#146c43;margin-top:4px;">{{ ativas }}</div>
+  </div>
+  <div class="card" style="padding:18px 20px;">
+    <span style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Checklists realizados</span>
+    <div style="font-size:28px;font-weight:900;color:var(--dhl-black);margin-top:4px;">{{ checks }}</div>
+  </div>
+  <div class="card" style="padding:18px 20px;">
+    <span style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Não conformes</span>
+    <div style="font-size:28px;font-weight:900;color:var(--dhl-red);margin-top:4px;">{{ nao_conformes }}</div>
+  </div>
+</div>
+
+<!-- Tabela de portas -->
+<div class="card" style="padding:0;overflow:hidden;">
+  <div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <span style="font-weight:900;font-size:15px;color:var(--dhl-black);">{{ portas|length }} porta(s) cadastrada(s)</span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:2px solid var(--line);">
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Código</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Localização</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Setor</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Rota de fuga</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Responsável</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Criado por</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Status</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if portas|length == 0 %}
+        <tr>
+          <td colspan="8" style="padding:40px;text-align:center;color:var(--muted);font-size:13px;font-weight:700;">
+            Nenhuma porta cadastrada.
+          </td>
+        </tr>
+        {% endif %}
+        {% for p in portas %}
+        <tr style="border-bottom:1px solid var(--line);">
+          <td style="padding:12px 14px;font-weight:800;color:var(--dhl-black);">{{ p.codigo }}</td>
+          <td style="padding:12px 14px;">{{ p.localizacao }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ p.setor or '—' }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ p.rota_fuga or '—' }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ p.responsavel or '—' }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ p.criado_por or '—' }}</td>
+          <td style="padding:12px 14px;">
+            {% if p.ativo %}
+              <span class="badge badge-ok">Ativa</span>
+            {% else %}
+              <span class="badge badge-red">Inativa</span>
+            {% endif %}
+          </td>
+          <td style="padding:12px 14px;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <a href="{{ url_for('pe.checklist', porta_id=p.id) }}" class="btn btn-red btn-sm">✔ Checklist</a>
+              <a href="{{ url_for('pe.historico', porta_id=p.id) }}" class="btn btn-soft btn-sm">📄 Histórico</a>
+              {% if is_admin %}
+              <form method="post" action="{{ url_for('pe.excluir_porta', porta_id=p.id) }}"
+                    onsubmit="return confirm('Excluir esta porta e todos os seus checklists?')" style="display:inline;">
+                <button type="submit" class="btn btn-soft btn-sm" style="color:var(--dhl-red);">🗑</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

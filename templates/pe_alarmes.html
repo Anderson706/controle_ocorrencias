@@ -1,0 +1,81 @@
+{% extends "base_app.html" %}
+{% block page_title %}Disparos de Alarme | Portas de Emergência{% endblock %}
+{% block topbar_title %}🔔 Disparos de Alarme{% endblock %}
+{% block topbar_subtitle %}Histórico de acionamentos registrados{% endblock %}
+{% block topbar_actions %}
+  {% include 'pe_nav.html' %}
+  <a href="{{ url_for('pe.pdf_alarmes_geral') }}" class="btn btn-soft btn-sm" target="_blank" data-filename="alarmes_geral.pdf">📄 PDF Geral</a>
+  {% if is_gestor %}
+  <a href="{{ url_for('pe.novo_alarme') }}" class="btn btn-red btn-sm">+ Novo Disparo</a>
+  {% endif %}
+{% endblock %}
+
+{% block page_content %}
+<div style="margin-bottom:16px;">
+  <a href="{{ url_for('pe.painel') }}" class="btn btn-soft btn-sm">← Portas de Emergência</a>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden;">
+  <div style="padding:16px 20px;border-bottom:1px solid var(--line);">
+    <span style="font-weight:900;font-size:15px;color:var(--dhl-black);">{{ alarmes|length }} registro(s)</span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:2px solid var(--line);">
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">ID</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Data</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Hora</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Localização</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Setor</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Tipo</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Turno</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Criado por</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Status</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in alarmes %}
+        <tr style="border-bottom:1px solid var(--line);">
+          <td style="padding:12px 14px;color:var(--muted);">#{{ a.id }}</td>
+          <td style="padding:12px 14px;">{{ a.data_disparo }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ a.hora_disparo }}</td>
+          <td style="padding:12px 14px;font-weight:700;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ a.localizacao }}">{{ a.localizacao }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ a.setor or '—' }}</td>
+          <td style="padding:12px 14px;">{{ a.tipo_alarme }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ a.turno or '—' }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ a.criado_por or '—' }}</td>
+          <td style="padding:12px 14px;">
+            {% if a.status == 'TRATADO' %}
+              <span class="badge badge-ok">{{ a.status }}</span>
+            {% elif a.status == 'PENDENTE' %}
+              <span class="badge badge-warn">{{ a.status }}</span>
+            {% else %}
+              <span class="badge badge-red">{{ a.status }}</span>
+            {% endif %}
+          </td>
+          <td style="padding:12px 14px;">
+            <div style="display:flex;gap:6px;">
+              <a href="{{ url_for('pe.pdf_alarme', alarme_id=a.id) }}" class="btn btn-soft btn-sm" target="_blank" data-filename="alarme-{{ a.id }}.pdf">📄 PDF</a>
+              {% if is_admin %}
+              <form method="post" action="{{ url_for('pe.excluir_alarme', alarme_id=a.id) }}"
+                    onsubmit="return confirm('Excluir este registro?')" style="display:inline;">
+                <button type="submit" class="btn btn-soft btn-sm" style="color:var(--dhl-red);">🗑</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10" style="padding:40px;text-align:center;color:var(--muted);font-size:13px;font-weight:700;">
+            Nenhum disparo registrado.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

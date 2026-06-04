@@ -3,11 +3,20 @@
 {% block topbar_title %}📷 Cadastrar Câmeras{% endblock %}
 {% block topbar_subtitle %}Adicione câmeras individualmente ou em lote para {{ site }}{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('cameras_index') }}" class="btn btn-soft btn-sm">← Controle</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('cameras_checklist_novo') }}" class="adm-tab">📷 Novo Checklist</a>
+    <a href="{{ url_for('cameras_index') }}" class="adm-tab">📋 Controle</a>
+    <a href="{{ url_for('cameras_cadastrar') }}" class="adm-tab active">⚙️ Câmeras</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .form-card{ background:#fff; border:1px solid var(--line); border-radius:14px;
               box-shadow:var(--shadow); overflow:hidden; max-width:860px; }
   .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:16px 22px;

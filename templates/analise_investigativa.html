@@ -4,11 +4,20 @@
 {% block topbar_title %}Análise Investigativa{% endblock %}
 {% block topbar_subtitle %}CCTV Control Panel — DHL Supply Chain{% endblock %}
 {% block topbar_actions %}
-<a href="{{ url_for('ocorrencias') }}" class="btn btn-dark" style="padding:11px 16px; border-radius:12px;">← Voltar</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('analise_investigativa') }}" class="adm-tab active">🔍 Nova Análise</a>
+    <a href="{{ url_for('analises') }}" class="adm-tab">📋 Controle</a>
+    <a href="{{ url_for('dashboard_analise') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   /* ── SECTIONS / CARDS ── */
   .section{ margin-bottom:22px; }
   .section-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }

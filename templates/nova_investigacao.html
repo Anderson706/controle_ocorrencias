@@ -3,11 +3,20 @@
 {% block topbar_title %}{% if modo_edicao %}✏️ Editar Investigação{% else %}📋 Nova Investigação{% endif %}{% endblock %}
 {% block topbar_subtitle %}{% if modo_edicao %}Edite os dados da investigação{% else %}Registre uma nova investigação operacional{% endif %}{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('ocorrencias') }}" class="btn btn-soft btn-sm">← Controle</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('nova_investigacao') }}" class="adm-tab active">➕ Nova</a>
+    <a href="{{ url_for('ocorrencias') }}" class="adm-tab">📋 Controle</a>
+    <a href="{{ url_for('dashboard') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
   .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:18px 24px; display:flex; align-items:center; gap:12px; }
   .form-card-hdr-bar{ width:6px; height:28px; background:#ffcc00; border-radius:3px; flex-shrink:0; }
@@ -76,7 +85,19 @@
         </div>
         <div class="field">
           <label>Local *</label>
+          {% if locais %}
+          <select name="local" required>
+            <option value="">Selecione o local...</option>
+            {% for l in locais %}
+            <option value="{{ l }}" {% if modo_edicao and registro_edicao and registro_edicao.local == l %}selected{% endif %}>{{ l }}</option>
+            {% endfor %}
+            {% if modo_edicao and registro_edicao and registro_edicao.local and registro_edicao.local not in locais %}
+            <option value="{{ registro_edicao.local }}" selected>{{ registro_edicao.local }}</option>
+            {% endif %}
+          </select>
+          {% else %}
           <input type="text" name="local" placeholder="Ex: Portaria, Inbound, Pátio..." value="{% if modo_edicao and registro_edicao %}{{ registro_edicao.local or '' }}{% endif %}" required>
+          {% endif %}
         </div>
       </div>
       <div class="spacer"></div>
@@ -181,20 +202,23 @@
 
 {% block page_scripts %}
 <script>
-const LABELS = { RECUPERADO: 'Valor Recuperado', PREVENTIVO: 'Valor Preventivo', PREJUIZO: 'Prejuízo' };
-function toggleValor() {
-  var sel   = document.getElementById('tipo_valor');
-  var campo = document.getElementById('campo-valor');
-  var lbl   = document.getElementById('label-valor');
-  if (sel.value) {
-    campo.style.display = '';
-    lbl.textContent = LABELS[sel.value] || 'Valor';
-  } else {
-    campo.style.display = 'none';
-    document.getElementById('valor-financeiro').value = '';
-  }
-}
-// Inicializa estado na edição (caso já tenha tipo selecionado)
-document.addEventListener('DOMContentLoaded', toggleValor);
+(function(){
+  var _LABELS = { RECUPERADO: 'Valor Recuperado', PREVENTIVO: 'Valor Preventivo', PREJUIZO: 'Prejuízo' };
+  window.toggleValor = function() {
+    var sel   = document.getElementById('tipo_valor');
+    var campo = document.getElementById('campo-valor');
+    var lbl   = document.getElementById('label-valor');
+    if (sel && sel.value) {
+      campo.style.display = '';
+      lbl.textContent = _LABELS[sel.value] || 'Valor';
+    } else {
+      if (campo) campo.style.display = 'none';
+      var vf = document.getElementById('valor-financeiro');
+      if (vf) vf.value = '';
+    }
+  };
+  /* Inicializa imediatamente (DOM já disponível após HTMX swap) */
+  window.toggleValor();
+})();
 </script>
 {% endblock %}

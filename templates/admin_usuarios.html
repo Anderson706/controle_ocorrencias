@@ -3,17 +3,32 @@
 {% block topbar_title %}⚙️ Gerenciar Usuários{% endblock %}
 {% block topbar_subtitle %}Cadastro, permissões e controle de acesso{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('admin_solicitacoes') }}" class="btn btn-soft btn-sm">
-    Solicitações{% if pendentes %} <span style="background:#d40511;color:#fff;border-radius:999px;padding:1px 7px;font-size:10px;margin-left:2px">{{ pendentes }}</span>{% endif %}
-  </a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('admin_usuarios') }}" class="adm-tab active">👥 Usuários</a>
+    <a href="{{ url_for('admin_solicitacoes') }}" class="adm-tab">
+      📋 Solicitações{% if pendentes %} <span class="adm-badge">{{ pendentes }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_multisites') }}" class="adm-tab">🌐 Multisites</a>
+    <a href="{{ url_for('admin_releases') }}" class="adm-tab">📦 Releases</a>
+  </div>
+  <div class="adm-sep"></div>
   <button class="btn btn-soft btn-sm" onclick="abrirModalEmail()" title="Enviar comunicado de atualização para todos os usuários ativos">Comunicar Atualização</button>
   <a href="{{ url_for('admin_usuario_novo') }}" class="btn btn-red btn-sm">+ Novo Usuário</a>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  /* Admin nav tabs */
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-badge{ display:inline-flex; align-items:center; justify-content:center; background:#d40511; color:#fff; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:900; min-width:18px; }
+  .adm-tab.active .adm-badge{ background:rgba(255,255,255,.9); color:#d40511; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
+
   /* Stats */
-  .stats-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:4px; }
+  .stats-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:16px; margin-bottom:4px; }
   .stat-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; align-items:center; gap:14px; box-shadow:0 2px 8px rgba(0,0,0,.04); }
   .stat-icon{ width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
   .stat-icon.red{ background:#fff1f2; }
@@ -42,7 +57,7 @@
   /* Badges */
   .badge{ display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:.3px; }
   .badge-admin{ background:#fff1f2; color:#b1030d; }
-  .badge-supervisor{ background:#fffbeb; color:#92400e; }
+  .badge-gestor{ background:#fffbeb; color:#92400e; }
   .badge-operacional{ background:#f0fdf4; color:#166534; }
   .badge-ativo{ background:#dcfce7; color:#166534; }
   .badge-inativo{ background:#fee2e2; color:#991b1b; }
@@ -133,10 +148,14 @@
     <div class="stat-icon yellow">⭐</div>
     <div><div class="stat-val">{{ stats.admins }}</div><div class="stat-lbl">Administradores</div></div>
   </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#eff6ff;">🏭</div>
+    <div><div class="stat-val" style="color:#1d4ed8;">{{ stats.sites_ativos }}</div><div class="stat-lbl">Sites em uso</div></div>
+  </div>
 </div>
 
 <!-- Filtros -->
-<form method="GET" class="filter-bar" hx-boost="false">
+<form method="GET" data-autofilter class="filter-bar" hx-boost="false">
   <div>
     <label>Buscar</label>
     <input type="text" name="busca" value="{{ filtros.busca }}" placeholder="Nome ou e-mail...">
@@ -145,8 +164,9 @@
     <label>Perfil</label>
     <select name="perfil">
       <option value="">Todos os perfis</option>
-      <option value="ADMIN" {{ 'selected' if filtros.perfil=='ADMIN' }}>Admin</option>
-      <option value="SUPERVISOR" {{ 'selected' if filtros.perfil=='SUPERVISOR' }}>Supervisor</option>
+      <option value="ADMIN"       {{ 'selected' if filtros.perfil=='ADMIN' }}>Admin</option>
+      <option value="GESTOR"      {{ 'selected' if filtros.perfil=='GESTOR' }}>Gestor</option>
+      <option value="KEYUSER"     {{ 'selected' if filtros.perfil=='KEYUSER' }}>Key User</option>
       <option value="OPERACIONAL" {{ 'selected' if filtros.perfil=='OPERACIONAL' }}>Operacional</option>
     </select>
   </div>
@@ -168,7 +188,7 @@
     </select>
   </div>
   <button type="submit" class="btn btn-red">🔍 Filtrar</button>
-  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-soft">↺ Limpar</a>
+  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-soft" data-clear-filter>↺ Limpar</a>
 </form>
 
 <!-- Tabela -->
@@ -196,8 +216,10 @@
         <td style="color:var(--muted)">{{ u.email }}</td>
         <td>
           {% if u.perfil == 'ADMIN' %}<span class="badge badge-admin">ADMIN</span>
-          {% elif u.perfil == 'SUPERVISOR' %}<span class="badge badge-supervisor">SUPERVISOR</span>
-          {% else %}<span class="badge badge-operacional">OPERACIONAL</span>{% endif %}
+          {% elif u.perfil == 'GESTOR' %}<span class="badge badge-gestor">GESTOR</span>
+          {% elif u.perfil == 'KEYUSER' %}<span class="badge" style="background:#e0f2fe;color:#0369a1;">KEY USER</span>
+          {% elif u.perfil == 'MULTISITES' %}<span class="badge" style="background:#f0fdf4;color:#15803d;">MULTISITES</span>
+          {% else %}<span class="badge badge-operacional">{{ u.perfil or 'OPERACIONAL' }}</span>{% endif %}
         </td>
         <td>{{ u.site or '—' }}</td>
         <td>
@@ -255,14 +277,14 @@
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h3 id="modal-title">Confirmar ação</h3>
-      <button class="modal-close" onclick="fecharModal()">✕</button>
+      <button class="modal-close" onclick="fecharModalConfirm()">✕</button>
     </div>
     <div class="modal-body">
       <p id="modal-msg"></p>
       <form id="modal-form" method="POST">
         <div id="modal-extra"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
-          <button type="button" class="btn btn-soft btn-sm" onclick="fecharModal()">Cancelar</button>
+          <button type="button" class="btn btn-soft btn-sm" onclick="fecharModalConfirm()">Cancelar</button>
           <button type="submit" id="modal-btn" class="btn btn-sm" onclick="document.getElementById('loading-overlay').classList.add('show')">Confirmar</button>
         </div>
       </form>
@@ -342,11 +364,11 @@ function confirmar(titulo, msg, action, btnLabel, btnClass){
   document.getElementById('modal-extra').innerHTML = '';
   document.getElementById('modal-confirm').classList.add('open');
 }
-function fecharModal(){
+function fecharModalConfirm(){
   document.getElementById('modal-confirm').classList.remove('open');
 }
-document.getElementById('modal-confirm').addEventListener('click', function(e){ if(e.target===this) fecharModal(); });
-document.addEventListener('keydown', e => { if(e.key==='Escape') fecharModal(); });
+document.getElementById('modal-confirm').addEventListener('click', function(e){ if(e.target===this) fecharModalConfirm(); });
+document.addEventListener('keydown', e => { if(e.key==='Escape') fecharModalConfirm(); });
 
 setTimeout(() => {
   document.querySelectorAll('.flash').forEach(el => {
@@ -379,10 +401,10 @@ setTimeout(() => {
 })();
 
 /* ── Email builder ── */
-const _emailsAtivos = {{ emails_ativos | tojson }};
-const _versaoApp = "{{ versao_app }}";
+var _emailsAtivos = {{ emails_ativos | tojson }};
+var _versaoApp = "{{ versao_app }}";
 var _emItens = [], _emCatAtual = 'novo';
-const EM_CAT_META = {
+var EM_CAT_META = {
   novo:    { label:'🌟 Novidade', prefix:'' },
   melhoria:{ label:'🔧 Melhoria', prefix:'' },
   correcao:{ label:'🐛 Correção', prefix:'' },

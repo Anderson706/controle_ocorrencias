@@ -198,38 +198,41 @@
 
 {% block page_scripts %}
 <script>
-function iniciarSigPad(canvasId, inputId) {
-  const cv = document.getElementById(canvasId);
-  const inp = document.getElementById(inputId);
-  if (!cv || !inp) return null;
-  const ctx = cv.getContext("2d");
-  let draw = false;
-  function setup() { ctx.lineWidth=2; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.strokeStyle="#111"; }
-  function resize() {
-    const r=Math.max(window.devicePixelRatio||1,1), rc=cv.getBoundingClientRect();
-    cv.width=rc.width*r; cv.height=rc.height*r;
-    ctx.setTransform(1,0,0,1,0,0); ctx.scale(r,r); setup();
+(function(){
+  function iniciarSigPad(canvasId, inputId) {
+    var cv = document.getElementById(canvasId);
+    var inp = document.getElementById(inputId);
+    if (!cv || !inp) return null;
+    var ctx = cv.getContext("2d");
+    var draw = false;
+    function setup() { ctx.lineWidth=2; ctx.lineCap="round"; ctx.lineJoin="round"; ctx.strokeStyle="#111"; }
+    function resize() {
+      var r=Math.max(window.devicePixelRatio||1,1), rc=cv.getBoundingClientRect();
+      cv.width=rc.width*r; cv.height=rc.height*r;
+      ctx.setTransform(1,0,0,1,0,0); ctx.scale(r,r); setup();
+    }
+    function pos(e) {
+      var rc=cv.getBoundingClientRect(), t=e.touches?e.touches[0]:null;
+      return {x:(t?t.clientX:e.clientX)-rc.left, y:(t?t.clientY:e.clientY)-rc.top};
+    }
+    function start(e){ draw=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
+    function move(e){ if(!draw)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
+    function end(e){ if(!draw)return; draw=false; save(); if(e)e.preventDefault(); }
+    function save(){ inp.value=cv.toDataURL("image/png"); }
+    function clear() {
+      var r=Math.max(window.devicePixelRatio||1,1);
+      ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height); ctx.scale(r,r); setup(); inp.value="";
+    }
+    cv.addEventListener("mousedown",start); cv.addEventListener("mousemove",move);
+    cv.addEventListener("mouseup",end); cv.addEventListener("mouseleave",end);
+    cv.addEventListener("touchstart",start,{passive:false}); cv.addEventListener("touchmove",move,{passive:false});
+    cv.addEventListener("touchend",end,{passive:false});
+    window.addEventListener("resize",resize); resize();
+    return {clear:clear};
   }
-  function pos(e) {
-    const rc=cv.getBoundingClientRect(), t=e.touches?e.touches[0]:null;
-    return {x:(t?t.clientX:e.clientX)-rc.left, y:(t?t.clientY:e.clientY)-rc.top};
-  }
-  function start(e){ draw=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
-  function move(e){ if(!draw)return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); e.preventDefault(); }
-  function end(e){ if(!draw)return; draw=false; save(); if(e)e.preventDefault(); }
-  function save(){ inp.value=cv.toDataURL("image/png"); }
-  function clear() {
-    const r=Math.max(window.devicePixelRatio||1,1);
-    ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height); ctx.scale(r,r); setup(); inp.value="";
-  }
-  cv.addEventListener("mousedown",start); cv.addEventListener("mousemove",move);
-  cv.addEventListener("mouseup",end); cv.addEventListener("mouseleave",end);
-  cv.addEventListener("touchstart",start,{passive:false}); cv.addEventListener("touchmove",move,{passive:false});
-  cv.addEventListener("touchend",end,{passive:false});
-  window.addEventListener("resize",resize); resize();
-  return {clear};
-}
-const _sigPad = iniciarSigPad("sig-pad","assinatura_saida");
-function limparSig(){ if(_sigPad) _sigPad.clear(); }
+
+  var _sigPad = iniciarSigPad("sig-pad","assinatura_saida");
+  window.limparSig = function(){ if(_sigPad) _sigPad.clear(); };
+})();
 </script>
 {% endblock %}

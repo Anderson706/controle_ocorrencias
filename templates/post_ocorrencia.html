@@ -20,7 +20,49 @@
   .photo-box{ margin-top:16px; border:1px solid var(--line); border-radius:18px; background:#fff; padding:14px; }
   .photo-box h3{ margin:0 0 10px; font-size:15px; font-weight:900; color:#111827; }
   .photo-box img{ width:100%; max-height:420px; object-fit:cover; border-radius:14px; border:1px solid #e5e7eb; display:block; }
-  .attachment-box{ margin-top:12px; padding:12px 14px; border-radius:14px; background:#fff8db; border:1px solid #f0d66a; color:#7a5a00; font-size:13px; font-weight:700; }
+
+  /* Seção de vínculo */
+  .vinc-section{ margin-top:20px; padding:18px 20px; border:1.5px dashed var(--line); border-radius:14px; background:#fafbfc; transition:.2s; }
+  .vinc-section.ativa{ border-color:var(--dhl-red); background:#fff9f9; }
+  .vinc-header{ display:flex; align-items:center; gap:12px; margin-bottom:0; }
+  .vinc-header h4{ margin:0; font-size:14px; font-weight:900; color:var(--text); }
+  .vinc-body{ margin-top:14px; display:none; }
+  .vinc-body.show{ display:block; }
+
+  /* Badge do documento vinculado */
+  .doc-badge{ display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:10px; font-size:13px; font-weight:800; border:1.5px solid; cursor:pointer; transition:.15s; }
+  .doc-badge:hover{ opacity:.8; }
+  .doc-badge.anc-badge{ background:#fff4db; color:#92400e; border-color:#f5d066; }
+  .doc-badge.ai-badge{ background:#eff6ff; color:#1d4ed8; border-color:#93c5fd; }
+  .doc-badge-clear{ background:none; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:0 4px; line-height:1; }
+  .doc-badge-clear:hover{ color:#dc2626; }
+
+  /* Tabela do picker */
+  .picker-search{ width:100%; padding:9px 13px; border:1.5px solid var(--line); border-radius:10px; font-size:13px; font-family:inherit; background:#fff; outline:none; transition:.15s; box-sizing:border-box; margin-bottom:12px; }
+  .picker-search:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.07); }
+  .picker-table-wrap{ max-height:340px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; }
+  .picker-table{ width:100%; border-collapse:collapse; font-size:12px; }
+  .picker-table th{ background:#f9fafb; padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; position:sticky; top:0; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .picker-table td{ padding:9px 12px; border-bottom:1px solid var(--line); color:var(--text); vertical-align:middle; }
+  .picker-table tr:last-child td{ border-bottom:none; }
+  .picker-table tr:hover td{ background:#fafafa; }
+  .btn-select{ padding:5px 12px; border-radius:8px; background:var(--dhl-red); color:#fff; border:none; font-size:11px; font-weight:800; cursor:pointer; font-family:inherit; transition:.15s; }
+  .btn-select:hover{ background:var(--dhl-red-dark); }
+  .picker-empty{ text-align:center; padding:28px; color:var(--muted); font-size:13px; font-weight:600; }
+
+  /* Modais picker */
+  .picker-overlay{ display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:9100; align-items:center; justify-content:center; padding:20px; }
+  .picker-overlay.open{ display:flex; }
+  .picker-box{ background:#fff; border-radius:20px; box-shadow:0 24px 60px rgba(0,0,0,.2); width:100%; max-width:720px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; animation:pkIn .18s ease; }
+  @keyframes pkIn{ from{opacity:0;transform:scale(.97)} to{opacity:1;transform:scale(1)} }
+  .picker-head{ background:var(--dhl-red); color:#fff; padding:18px 24px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .picker-head h3{ margin:0; font-size:16px; font-weight:900; }
+  .picker-close{ background:rgba(255,255,255,.2); border:none; color:#fff; width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; transition:.15s; }
+  .picker-close:hover{ background:rgba(255,255,255,.35); }
+  .picker-body{ padding:20px 24px; flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+
+  /* Vinculos já definidos */
+  .vinculos-atuais{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
 </style>
 
 <div style="max-width:1150px; margin:0 auto; width:100%;">
@@ -74,6 +116,20 @@
     <img src="{{ registro.foto }}" alt="Foto da ocorrência">
   </div>
   {% endif %}
+
+  {% if anc_vinculada or analise_vinculada %}
+  <div style="margin-top:16px;">
+    <div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Documentos Vinculados</div>
+    <div class="vinculos-atuais">
+      {% if anc_vinculada %}
+      <span class="doc-badge anc-badge">⚠️ {{ anc_vinculada.numero_anc or ('ANC-' ~ anc_vinculada.id) }}</span>
+      {% endif %}
+      {% if analise_vinculada %}
+      <span class="doc-badge ai-badge">🔍 {{ analise_vinculada.codigo or ('AI-' ~ analise_vinculada.id) }}</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
 </section>
 
 <section class="card">
@@ -82,23 +138,65 @@
     <span class="section-chip">Pós-investigação</span>
   </div>
   <form method="POST" enctype="multipart/form-data" hx-boost="false">
+
+    <!-- Campos ocultos de vínculo -->
+    <input type="hidden" name="anc_vinculada_id"     id="anc_vinculada_id"     value="{{ registro.anc_vinculada_id or '' }}">
+    <input type="hidden" name="analise_vinculada_id" id="analise_vinculada_id" value="{{ registro.analise_vinculada_id or '' }}">
+
     <div class="row">
       <div class="field">
         <label>Conclusão da análise</label>
-        <select name="status_post" required>
+        <select name="status_post" id="sel-conclusao" required onchange="onConclusaoChange(this.value)">
           <option value="">Selecione</option>
-          <option value="ANALISE INVESTIGATIVA" {% if registro.status == 'ANALISE INVESTIGATIVA' %}selected{% endif %}>Análise investigativa</option>
-          <option value="ANC" {% if registro.status == 'ANC' %}selected{% endif %}>ANC</option>
-          <option value="LEVANTAMENTO DE IMAGENS" {% if registro.status == 'LEVANTAMENTO DE IMAGENS' %}selected{% endif %}>Levantamento de imagens</option>
-          <option value="INCONCLUSIVA" {% if registro.status == 'INCONCLUSIVA' %}selected{% endif %}>Inconclusivo</option>
+          <option value="ANALISE INVESTIGATIVA" {% if registro.situacao_investigacao == 'ANALISE INVESTIGATIVA' %}selected{% endif %}>Análise investigativa</option>
+          <option value="ANC"                   {% if registro.situacao_investigacao == 'ANC' %}selected{% endif %}>ANC</option>
+          <option value="LEVANTAMENTO DE IMAGENS"{% if registro.situacao_investigacao == 'LEVANTAMENTO DE IMAGENS' %}selected{% endif %}>Levantamento de imagens</option>
+          <option value="INCONCLUSIVA"           {% if registro.situacao_investigacao == 'INCONCLUSIVA' %}selected{% endif %}>Inconclusivo</option>
         </select>
       </div>
       <div class="field">
         <label>Responsável pelo fechamento</label>
-        <input type="text" name="responsavel_fechamento" placeholder="Digite o nome de quem está finalizando" value="{{ registro.responsavel_fechamento or session.get('user_nome') }}" required>
+        <input type="text" name="responsavel_fechamento" placeholder="Nome de quem está finalizando"
+               value="{{ registro.responsavel_fechamento or session.get('user_nome') }}" required>
       </div>
     </div>
-    <div style="margin-top:14px;">
+
+    <!-- Vínculo ANC -->
+    <div class="vinc-section" id="vinc-anc" style="display:none">
+      <div class="vinc-header">
+        <span style="font-size:18px">⚠️</span>
+        <h4>Vincular ANC</h4>
+      </div>
+      <div class="vinc-body show">
+        <div id="anc-selecionada-wrap" style="display:none; margin-bottom:10px;">
+          <span class="doc-badge anc-badge" id="anc-selecionada-badge"></span>
+          <button type="button" class="doc-badge-clear" onclick="limparVinculo('anc')" title="Remover vínculo">✕</button>
+        </div>
+        <button type="button" class="btn btn-soft btn-sm" onclick="abrirPicker('anc')">
+          🔗 Escolher ANC
+        </button>
+      </div>
+    </div>
+
+    <!-- Vínculo Análise Investigativa -->
+    <div class="vinc-section" id="vinc-ai" style="display:none">
+      <div class="vinc-header">
+        <span style="font-size:18px">🔍</span>
+        <h4>Vincular Análise Investigativa</h4>
+      </div>
+      <div class="vinc-body show">
+        <div id="ai-selecionada-wrap" style="display:none; margin-bottom:10px;">
+          <span class="doc-badge ai-badge" id="ai-selecionada-badge"></span>
+          <button type="button" class="doc-badge-clear" onclick="limparVinculo('ai')" title="Remover vínculo">✕</button>
+        </div>
+        <button type="button" class="btn btn-soft btn-sm" onclick="abrirPicker('ai')">
+          🔗 Escolher Análise
+        </button>
+      </div>
+    </div>
+
+    <!-- Anexos -->
+    <div style="margin-top:20px;">
       <div style="font-size:13px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:10px;">Anexos (até 3 arquivos — PDF, DOC, DOCX, XLSX, JPG, PNG)</div>
       <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px;">
         <div style="border:1px dashed #d6dae1; border-radius:14px; padding:14px; background:#fafafa;">
@@ -118,9 +216,12 @@
         </div>
       </div>
     </div>
+
     <div class="actions">
       <button type="submit" class="btn btn-red">Salvar publicação</button>
-      <a href="{{ url_for('exportar_ocorrencia_pdf', ocorrencia_id=registro.id) }}" data-filename="{{ registro.codigo or ('OC-' ~ registro.id) }} - {{ registro.natureza }} - {{ registro.site or 'DHL' }}.pdf" class="btn btn-soft" style="background:#fff4db; color:#7a5a00; border:1px solid #f0d66a;">Exportar PDF</a>
+      <a href="{{ url_for('exportar_ocorrencia_pdf', ocorrencia_id=registro.id) }}"
+         data-filename="{{ registro.codigo or ('OC-' ~ registro.id) }} - {{ registro.natureza }} - {{ registro.site or 'DHL' }}.pdf"
+         class="btn btn-soft" style="background:#fff4db; color:#7a5a00; border:1px solid #f0d66a;">Exportar PDF</a>
       <a href="{{ url_for('ocorrencias') }}" class="btn btn-dark">Voltar</a>
       <a href="{{ url_for('dashboard') }}" class="btn btn-soft">Dashboard</a>
     </div>
@@ -128,4 +229,200 @@
 </section>
 
 </div>
+{% endblock %}
+
+{% block modals %}
+<!-- ══ Picker ANC ══ -->
+<div class="picker-overlay" id="picker-anc" onclick="if(event.target===this)fecharPicker('anc')">
+  <div class="picker-box" onclick="event.stopPropagation()">
+    <div class="picker-head">
+      <h3>⚠️ Selecionar ANC</h3>
+      <button class="picker-close" onclick="fecharPicker('anc')">✕</button>
+    </div>
+    <div class="picker-body">
+      <input class="picker-search" id="search-anc" placeholder="🔍 Buscar por número, setor, tipo..." oninput="filtrarPicker('anc', this.value)">
+      <div class="picker-table-wrap">
+        <table class="picker-table" id="table-anc">
+          <thead>
+            <tr>
+              <th>Nº ANC</th>
+              <th>Data</th>
+              <th>Tipo</th>
+              <th>Gravidade</th>
+              <th>Status</th>
+              <th>Setor</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-anc">
+            <tr><td colspan="7" class="picker-empty">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Picker Análise Investigativa ══ -->
+<div class="picker-overlay" id="picker-ai" onclick="if(event.target===this)fecharPicker('ai')">
+  <div class="picker-box" onclick="event.stopPropagation()">
+    <div class="picker-head">
+      <h3>🔍 Selecionar Análise Investigativa</h3>
+      <button class="picker-close" onclick="fecharPicker('ai')">✕</button>
+    </div>
+    <div class="picker-body">
+      <input class="picker-search" id="search-ai" placeholder="🔍 Buscar por código, responsável, classificação..." oninput="filtrarPicker('ai', this.value)">
+      <div class="picker-table-wrap">
+        <table class="picker-table" id="table-ai">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Data</th>
+              <th>Responsável</th>
+              <th>Classificação</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-ai">
+            <tr><td colspan="6" class="picker-empty">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+var _ancsData    = [];
+var _analisesData = [];
+
+// ── Carrega dados das APIs ────────────────────────────────────────────────────
+fetch('/api/ancs-site').then(function(r){ return r.json(); }).then(function(d){ _ancsData = d; }).catch(function(){});
+fetch('/api/analises-site').then(function(r){ return r.json(); }).then(function(d){ _analisesData = d; }).catch(function(){});
+
+// ── Mostra/oculta seção de vínculo conforme seleção ──────────────────────────
+function onConclusaoChange(val) {
+  var va = document.getElementById('vinc-anc');
+  var vi = document.getElementById('vinc-ai');
+  if (va) va.style.display = (val === 'ANC')                   ? '' : 'none';
+  if (vi) vi.style.display  = (val === 'ANALISE INVESTIGATIVA') ? '' : 'none';
+  if (val !== 'ANC')                   limparVinculo('anc');
+  if (val !== 'ANALISE INVESTIGATIVA') limparVinculo('ai');
+}
+
+// Inicialização — chamada ao carregar a página e após navegação HTMX
+function initPostPage() {
+  var sel = document.getElementById('sel-conclusao');
+  if (!sel) return; // não estamos nesta página
+
+  // Restaura seleção e seções de vínculo
+  if (sel.value) onConclusaoChange(sel.value);
+
+  // Restaura badges se já há vínculo salvo
+  var ancId = (document.getElementById('anc_vinculada_id') || {}).value || '';
+  var aiId  = (document.getElementById('analise_vinculada_id') || {}).value || '';
+  if (ancId) {
+    fetch('/api/ancs-site').then(function(r){ return r.json(); }).then(function(d){
+      var a = d.find(function(x){ return String(x.id)===String(ancId); });
+      if (a) _selecionarAnc(a);
+    }).catch(function(){});
+  }
+  if (aiId) {
+    fetch('/api/analises-site').then(function(r){ return r.json(); }).then(function(d){
+      var a = d.find(function(x){ return String(x.id)===String(aiId); });
+      if (a) _selecionarAi(a);
+    }).catch(function(){});
+  }
+}
+
+// Garante que a init roda tanto na carga inicial quanto após swap do HTMX
+document.addEventListener('DOMContentLoaded', initPostPage);
+document.addEventListener('htmx:afterSettle',  initPostPage);
+
+// ── Picker ───────────────────────────────────────────────────────────────────
+function abrirPicker(tipo) {
+  document.getElementById('picker-' + tipo).classList.add('open');
+  document.getElementById('search-' + tipo).value = '';
+  renderizarTabela(tipo, '');
+}
+function fecharPicker(tipo) {
+  document.getElementById('picker-' + tipo).classList.remove('open');
+}
+
+function filtrarPicker(tipo, q) { renderizarTabela(tipo, q.toLowerCase()); }
+
+function renderizarTabela(tipo, q) {
+  var tbody = document.getElementById('tbody-' + tipo);
+  var data  = tipo === 'anc' ? _ancsData : _analisesData;
+  var rows  = data.filter(function(r) {
+    var txt = Object.values(r).join(' ').toLowerCase();
+    return !q || txt.includes(q);
+  });
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="picker-empty">Nenhum registro encontrado.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(function(r) {
+    if (tipo === 'anc') {
+      var gCor = r.gravidade === 'CRÍTICA' ? '#dc2626' : r.gravidade === 'ALTA' ? '#d97706' : '#16a34a';
+      return '<tr>' +
+        '<td><strong>' + r.numero_anc + '</strong></td>' +
+        '<td>' + r.data_nc + '</td>' +
+        '<td>' + r.tipo_ocorrencia + '</td>' +
+        '<td><span style="color:' + gCor + ';font-weight:800">' + r.gravidade + '</span></td>' +
+        '<td>' + r.status + '</td>' +
+        '<td>' + r.setor + '</td>' +
+        '<td><button class="btn-select" onclick="selecionarDoc(\'anc\',' + JSON.stringify(r) + ')">Selecionar</button></td>' +
+        '</tr>';
+    } else {
+      return '<tr>' +
+        '<td><strong>' + r.codigo + '</strong></td>' +
+        '<td>' + r.data_levantamento + '</td>' +
+        '<td>' + r.responsavel + '</td>' +
+        '<td>' + r.classificacao + '</td>' +
+        '<td>' + r.status_analise + '</td>' +
+        '<td><button class="btn-select" onclick="selecionarDoc(\'ai\',' + JSON.stringify(r) + ')">Selecionar</button></td>' +
+        '</tr>';
+    }
+  }).join('');
+}
+
+function selecionarDoc(tipo, r) {
+  if (tipo === 'anc') _selecionarAnc(r);
+  else                _selecionarAi(r);
+  fecharPicker(tipo);
+}
+
+function _selecionarAnc(r) {
+  document.getElementById('anc_vinculada_id').value = r.id;
+  document.getElementById('anc-selecionada-badge').textContent = '⚠️ ' + r.numero_anc;
+  document.getElementById('anc-selecionada-wrap').style.display = '';
+}
+function _selecionarAi(r) {
+  document.getElementById('analise_vinculada_id').value = r.id;
+  document.getElementById('ai-selecionada-badge').textContent = '🔍 ' + r.codigo;
+  document.getElementById('ai-selecionada-wrap').style.display = '';
+}
+
+function limparVinculo(tipo) {
+  if (tipo === 'anc') {
+    document.getElementById('anc_vinculada_id').value = '';
+    document.getElementById('anc-selecionada-wrap').style.display = 'none';
+  } else {
+    document.getElementById('analise_vinculada_id').value = '';
+    document.getElementById('ai-selecionada-wrap').style.display = 'none';
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    if (typeof fecharPicker === 'function') { fecharPicker('anc'); fecharPicker('ai'); }
+  }
+});
+</script>
 {% endblock %}

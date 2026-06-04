@@ -3,9 +3,21 @@
 
 {% block topbar_title %}Controle de Análises Investigativas{% endblock %}
 {% block topbar_subtitle %}CCTV Control Panel — histórico de análises{% endblock %}
+{% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('analise_investigativa') }}" class="adm-tab">🔍 Nova Análise</a>
+    <a href="{{ url_for('analises') }}" class="adm-tab active">📋 Controle</a>
+    <a href="{{ url_for('dashboard_analise') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
+{% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .badge-fechada{ background:var(--ok-bg); color:var(--ok-text); display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:900; }
   .badge-andamento{ background:var(--warn-bg); color:var(--warn-text); display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border-radius:999px; font-size:11px; font-weight:900; }
   .modal-codigo{ font-size:13px; opacity:.85; margin-top:3px; }
@@ -46,7 +58,7 @@
     <h3>🔍 Filtros</h3>
     <span class="section-chip">Consulta dinâmica</span>
   </div>
-  <form method="GET" action="{{ url_for('analises') }}" hx-boost="false">
+  <form method="GET" data-autofilter action="{{ url_for('analises') }}" hx-boost="false">
     <div class="filters">
       <div>
         <label>Data inicial</label>
@@ -86,7 +98,7 @@
     </div>
     <div class="filter-actions">
       <button type="submit" class="btn btn-red">Aplicar filtros</button>
-      <a href="{{ url_for('analises') }}" class="btn btn-soft">Limpar</a>
+      <a href="{{ url_for('analises') }}" class="btn btn-soft" data-clear-filter>Limpar</a>
       {% if filtros.data_inicial or filtros.data_final or filtros.status or filtros.empresa or filtros.responsavel or filtros.site_filtro %}
       <span style="font-size:12px;font-weight:700;color:var(--muted);">Filtro ativo</span>
       {% endif %}
@@ -126,7 +138,7 @@
             {% else %}<span class="badge-andamento"> Em andamento</span>{% endif %}
           </td>
           <td style="text-align:center; white-space:nowrap; display:flex; gap:6px; justify-content:center;">
-            <button type="button" class="btn btn-dark btn-sm" onclick="abrirModal(this)"
+            <button type="button" class="btn btn-dark btn-sm" onclick="abrirModalAi(this)"
               data-id="{{ r.id }}"
               data-codigo="{{ r.codigo or '-' }}"
               data-numero="{{ r.numero_site or r.id }}"
@@ -171,14 +183,14 @@
 {% endblock %}
 
 {% block modals %}
-<div class="modal-overlay" id="modal" onclick="fecharModalFora(event)">
+<div class="modal-overlay" id="modal" onclick="fecharModalAiFora(event)">
   <div class="modal-box">
     <div class="modal-head">
       <div>
         <h3>Detalhes da Análise</h3>
         <div class="modal-codigo" id="m-codigo"></div>
       </div>
-      <button class="modal-close" onclick="fecharModal()">×</button>
+      <button class="modal-close" onclick="fecharModalAi()">×</button>
     </div>
     <div class="modal-body">
       <div class="modal-grid">
@@ -231,7 +243,7 @@
 
 {% block page_scripts %}
 <script>
-function abrirModal(btn) {
+function abrirModalAi(btn) {
   const d = btn.dataset;
   document.getElementById('m-codigo').textContent    = d.codigo;
   document.getElementById('m-numero').textContent    = d.numero;
@@ -285,9 +297,9 @@ function abrirModal(btn) {
   document.getElementById('modal').classList.add('open');
 }
 
-function fecharModal() { document.getElementById('modal').classList.remove('open'); }
-function fecharModalFora(e) { if (e.target === document.getElementById('modal')) fecharModal(); }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
+function fecharModalAi() { document.getElementById('modal').classList.remove('open'); }
+function fecharModalAiFora(e) { if (e.target === document.getElementById('modal')) fecharModalAi(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModalAi(); });
 </script>
 <script>
 (function(){

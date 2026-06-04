@@ -3,12 +3,22 @@
 {% block topbar_title %}↩ Realizar Devolução{% endblock %}
 {% block topbar_subtitle %}Chaves em uso no site {{ site }}{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('chaves.export_devolucao_excel') }}" class="btn btn-yellow btn-sm">📥 Exportar Excel</a>
-  <a href="{{ url_for('chaves.realizar_retirada') }}" class="btn btn-red btn-sm">🔑 Realizar Retirada</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('chaves.meu_claviculario') }}" class="adm-tab">🗃️ Claviculário</a>
+    <a href="{{ url_for('chaves.realizar_retirada') }}" class="adm-tab">🔑 Retirada</a>
+    <a href="{{ url_for('chaves.realizar_devolucao') }}" class="adm-tab active">↩ Devolução</a>
+  </div>
+  <div class="adm-sep"></div>
+  <a href="{{ url_for('chaves.export_devolucao_excel') }}" class="btn btn-soft btn-sm">📥 Exportar Excel</a>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .content{ max-width:960px; margin:0 auto; }
   .flash-wrap{ display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
 

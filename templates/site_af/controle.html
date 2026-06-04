@@ -1,0 +1,392 @@
+{% extends "base_app.html" %}
+{% block page_title %}Abertura e Fechamento | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🔐 Abertura e Fechamento de Site{% endblock %}
+{% block topbar_subtitle %}Controle de ciclos de abertura e fechamento — SF-154234{% endblock %}
+{% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('af.controle') }}"   class="adm-tab active">📋 Controle</a>
+    <a href="{{ url_for('af.dashboard') }}"  class="adm-tab">📊 Dashboard</a>
+    <a href="{{ url_for('af.config_itens') }}" class="adm-tab {% if not can_approve %}disabled{% endif %}">⚙️ Itens</a>
+  </div>
+  <div class="adm-sep"></div>
+  <a href="{{ url_for('af.novo_fechamento') }}" class="btn btn-red btn-sm">🔒 Registrar Fechamento</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-tab.disabled{ opacity:.4; pointer-events:none; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
+
+  /* KPIs */
+  .kpi-row{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:20px; }
+  .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 20px; box-shadow:var(--shadow); border-left:5px solid var(--dhl-yellow); }
+  .kpi-val{ font-size:28px; font-weight:900; color:var(--dhl-red); line-height:1; }
+  .kpi-lbl{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:4px; }
+
+  /* Filtros */
+  .filter-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 20px; margin-bottom:16px; }
+  .filter-row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .filter-row > div{ display:flex; flex-direction:column; gap:4px; }
+  .filter-row label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; }
+  .filter-row select, .filter-row input{ padding:9px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:13px; font-family:inherit; min-width:150px; }
+
+  /* Tabela */
+  .table-card{ background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:var(--shadow); }
+  table{ width:100%; border-collapse:collapse; }
+  th{ padding:10px 14px; background:#f9fafb; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--line); text-align:left; }
+  td{ padding:11px 14px; border-bottom:1px solid var(--line); font-size:13px; vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  tr:hover td{ background:#fafafa; }
+
+  /* Status badges */
+  .badge{ display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
+  .badge-aguard{ background:#fff4db; color:#92400e; }
+  .badge-pendente{ background:#e0f2fe; color:#0369a1; }
+  .badge-aprovado{ background:#dcfce7; color:#166534; }
+  .badge-rejeitado{ background:#fee2e2; color:#991b1b; }
+  .badge-fech{ background:#f3f4f6; color:#374151; }
+
+  /* Sub-status */
+  .sub-status{ display:flex; gap:6px; flex-wrap:wrap; }
+  .sub-badge{ display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:999px; font-size:10px; font-weight:800; }
+  .sub-fech-ok{ background:#dcfce7; color:#166534; }
+  .sub-fech-rej{ background:#fee2e2; color:#991b1b; }
+  .sub-fech-pend{ background:#f3f4f6; color:#6b7280; }
+  .sub-aber-pend{ background:#e0f2fe; color:#0369a1; }
+  .sub-aber-ok{ background:#dcfce7; color:#166534; }
+  .sub-aber-rej{ background:#fee2e2; color:#991b1b; }
+  .sub-aber-vazio{ background:#f9fafb; color:#9ca3af; }
+
+  /* NC badge */
+  .nc-warn{ color:#d40511; font-weight:800; font-size:12px; }
+
+  /* Modal */
+  .modal-body-scroll{ overflow-y:auto; max-height:70vh; padding:20px 24px; }
+  .det-section{ margin-bottom:18px; }
+  .det-section-title{ font-size:13px; font-weight:900; color:#1f2937; border-bottom:2px solid var(--dhl-yellow); padding-bottom:6px; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .det-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .det-field{ background:#f8fafc; border-radius:10px; padding:8px 12px; }
+  .det-field label{ display:block; font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:2px; }
+  .det-field span{ font-size:13px; font-weight:700; color:#1f2937; }
+  .chk-list{ list-style:none; padding:0; margin:0; }
+  .chk-list li{ display:flex; align-items:flex-start; gap:8px; padding:5px 0; border-bottom:1px solid #f1f3f5; font-size:12px; }
+  .chk-list li:last-child{ border-bottom:none; }
+  .chk-ok{ color:#16a34a; font-weight:900; font-size:14px; }
+  .chk-no{ color:#d40511; font-weight:900; font-size:14px; }
+  .chk-desc{ flex:1; color:#374151; }
+  .chk-obs{ color:var(--muted); font-size:11px; margin-top:2px; }
+
+  /* Aprovação inline */
+  .aprov-form{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .aprov-form input{ flex:1; min-width:140px; padding:7px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:12px; font-family:inherit; }
+  .btn-aprov{ background:#dcfce7; color:#166534; border:1px solid #86efac; padding:6px 12px; border-radius:8px; font-size:12px; font-weight:800; cursor:pointer; }
+  .btn-rejeit{ background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; padding:6px 12px; border-radius:8px; font-size:12px; font-weight:800; cursor:pointer; }
+
+  @media(max-width:900px){ .kpi-row{ grid-template-columns:repeat(3,1fr); } }
+  @media(max-width:600px){ .kpi-row{ grid-template-columns:repeat(2,1fr); } .det-grid{ grid-template-columns:1fr; } }
+</style>
+
+<!-- KPIs -->
+<div class="kpi-row">
+  <div class="kpi-card"><div class="kpi-val">{{ kpis.total }}</div><div class="kpi-lbl">Total de ciclos</div></div>
+  <div class="kpi-card" style="border-left-color:#f59e0b;"><div class="kpi-val" style="color:#b45309;">{{ kpis.aguardando_abertura }}</div><div class="kpi-lbl">Aguardando Abertura</div></div>
+  <div class="kpi-card" style="border-left-color:#0ea5e9;"><div class="kpi-val" style="color:#0369a1;">{{ kpis.pendente_aprovacao }}</div><div class="kpi-lbl">Pendente Aprovação</div></div>
+  <div class="kpi-card" style="border-left-color:#22c55e;"><div class="kpi-val" style="color:#16a34a;">{{ kpis.aprovados }}</div><div class="kpi-lbl">Aprovados</div></div>
+  <div class="kpi-card" style="border-left-color:#d40511;"><div class="kpi-val" style="color:#d40511;">{{ kpis.rejeitados }}</div><div class="kpi-lbl">Rejeitados</div></div>
+</div>
+
+<!-- Filtros -->
+<div class="filter-card">
+  <form method="GET" data-autofilter class="filter-row">
+    {% if is_admin %}
+    <div>
+      <label>Site</label>
+      <select name="site_filtro">
+        <option value="">Todos</option>
+        {% for s in todos_sites %}<option value="{{ s }}" {{ 'selected' if filtros.site_filtro==s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div>
+      <label>Status</label>
+      <select name="status">
+        <option value="">Todos</option>
+        <option value="AGUARDANDO_ABERTURA" {{ 'selected' if filtros.status=='AGUARDANDO_ABERTURA' }}>Aguardando Abertura</option>
+        <option value="PENDENTE_APROVACAO"  {{ 'selected' if filtros.status=='PENDENTE_APROVACAO' }}>Pendente Aprovação</option>
+        <option value="APROVADO"            {{ 'selected' if filtros.status=='APROVADO' }}>Aprovado</option>
+        <option value="REJEITADO"           {{ 'selected' if filtros.status=='REJEITADO' }}>Rejeitado</option>
+      </select>
+    </div>
+    <div>
+      <label>Data inicial</label>
+      <input type="date" name="data_inicial" value="{{ filtros.data_inicial or '' }}">
+    </div>
+    <div>
+      <label>Data final</label>
+      <input type="date" name="data_final" value="{{ filtros.data_final or '' }}">
+    </div>
+    <button type="submit" style="display:none">Filtrar</button>
+  </form>
+</div>
+
+<!-- Tabela -->
+<div class="table-card">
+  {% if registros %}
+  <table>
+    <thead>
+      <tr>
+        <th>Ciclo</th>
+        {% if is_admin %}<th>Site</th>{% endif %}
+        <th>Fechamento</th>
+        <th>Abertura</th>
+        <th>Status Geral</th>
+        <th>Aprovações</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in registros %}
+      <tr>
+        <td><strong>#{{ r.id }}</strong><br><span style="font-size:11px;color:var(--muted);">{{ r.criado_por or '—' }}</span></td>
+        {% if is_admin %}<td style="color:var(--muted);font-size:12px;">{{ r.site }}</td>{% endif %}
+        <td>
+          {% if r.fech_criado_em %}
+            <strong>{{ r.fech_data or '—' }}</strong> {{ r.fech_hora or '' }}<br>
+            <span style="font-size:11px;color:var(--muted);">{{ r.fech_realizado_por or '—' }}</span>
+            {% if r.nao_conformes_fech() %}<br><span class="nc-warn">⚠ {{ r.nao_conformes_fech()|length }} NC</span>{% endif %}
+          {% else %}
+            <span style="color:var(--muted);font-size:12px;">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.aber_criado_em %}
+            <strong>{{ r.aber_data or '—' }}</strong> {{ r.aber_hora or '' }}<br>
+            <span style="font-size:11px;color:var(--muted);">{{ r.aber_realizado_por or '—' }}</span>
+            {% if r.nao_conformes_aber() %}<br><span class="nc-warn">⚠ {{ r.nao_conformes_aber()|length }} NC</span>{% endif %}
+          {% elif r.status == 'AGUARDANDO_ABERTURA' %}
+            <a href="{{ url_for('af.abertura', ciclo_id=r.id) }}" class="btn btn-soft btn-sm" style="font-size:11px;">🔓 Registrar abertura</a>
+          {% else %}
+            <span style="color:var(--muted);font-size:12px;">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.status == 'AGUARDANDO_ABERTURA' %}
+            <span class="badge badge-aguard">⏳ Aguard. Abertura</span>
+          {% elif r.status == 'PENDENTE_APROVACAO' %}
+            <span class="badge badge-pendente">🔔 Pend. Aprovação</span>
+          {% elif r.status == 'APROVADO' %}
+            <span class="badge badge-aprovado">✅ Aprovado</span>
+          {% elif r.status == 'REJEITADO' %}
+            <span class="badge badge-rejeitado">❌ Rejeitado</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="sub-status">
+            <!-- Fechamento -->
+            {% if r.fech_status == 'APROVADO' %}
+              <span class="sub-badge sub-fech-ok">🔒 ✔</span>
+            {% elif r.fech_status == 'REJEITADO' %}
+              <span class="sub-badge sub-fech-rej">🔒 ✘</span>
+            {% elif r.fech_criado_em %}
+              <span class="sub-badge sub-fech-pend">🔒 ⏳</span>
+            {% endif %}
+            <!-- Abertura -->
+            {% if r.aber_status == 'APROVADO' %}
+              <span class="sub-badge sub-aber-ok">🔓 ✔</span>
+            {% elif r.aber_status == 'REJEITADO' %}
+              <span class="sub-badge sub-aber-rej">🔓 ✘</span>
+            {% elif r.aber_criado_em %}
+              <span class="sub-badge sub-aber-pend">🔓 ⏳</span>
+            {% else %}
+              <span class="sub-badge sub-aber-vazio">🔓 —</span>
+            {% endif %}
+          </div>
+        </td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-soft btn-sm" onclick="verDetalhe({{ r.id }})">🔍</button>
+            <a href="{{ url_for('af.pdf_ciclo', ciclo_id=r.id) }}" class="btn btn-soft btn-sm" data-filename="AF-{{ r.site }}-{{ r.fech_data or r.id }}.pdf">📄</a>
+            {% if can_approve and r.aber_criado_em and r.status != 'APROVADO' %}
+            <button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;font-size:11px;" onclick="abrirAprovacao({{ r.id }}, '{{ r.fech_status or 'PENDENTE' }}', '{{ r.aber_status or 'PENDENTE' }}')">⚖️ Aprovar</button>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div style="text-align:center;padding:60px 20px;color:var(--muted);">
+    <div style="font-size:48px;margin-bottom:12px;">🔐</div>
+    <p style="font-size:14px;">Nenhum ciclo registrado.</p>
+    <a href="{{ url_for('af.novo_fechamento') }}" class="btn btn-red" style="margin-top:12px;display:inline-block;">🔒 Registrar Fechamento</a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Modal Detalhe -->
+<div class="modal-overlay" id="modalDetalhe" onclick="fecharModal('modalDetalhe',event)">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:700px;">
+    <div class="modal-head">
+      <h3>🔐 Detalhe do Ciclo</h3>
+      <button class="modal-close" onclick="fecharModal('modalDetalhe')">✕</button>
+    </div>
+    <div class="modal-body-scroll" id="modalDetalheBody">
+      <p style="color:var(--muted);text-align:center;">Carregando...</p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Aprovação -->
+<div class="modal-overlay" id="modalAprovacao" onclick="fecharModal('modalAprovacao',event)">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:520px;">
+    <div class="modal-head" style="background:#0f2040;">
+      <h3>⚖️ Aprovação do Ciclo</h3>
+      <button class="modal-close" onclick="fecharModal('modalAprovacao')">✕</button>
+    </div>
+    <div class="modal-body" id="modalAprovacaoBody"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function verDetalhe(id){
+  abrirModal('modalDetalhe');
+  document.getElementById('modalDetalheBody').innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;">Carregando...</p>';
+  fetch("{{ url_for('af.detalhe', ciclo_id=0) }}".replace('/0/', '/'+id+'/'))
+    .then(r=>r.json())
+    .then(d=>{
+      function statusBadge(s){
+        if(!s||s==='—') return '<span style="color:#9ca3af">—</span>';
+        var cores={'APROVADO':'#dcfce7;color:#166534','REJEITADO':'#fee2e2;color:#991b1b','PENDENTE':'#f3f4f6;color:#6b7280'};
+        var c=cores[s]||cores['PENDENTE'];
+        return '<span style="background:'+c+';padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">'+s+'</span>';
+      }
+      function chkList(itens, label){
+        if(!itens||!itens.length) return '<p style="color:var(--muted);font-size:12px;">Não registrado.</p>';
+        var html='<ul class="chk-list">';
+        itens.forEach(function(it){
+          var ic=it.ok==='S'?'<span class="chk-ok">✔</span>':it.ok==='N'?'<span class="chk-no">✘</span>':'<span style="color:#9ca3af">—</span>';
+          html+='<li>'+ic+'<div class="chk-desc">'+it.descricao+(it.obs?'<div class="chk-obs">'+it.obs+'</div>':'')+'</div></li>';
+        });
+        return html+'</ul>';
+      }
+      var html = '<div class="det-section">'
+        +'<div class="det-section-title">🔒 Fechamento</div>'
+        +'<div class="det-grid">'
+        +'<div class="det-field"><label>Data/Hora</label><span>'+( d.fech_data||'—')+' '+(d.fech_hora||'')+'</span></div>'
+        +'<div class="det-field"><label>Realizado por</label><span>'+(d.fech_realizado_por||'—')+'</span></div>'
+        +'<div class="det-field"><label>Status</label><span>'+statusBadge(d.fech_status)+'</span></div>'
+        +'<div class="det-field"><label>Aprovado por</label><span>'+(d.fech_aprov_por||'—')+'</span></div>'
+        +'</div>'
+        +'<div style="margin-top:10px;font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px;">Checklist — '+(d.nc_fech?' ⚠ '+d.nc_fech+' não conformes':'✔ Sem não conformidades')+'</div>'
+        +chkList(d.fech_itens,'Fechamento')+'</div>';
+
+      html += '<div class="det-section">'
+        +'<div class="det-section-title">🔓 Abertura</div>'
+        +(d.aber_data?
+          '<div class="det-grid">'
+          +'<div class="det-field"><label>Data/Hora</label><span>'+(d.aber_data||'—')+' '+(d.aber_hora||'')+'</span></div>'
+          +'<div class="det-field"><label>Realizado por</label><span>'+(d.aber_realizado_por||'—')+'</span></div>'
+          +'<div class="det-field"><label>Status</label><span>'+statusBadge(d.aber_status)+'</span></div>'
+          +'<div class="det-field"><label>Aprovado por</label><span>'+(d.aber_aprov_por||'—')+'</span></div>'
+          +'</div>'
+          +'<div style="margin-top:10px;font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px;">Checklist — '+(d.nc_aber?' ⚠ '+d.nc_aber+' não conformes':'✔ Sem não conformidades')+'</div>'
+          +chkList(d.aber_itens,'Abertura')
+          : '<p style="color:var(--muted);font-size:12px;">Abertura não registrada ainda.</p>')
+        +'</div>';
+
+      html += '<div style="display:flex;gap:10px;padding-top:10px;">'
+        +'<a href="'+d.pdf_url+'" class="btn btn-soft btn-sm" data-filename="AF-ciclo-'+d.id+'.pdf">📄 Baixar PDF</a>'
+        +'</div>';
+
+      document.getElementById('modalDetalheBody').innerHTML = html;
+    })
+    .catch(()=>{ document.getElementById('modalDetalheBody').innerHTML='<p style="color:red;text-align:center;">Erro ao carregar.</p>'; });
+}
+
+function abrirAprovacao(id, fech_status, aber_status){
+  var canAprovFech = fech_status !== 'APROVADO' && fech_status !== 'REJEITADO' ? '' : 'disabled';
+  var canAprovAber = aber_status !== 'APROVADO' && aber_status !== 'REJEITADO' && aber_status !== '—' ? '' : 'disabled';
+
+  var urlFech = "{{ url_for('af.aprovar_fechamento', ciclo_id=0) }}".replace('/0/', '/'+id+'/');
+  var urlAber = "{{ url_for('af.aprovar_abertura',   ciclo_id=0) }}".replace('/0/', '/'+id+'/');
+
+  var html = '<div style="padding:20px;display:flex;flex-direction:column;gap:16px;">';
+
+  function sigBlock(canvasId, inputId){
+    return '<div style="margin:10px 0 6px;">'
+      +'<p style="font-size:11px;font-weight:800;color:var(--muted);margin:0 0 4px;">✍️ Assinatura do Gestor</p>'
+      +'<div style="border:2px dashed #d1d5db;border-radius:10px;overflow:hidden;background:#fff;cursor:crosshair;">'
+      +'<canvas id="'+canvasId+'" style="display:block;width:100%;height:100px;touch-action:none;"></canvas>'
+      +'</div>'
+      +'<button type="button" onclick="limparAprovSig(\''+canvasId+'\',\''+inputId+'\')" style="margin-top:4px;font-size:11px;background:#f3f4f6;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;">🗑 Limpar</button>'
+      +'<input type="hidden" name="assinatura" id="'+inputId+'">'
+      +'</div>';
+  }
+
+  html += '<div style="background:#f9fafb;border-radius:12px;padding:14px;">'
+    +'<p style="font-size:12px;font-weight:900;color:var(--muted);text-transform:uppercase;margin:0 0 8px;">🔒 Fechamento — atual: <strong>'+fech_status+'</strong></p>'
+    +'<form method="POST" action="'+urlFech+'" hx-boost="false" id="formAprovFech" class="aprov-form" style="flex-direction:column;align-items:stretch;">'
+    +sigBlock('sigFech','sigFechData')
+    +'<input name="obs" placeholder="Observação (opcional)" style="margin-bottom:8px;">'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button type="submit" name="acao" value="APROVADO" class="btn-aprov" '+canAprovFech+' onclick="capturarAprovSig(\'sigFech\',\'sigFechData\')">✔ Aprovar</button>'
+    +'<button type="submit" name="acao" value="REJEITADO" class="btn-rejeit" '+canAprovFech+' onclick="capturarAprovSig(\'sigFech\',\'sigFechData\');return confirm(\'Rejeitar fechamento?\')">✘ Rejeitar</button>'
+    +'</div></form></div>';
+
+  html += '<div style="background:#f9fafb;border-radius:12px;padding:14px;">'
+    +'<p style="font-size:12px;font-weight:900;color:var(--muted);text-transform:uppercase;margin:0 0 8px;">🔓 Abertura — atual: <strong>'+aber_status+'</strong></p>'
+    +(aber_status==='—'
+      ? '<p style="font-size:12px;color:var(--muted);">Abertura ainda não registrada.</p>'
+      : '<form method="POST" action="'+urlAber+'" hx-boost="false" id="formAprovAber" class="aprov-form" style="flex-direction:column;align-items:stretch;">'
+        +sigBlock('sigAber','sigAberData')
+        +'<input name="obs" placeholder="Observação (opcional)" style="margin-bottom:8px;">'
+        +'<div style="display:flex;gap:8px;">'
+        +'<button type="submit" name="acao" value="APROVADO" class="btn-aprov" '+canAprovAber+' onclick="capturarAprovSig(\'sigAber\',\'sigAberData\')">✔ Aprovar</button>'
+        +'<button type="submit" name="acao" value="REJEITADO" class="btn-rejeit" '+canAprovAber+' onclick="capturarAprovSig(\'sigAber\',\'sigAberData\');return confirm(\'Rejeitar abertura?\')">✘ Rejeitar</button>'
+        +'</div></form>')
+    +'</div></div>';
+
+  document.getElementById('modalAprovacaoBody').innerHTML = html;
+  abrirModal('modalAprovacao');
+  // Inicializa os canvas de assinatura após injetar o HTML
+  setTimeout(function(){
+    ['sigFech','sigAber'].forEach(function(cid){
+      var cv = document.getElementById(cid);
+      if(!cv) return;
+      cv.width  = cv.offsetWidth;
+      cv.height = 100;
+      var ctx = cv.getContext('2d');
+      ctx.strokeStyle='#1f2937'; ctx.lineWidth=2; ctx.lineCap='round';
+      var drawing=false;
+      function pos(e){ var r=cv.getBoundingClientRect(); if(e.touches) return {x:e.touches[0].clientX-r.left,y:e.touches[0].clientY-r.top}; return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+      cv.addEventListener('mousedown',function(e){drawing=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
+      cv.addEventListener('mousemove',function(e){if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();});
+      cv.addEventListener('mouseup',function(){drawing=false;});
+      cv.addEventListener('touchstart',function(e){e.preventDefault();drawing=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
+      cv.addEventListener('touchmove',function(e){e.preventDefault();if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();});
+      cv.addEventListener('touchend',function(){drawing=false;});
+    });
+  }, 50);
+}
+
+function capturarAprovSig(canvasId, inputId){
+  var cv = document.getElementById(canvasId);
+  var inp = document.getElementById(inputId);
+  if(cv && inp) inp.value = cv.toDataURL('image/png');
+}
+
+function limparAprovSig(canvasId, inputId){
+  var cv = document.getElementById(canvasId);
+  var inp = document.getElementById(inputId);
+  if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+  if(inp) inp.value = '';
+}
+</script>
+{% endblock %}

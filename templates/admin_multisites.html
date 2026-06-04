@@ -3,11 +3,26 @@
 {% block topbar_title %}🌐 Gestão Multisites{% endblock %}
 {% block topbar_subtitle %}Gerencie quais sites cada usuário Multisites pode acessar{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-soft btn-sm">← Usuários</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('admin_usuarios') }}" class="adm-tab">👥 Usuários</a>
+    <a href="{{ url_for('admin_solicitacoes') }}" class="adm-tab">
+      📋 Solicitações{% if pendentes %} <span class="adm-badge">{{ pendentes }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_multisites') }}" class="adm-tab active">🌐 Multisites</a>
+    <a href="{{ url_for('admin_releases') }}" class="adm-tab">📦 Releases</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  /* Admin nav tabs */
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-badge{ display:inline-flex; align-items:center; justify-content:center; background:#d40511; color:#fff; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:900; min-width:18px; }
+  .adm-tab.active .adm-badge{ background:rgba(255,255,255,.9); color:#d40511; }
+
   .search-bar{ width:100%; max-width:420px; padding:11px 16px; border:1.5px solid var(--line); border-radius:12px; font-size:13px; font-family:inherit; background:#fff; outline:none; transition:.18s; margin-bottom:20px; }
   .search-bar:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.08); }
 

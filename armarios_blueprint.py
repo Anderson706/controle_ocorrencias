@@ -13,6 +13,7 @@ armarios_bp = Blueprint('armarios', __name__, template_folder='templates')
 _db    = None
 Armario             = None
 ArmarioChaveReserva = None
+ArmarioHistorico    = None
 
 
 def _tempo_decorrido(dt):
@@ -32,7 +33,7 @@ def _tempo_decorrido(dt):
 
 # ── Inicialização ─────────────────────────────────────────────────────────────
 def setup_armarios(db):
-    global _db, Armario, ArmarioChaveReserva
+    global _db, Armario, ArmarioChaveReserva, ArmarioHistorico
     _db = db
 
     class _Armario(db.Model):
@@ -66,13 +67,30 @@ def setup_armarios(db):
         status              = db.Column(db.String(20),  nullable=False, default='RETIRADA')  # RETIRADA | DEVOLVIDA
         assinatura          = db.Column(db.Text,        nullable=True)  # base64 PNG do canvas
 
+    class _ArmarioHistorico(db.Model):
+        """Auditoria de todas as operações nos armários."""
+        __tablename__ = "armario_historico"
+        id               = db.Column(db.Integer, db.Sequence('arm_hist_id_seq', start=1), primary_key=True)
+        armario_id       = db.Column(db.Integer,     nullable=False)
+        armario_numero   = db.Column(db.String(50),  nullable=True)
+        bloco            = db.Column(db.String(100), nullable=True)
+        site             = db.Column(db.String(100), nullable=False)
+        evento           = db.Column(db.String(50),  nullable=False)  # ATRIBUIÇÃO | LIBERAÇÃO | CHAVE RETIRADA | CHAVE DEVOLVIDA
+        colaborador_nome = db.Column(db.String(150), nullable=True)
+        colaborador_cpf  = db.Column(db.String(50),  nullable=True)
+        operador         = db.Column(db.String(150), nullable=True)
+        data_evento      = db.Column(db.DateTime,    nullable=False, default=datetime.now)
+        observacao       = db.Column(db.String(300), nullable=True)
+
     Armario             = _Armario
     ArmarioChaveReserva = _ArmarioChaveReserva
+    ArmarioHistorico    = _ArmarioHistorico
 
     import sys
     mod = sys.modules[__name__]
     mod.Armario             = _Armario
     mod.ArmarioChaveReserva = _ArmarioChaveReserva
+    mod.ArmarioHistorico    = _ArmarioHistorico
     mod._db                 = db
 
 
@@ -86,14 +104,19 @@ def _login_required(f):
     return dec
 
 def _is_privileged():
-    """Retorna True se o usuário for ADMIN ou SUPERVISOR."""
-    return (session.get("user_perfil") or "").upper() in ("ADMIN", "SUPERVISOR")
+    """Retorna True se o usuário for ADMIN (acesso cross-site total no módulo de armários).
+    GESTOR usa site próprio; KEYUSER usa site próprio."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN",)
+
+def _is_can_manage():
+    """Retorna True para perfis que podem gerenciar armários (inclui KEYUSER)."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN", "GESTOR", "KEYUSER")
 
 def _admin_required(f):
     @wraps(f)
     def dec(*a, **kw):
-        if not _is_privileged():
-            flash("Acesso restrito a administradores e supervisores.", "danger")
+        if not _is_can_manage():
+            flash("Acesso restrito a administradores, gestores e key users.", "danger")
             return redirect(url_for("armarios.painel"))
         return f(*a, **kw)
     return dec
@@ -105,6 +128,29 @@ def _chave_ativa(armario_id):
     return ArmarioChaveReserva.query.filter_by(
         armario_id=armario_id, status='RETIRADA'
     ).first()
+
+
+def _reg_historico(armario_id, armario_numero, bloco, site, evento,
+                   colaborador_nome=None, colaborador_cpf=None,
+                   operador=None, observacao=None):
+    """Registra um evento no histórico de armários. Silencioso em caso de erro."""
+    try:
+        h = ArmarioHistorico(
+            armario_id       = armario_id,
+            armario_numero   = armario_numero,
+            bloco            = bloco,
+            site             = site,
+            evento           = evento,
+            colaborador_nome = colaborador_nome,
+            colaborador_cpf  = colaborador_cpf,
+            operador         = operador,
+            data_evento      = datetime.now(),
+            observacao       = observacao,
+        )
+        _db.session.add(h)
+        _db.session.commit()
+    except Exception:
+        _db.session.rollback()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -181,6 +227,7 @@ def painel():
         sites_lista=sites_lista,
         site=site,
         is_admin=is_admin,
+        can_manage=_is_can_manage(),
         total=total, ocupados=ocupados, livres=livres, chave_fora=chave_fora,
     )
 
@@ -261,7 +308,6 @@ def criar_lote():
 
 @armarios_bp.route("/atribuir/<int:arm_id>", methods=["POST"])
 @_login_required
-@_admin_required
 def atribuir(arm_id):
     arm  = Armario.query.get_or_404(arm_id)
     nome = request.form.get("colaborador_nome", "").strip()
@@ -293,12 +339,15 @@ def atribuir(arm_id):
         arm.atribuido_por         = atribuido_por
         arm.assinatura_atribuicao = assinatura
         _db.session.commit()
+        _reg_historico(arm.id, arm.numero, arm.bloco, arm.site, 'ATRIBUIÇÃO',
+                       colaborador_nome=nome, colaborador_cpf=cpf, operador=atribuido_por)
         flash(f"Armário {arm.numero} atribuído a {nome} com sucesso!", "success")
         return redirect(url_for("armarios.painel"))
     except Exception:
         _db.session.rollback()
 
     # Tentativa 2: fallback sem colunas que podem não existir ainda no Oracle
+    _atrib_ok = False
     try:
         _db.session.execute(
             _db.text(
@@ -310,16 +359,20 @@ def atribuir(arm_id):
         _db.session.commit()
         flash(f"Armário {arm.numero} atribuído a {nome} com sucesso! "
               f"(Assinatura será disponível após reiniciar o sistema.)", "success")
+        _atrib_ok = True
     except Exception as e2:
         _db.session.rollback()
         flash(f"Erro ao atribuir armário: {e2}", "danger")
+
+    if _atrib_ok:
+        _reg_historico(arm.id, arm.numero, arm.bloco, arm.site, 'ATRIBUIÇÃO',
+                       colaborador_nome=nome, colaborador_cpf=cpf, operador=atribuido_por)
 
     return redirect(url_for("armarios.painel"))
 
 
 @armarios_bp.route("/liberar/<int:arm_id>", methods=["POST"])
 @_login_required
-@_admin_required
 def liberar(arm_id):
     arm = Armario.query.get_or_404(arm_id)
 
@@ -329,11 +382,16 @@ def liberar(arm_id):
         return redirect(url_for("armarios.painel"))
 
     try:
+        colab_nome = arm.colaborador_nome
+        colab_cpf  = arm.colaborador_cpf
         arm.colaborador_nome = None
         arm.colaborador_cpf  = None
         arm.status           = 'LIVRE'
         arm.atribuido_em     = None
         _db.session.commit()
+        _reg_historico(arm.id, arm.numero, arm.bloco, arm.site, 'LIBERAÇÃO',
+                       colaborador_nome=colab_nome, colaborador_cpf=colab_cpf,
+                       operador=session.get("user_nome", ""))
         flash(f"Armário {arm.numero} liberado com sucesso!", "success")
     except Exception as e:
         _db.session.rollback()
@@ -411,7 +469,6 @@ def excluir_lote():
 
 @armarios_bp.route("/editar-colaborador/<int:arm_id>", methods=["POST"])
 @_login_required
-@_admin_required
 def editar_colaborador(arm_id):
     arm  = Armario.query.get_or_404(arm_id)
     site = session.get("user_site", "")
@@ -489,6 +546,9 @@ def chave_reserva():
             )
             _db.session.add(reg)
             _db.session.commit()
+            _reg_historico(arm.id, arm.numero, arm.bloco, arm.site, 'CHAVE RETIRADA',
+                           colaborador_nome=nome, colaborador_cpf=cpf,
+                           operador=session.get("user_nome", ""))
             flash(f"Chave reserva do armário {arm.numero} registrada com sucesso!", "success")
         except Exception as e:
             _db.session.rollback()
@@ -534,9 +594,19 @@ def devolver_chave_reserva(reg_id):
         flash("Chave já devolvida.", "warning")
         return redirect(url_for("armarios.chave_reserva"))
     try:
+        arm_r              = Armario.query.get(reg.armario_id)
         reg.status         = 'DEVOLVIDA'
         reg.data_devolucao = datetime.now()
         _db.session.commit()
+        _reg_historico(
+            reg.armario_id,
+            arm_r.numero if arm_r else None,
+            arm_r.bloco  if arm_r else None,
+            reg.site, 'CHAVE DEVOLVIDA',
+            colaborador_nome=reg.retirado_por_nome,
+            colaborador_cpf=reg.retirado_por_cpf,
+            operador=session.get("user_nome", ""),
+        )
         flash("Chave reserva devolvida com sucesso!", "success")
     except Exception as e:
         _db.session.rollback()
@@ -1155,6 +1225,192 @@ def exportar_situacao_excel():
     wb.save(output)
     output.seek(0)
     nome_arq = f"armarios_{site}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        output, as_attachment=True, download_name=nome_arq,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HISTÓRICO DE EVENTOS — ARMÁRIOS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@armarios_bp.route("/historico")
+@_login_required
+def historico():
+    site     = session.get("user_site", "")
+    is_admin = _is_privileged()
+
+    site_f   = request.args.get("site",    "" if is_admin else site)
+    arm_f    = request.args.get("armario", "").strip()
+    evento_f = request.args.get("evento",  "")
+    data_ini = request.args.get("data_ini", "")
+    data_fim = request.args.get("data_fim", "")
+
+    q = ArmarioHistorico.query
+    if is_admin:
+        if site_f:
+            q = q.filter_by(site=site_f)
+    else:
+        q = q.filter_by(site=site)
+
+    if arm_f:
+        q = q.filter(ArmarioHistorico.armario_numero.ilike(f"%{arm_f}%"))
+    if evento_f:
+        q = q.filter_by(evento=evento_f)
+    if data_ini:
+        try:
+            q = q.filter(ArmarioHistorico.data_evento >= datetime.strptime(data_ini, "%Y-%m-%d"))
+        except ValueError:
+            pass
+    if data_fim:
+        try:
+            dt_f = datetime.strptime(data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            q = q.filter(ArmarioHistorico.data_evento <= dt_f)
+        except ValueError:
+            pass
+
+    registros = q.order_by(ArmarioHistorico.data_evento.desc()).limit(500).all()
+
+    sites_lista = []
+    if is_admin:
+        rows = (ArmarioHistorico.query
+                .with_entities(ArmarioHistorico.site)
+                .distinct()
+                .all())
+        sites_lista = sorted({r.site for r in rows if r.site})
+
+    return render_template(
+        "armarios/historico.html",
+        registros=registros,
+        site=site,
+        is_admin=is_admin,
+        sites_lista=sites_lista,
+        site_f=site_f,
+        arm_f=arm_f,
+        evento_f=evento_f,
+        data_ini=data_ini,
+        data_fim=data_fim,
+    )
+
+
+@armarios_bp.route("/historico/exportar")
+@_login_required
+def exportar_historico():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    site     = session.get("user_site", "")
+    is_admin = _is_privileged()
+
+    site_f   = request.args.get("site",    "" if is_admin else site)
+    arm_f    = request.args.get("armario", "").strip()
+    evento_f = request.args.get("evento",  "")
+    data_ini = request.args.get("data_ini", "")
+    data_fim = request.args.get("data_fim", "")
+
+    q = ArmarioHistorico.query
+    if is_admin:
+        if site_f:
+            q = q.filter_by(site=site_f)
+    else:
+        q = q.filter_by(site=site)
+
+    if arm_f:
+        q = q.filter(ArmarioHistorico.armario_numero.ilike(f"%{arm_f}%"))
+    if evento_f:
+        q = q.filter_by(evento=evento_f)
+    if data_ini:
+        try:
+            q = q.filter(ArmarioHistorico.data_evento >= datetime.strptime(data_ini, "%Y-%m-%d"))
+        except ValueError:
+            pass
+    if data_fim:
+        try:
+            dt_f = datetime.strptime(data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            q = q.filter(ArmarioHistorico.data_evento <= dt_f)
+        except ValueError:
+            pass
+
+    registros = q.order_by(ArmarioHistorico.data_evento.desc()).all()
+
+    thin = Side(style="thin", color="D1D5DB")
+    wb   = Workbook()
+    ws   = wb.active
+    ws.title = "Histórico de Armários"
+
+    n_cols = 9
+    col_letra = chr(ord('A') + n_cols - 1)
+
+    filtros = []
+    if site_f:   filtros.append(f"Site: {site_f}")
+    if arm_f:    filtros.append(f"Armário: {arm_f}")
+    if evento_f: filtros.append(f"Evento: {evento_f}")
+    if data_ini: filtros.append(f"De: {data_ini}")
+    if data_fim: filtros.append(f"Até: {data_fim}")
+    filtros_txt = " | ".join(filtros) if filtros else "Todos os registros"
+
+    ws.merge_cells(f"A1:{col_letra}1")
+    ws["A1"] = f"HISTÓRICO DE ARMÁRIOS — {(site_f or site).upper()}"
+    ws["A1"].font      = Font(size=13, bold=True, color="FFFFFF")
+    ws["A1"].fill      = PatternFill("solid", fgColor="D40511")
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    ws.merge_cells(f"A2:{col_letra}2")
+    ws["A2"] = (f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+                f" | Usuário: {session.get('user_nome', 'Sistema')}"
+                f" | {filtros_txt}"
+                f" | Total: {len(registros)} registro(s)")
+    ws["A2"].font      = Font(size=10, bold=True, color="111827")
+    ws["A2"].fill      = PatternFill("solid", fgColor="FFCC00")
+    ws["A2"].alignment = Alignment(horizontal="center")
+    ws.row_dimensions[2].height = 16
+
+    headers = ["Data/Hora", "Site", "Nº Armário", "Bloco",
+               "Evento", "Colaborador", "CPF / Matrícula", "Operador", "Observação"]
+    for col, h in enumerate(headers, start=1):
+        c = ws.cell(row=4, column=col, value=h)
+        c.font      = Font(bold=True, size=10, color="111827")
+        c.fill      = PatternFill("solid", fgColor="E5E7EB")
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border    = Border(top=thin, left=thin, right=thin, bottom=thin)
+    ws.row_dimensions[4].height = 22
+
+    cor_evento = {
+        'ATRIBUIÇÃO':    "D1FAE5",
+        'LIBERAÇÃO':     "FEE2E2",
+        'CHAVE RETIRADA': "FEF3C7",
+        'CHAVE DEVOLVIDA': "EDE9FE",
+    }
+
+    for row_i, r in enumerate(registros, start=5):
+        row_data = [
+            r.data_evento.strftime("%d/%m/%Y %H:%M") if r.data_evento else "—",
+            r.site or "—",
+            r.armario_numero or "—",
+            r.bloco or "—",
+            r.evento or "—",
+            r.colaborador_nome or "—",
+            r.colaborador_cpf  or "—",
+            r.operador         or "—",
+            r.observacao       or "—",
+        ]
+        fill_hex = cor_evento.get(r.evento, "FFFFFF")
+        for col, val in enumerate(row_data, start=1):
+            c = ws.cell(row=row_i, column=col, value=val)
+            c.border    = Border(top=thin, left=thin, right=thin, bottom=thin)
+            c.alignment = Alignment(vertical="center")
+            c.fill      = PatternFill("solid", fgColor=fill_hex)
+
+    for col, w in zip("ABCDEFGHI", [18, 14, 14, 12, 18, 28, 18, 22, 30]):
+        ws.column_dimensions[col].width = w
+    ws.freeze_panes = "A5"
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    nome_arq = f"ARM-HIST-{(site_f or site).replace(' ','_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     return send_file(
         output, as_attachment=True, download_name=nome_arq,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

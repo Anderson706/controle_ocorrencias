@@ -57,6 +57,8 @@ hiddenimports = (
         'cryptography.hazmat.backends.openssl',
         # Controle de Chaves
         'chaves_blueprint',
+        # Achados e Perdidos
+        'achados_blueprint',
     ]
 )
 

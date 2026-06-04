@@ -59,7 +59,7 @@
     <div class="avatar-info">
       <h2>{{ user.nome }}</h2>
       <p>{{ user.email }}<br>Site: {{ user.site or '—' }}</p>
-      <span class="role-chip">{{ user.perfil }}</span>
+      <span class="role-chip">{% if user.perfil and user.perfil.upper() == 'KEYUSER' %}Key User{% else %}{{ user.perfil }}{% endif %}</span>
     </div>
   </div>
 
@@ -113,6 +113,36 @@
         <div class="hint" id="match-hint"></div>
       </div>
       <button type="submit" class="btn btn-red"> Alterar senha</button>
+    </form>
+  </div>
+
+  <!-- Cargo (editável) -->
+  <div class="form-card">
+    <h3>💼 Cargo / Função</h3>
+    <form method="POST" id="form-cargo">
+      <input type="hidden" name="foto_perfil_skip" value="1">
+      <input type="hidden" name="nova_senha" value="">
+      <input type="hidden" name="confirma_senha" value="">
+      <div class="field">
+        <label>Cargo / Função</label>
+        <select name="cargo">
+          <option value="">Selecione...</option>
+          {% set _cargos = [
+            'AUXILIAR DE SEGURANÇA PATRIMONIAL',
+            'ASSISTENTE DE SEGURANÇA PATRIMONIAL',
+            'ANALISTA DE SEGURANÇA PATRIMONIAL',
+            'COORDENADOR DE SEGURANÇA PATRIMONIAL',
+            'SUPERVISOR DE SEGURANÇA PATRIMONIAL',
+            'GERENTE DE SEGURANÇA PATRIMONIAL',
+            'GERENTE SR DE SEGURANÇA PATRIMONIAL',
+            'DIRETOR DE SEGURANÇA PATRIMONIAL'
+          ] %}
+          {% for c in _cargos %}
+          <option value="{{ c }}" {{ 'selected' if user.cargo == c }}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">💾 Salvar cargo</button>
     </form>
   </div>
 

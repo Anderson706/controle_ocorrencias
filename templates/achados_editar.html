@@ -1,0 +1,146 @@
+{% extends "base_app.html" %}
+{% block page_title %}Editar Registro — Achados e Perdidos | CCTV Control Panel{% endblock %}
+{% block topbar_title %}✏️ Editar Registro #{{ reg.id_registro }}{% endblock %}
+{% block topbar_subtitle %}{{ reg.objeto }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('achados.lista') }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:18px; padding:32px 36px; box-shadow:0 4px 16px rgba(0,0,0,.06); max-width:720px; }
+  .section-title{ font-size:13px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin:22px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  .section-title:first-child{ margin-top:0; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  .field input,.field select,.field textarea{ width:100%; padding:11px 14px; border:1.5px solid var(--line); border-radius:11px; font-size:13px; font-family:inherit; background:#fafbfc; color:var(--text); outline:none; transition:.15s; box-sizing:border-box; }
+  .field input:focus,.field select:focus,.field textarea:focus{ border-color:var(--dhl-red); background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.07); }
+  .field textarea{ min-height:110px; resize:vertical; }
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media(max-width:600px){ .grid-2{ grid-template-columns:1fr; } }
+  .form-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:28px; padding-top:20px; border-top:1px solid var(--line); }
+
+  /* Foto atual */
+  .foto-atual{ display:flex; align-items:center; gap:16px; background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .foto-atual img{ width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--line); }
+  .foto-atual .no-foto{ width:72px; height:72px; background:#f1f5f9; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:28px; flex-shrink:0; }
+  .foto-atual-info{ font-size:12px; color:var(--muted); }
+  .foto-atual-info strong{ display:block; font-size:13px; color:var(--text); margin-bottom:4px; }
+
+  /* Troca de foto */
+  .foto-wrapper{ position:relative; }
+  .foto-wrapper input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .foto-display{ display:flex; align-items:center; gap:12px; padding:10px 14px; border:1.5px dashed var(--line); border-radius:11px; background:#fafbfc; cursor:pointer; transition:.15s; }
+  .foto-display:hover{ border-color:var(--dhl-red); background:#fff9f9; }
+  .foto-display .fi{ font-size:18px; }
+  .foto-display .ft{ font-size:12px; color:var(--muted); font-weight:600; }
+  .foto-display .ft.chosen{ color:var(--text); font-weight:700; }
+</style>
+
+<div class="form-card">
+  <form method="POST" action="{{ url_for('achados.editar_salvar', row_id=reg.id) }}"
+        enctype="multipart/form-data"
+        onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+
+    <!-- Dados principais -->
+    <div class="section-title">Dados do Objeto</div>
+    <div class="field">
+      <label>Objeto *</label>
+      <input type="text" name="objeto" value="{{ reg.objeto }}" required>
+    </div>
+    <div class="field">
+      <label>Responsável pelo registro *</label>
+      <input type="text" name="responsavel" value="{{ reg.responsavel }}" required>
+    </div>
+    <div class="field">
+      <label>Descrição detalhada *</label>
+      <textarea name="descricao" required>{{ reg.descricao }}</textarea>
+    </div>
+
+    <!-- Turno -->
+    <div class="section-title">Turno</div>
+    <div class="field" style="max-width:320px">
+      <label>Turno</label>
+      <select name="turno">
+        <option value="Turno 1"      {{ 'selected' if reg.turno|string == 'Turno 1' or reg.turno|string == '1' }}>Turno 1</option>
+        <option value="Turno 2"      {{ 'selected' if reg.turno|string == 'Turno 2' or reg.turno|string == '2' }}>Turno 2</option>
+        <option value="Turno 3"      {{ 'selected' if reg.turno|string == 'Turno 3' or reg.turno|string == '3' }}>Turno 3</option>
+        <option value="Turno Diurno" {{ 'selected' if reg.turno|string == 'Turno Diurno' }}>Turno Diurno</option>
+        <option value="Turno Noturno"{{ 'selected' if reg.turno|string == 'Turno Noturno' }}>Turno Noturno</option>
+      </select>
+    </div>
+
+    <!-- Status -->
+    <div class="section-title">Status</div>
+    <div class="grid-2">
+      <div class="field">
+        <label>Status atual</label>
+        <select name="status">
+          <option value="Pendente"  {{ 'selected' if reg.status == 'Pendente' }}>⏳ Pendente</option>
+          <option value="Entregue"  {{ 'selected' if reg.status == 'Entregue' }}>✔ Entregue</option>
+          <option value="Devolvido" {{ 'selected' if reg.status == 'Devolvido' }}>↩ Devolvido</option>
+          <option value="Doacao"    {{ 'selected' if reg.status == 'Doacao' }}>🎁 Doação</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Retirado / Recebido por</label>
+        <input type="text" name="retirado_por" value="{{ reg.retirado_por or '' }}"
+               placeholder="Nome da pessoa (se aplicável)">
+      </div>
+    </div>
+
+    <!-- Foto -->
+    <div class="section-title">Foto do Objeto</div>
+
+    <!-- Foto atual -->
+    <div class="foto-atual">
+      {% if reg.foto_path %}
+      <img src="{{ url_for('static', filename=reg.foto_path) }}" alt="foto atual">
+      <div class="foto-atual-info">
+        <strong>Foto atual</strong>
+        Selecione uma nova imagem abaixo para substituir.
+      </div>
+      {% else %}
+      <span class="no-foto">📦</span>
+      <div class="foto-atual-info">
+        <strong>Sem foto</strong>
+        Selecione uma imagem abaixo para adicionar.
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="field">
+      <label>Nova foto <span style="font-weight:500;text-transform:none">(opcional)</span></label>
+      <div class="foto-wrapper">
+        <div class="foto-display" id="foto-display">
+          <span class="fi">📷</span>
+          <span class="ft" id="foto-txt">Clique para trocar a foto (PNG, JPG, WEBP)</span>
+        </div>
+        <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp,.gif" onchange="atualizarFoto(this)">
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('achados.lista') }}" class="btn btn-soft">Cancelar</a>
+      <button type="submit" class="btn btn-red">✓ Salvar Alterações</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function atualizarFoto(input) {
+  var txt = document.getElementById('foto-txt');
+  var disp = document.getElementById('foto-display');
+  if (input.files && input.files[0]) {
+    var f = input.files[0];
+    txt.textContent = f.name + '  (' + (f.size/1048576).toFixed(1) + ' MB)';
+    txt.classList.add('chosen');
+    disp.style.borderColor = '#16a34a'; disp.style.borderStyle = 'solid';
+    disp.style.background = '#f0fdf4';
+    disp.querySelector('.fi').textContent = '✔';
+  }
+}
+</script>
+{% endblock %}

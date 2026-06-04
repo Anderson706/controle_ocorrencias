@@ -18,10 +18,6 @@
  /* ── Loading ── */
  #loading-overlay{ display:none; position:fixed; inset:0; z-index:99999; background:rgba(15,23,42,.52); backdrop-filter:blur(3px); align-items:center; justify-content:center; }
  #loading-overlay.show{ display:flex; }
- .loading-box{ background:#fff; border-radius:20px; padding:36px 52px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.22); }
- .spinner{ width:46px; height:46px; border:4px solid #e5e7eb; border-top-color:var(--dhl-red); border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 18px; }
- @keyframes spin{ to{ transform:rotate(360deg); } }
- .loading-box p{ margin:0; font-size:14px; font-weight:800; color:#374151; }
 
  /* ── Layout ── */
  .page{ min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding:32px 16px 48px; }
@@ -123,7 +119,7 @@
  </style>
 </head>
 <body>
-<div id="loading-overlay"><div class="loading-box"><div class="spinner"></div><p>Processando...</p></div></div>
+<div id="loading-overlay"></div>
 
 <!-- Modal de confirmação de recusa -->
 <div class="modal-overlay" id="modal-recusa">

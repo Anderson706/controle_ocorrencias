@@ -3,12 +3,20 @@
 {% block topbar_title %}🔑 Realizar Retirada{% endblock %}
 {% block topbar_subtitle %}Registre a retirada de uma chave — {{ site }}{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('chaves.meu_claviculario') }}" class="btn btn-soft btn-sm">← Claviculário</a>
-  <a href="{{ url_for('chaves.realizar_devolucao') }}" class="btn btn-soft btn-sm">↩ Devoluções</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('chaves.meu_claviculario') }}" class="adm-tab">🗃️ Claviculário</a>
+    <a href="{{ url_for('chaves.realizar_retirada') }}" class="adm-tab active">🔑 Retirada</a>
+    <a href="{{ url_for('chaves.realizar_devolucao') }}" class="adm-tab">↩ Devolução</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .content{ max-width:820px; margin:0 auto; }
   .flash-wrap{ display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
 

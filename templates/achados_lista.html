@@ -1,0 +1,488 @@
+{% extends "base_app.html" %}
+{% block page_title %}Registros — Achados e Perdidos | CCTV Control Panel{% endblock %}
+{% block topbar_title %}📦 Achados e Perdidos — Registros{% endblock %}
+{% block topbar_subtitle %}Gerencie os objetos encontrados e acompanhe os prazos{% endblock %}
+{% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('achados.novo') }}" class="adm-tab">➕ Novo</a>
+    <a href="{{ url_for('achados.lista') }}" class="adm-tab active">📦 Registros</a>
+    <a href="{{ url_for('achados.dashboard') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
+  <div class="adm-sep"></div>
+  <a href="{{ url_for('achados.novo') }}" class="btn btn-red btn-sm">+ Novo Registro</a>
+  <a href="{{ url_for('achados.exportar_excel') }}" class="btn btn-soft btn-sm">⬇ Excel</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
+  /* Filtros */
+  .filter-bar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+  .filter-bar input[type=text]{ flex:1; min-width:200px; padding:10px 14px; border:1.5px solid var(--line); border-radius:11px; font-size:13px; font-family:inherit; background:#fff; outline:none; transition:.15s; }
+  .filter-bar input[type=text]:focus{ border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(212,5,17,.07); }
+  .tab-bar{ display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:4px; width:fit-content; }
+  .tab-btn{ padding:6px 14px; border-radius:9px; font-size:12px; font-weight:700; cursor:pointer; border:none; background:none; color:var(--muted); font-family:inherit; transition:.15s; text-decoration:none; }
+  .tab-btn.active{ background:var(--dhl-red); color:#fff; }
+  .tab-btn:hover:not(.active){ background:#f3f4f6; color:var(--text); }
+
+  /* Tabela */
+  .table-card{ background:#fff; border:1px solid var(--line); border-radius:18px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.05); }
+  .table-head-bar{ display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid var(--line); gap:12px; flex-wrap:wrap; }
+  .table-head-bar h3{ font-size:15px; font-weight:900; margin:0; color:var(--text); }
+  table{ width:100%; border-collapse:collapse; }
+  th{ padding:10px 14px; text-align:left; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; background:#f9fafb; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td{ padding:12px 14px; border-bottom:1px solid var(--line); font-size:13px; color:var(--text); vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  tr:hover td{ background:#fafafa; }
+
+  /* Badges de status */
+  .badge{ display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; white-space:nowrap; }
+  .badge-pendente{ background:#fff4db; color:#92400e; }
+  .badge-entregue{ background:#dcfce7; color:#166534; }
+  .badge-devolvido{ background:#dcfce7; color:#166534; }
+  .badge-doacao{ background:#eff6ff; color:#1d4ed8; }
+
+  /* Foto thumbnail */
+  .thumb{ width:40px; height:40px; border-radius:8px; object-fit:cover; border:1px solid var(--line); cursor:pointer; transition:.15s; }
+  .thumb:hover{ transform:scale(1.1); }
+  .no-foto{ width:40px; height:40px; border-radius:8px; background:#f1f5f9; display:inline-flex; align-items:center; justify-content:center; font-size:18px; }
+
+  /* Prazo */
+  .prazo-ok  { font-size:11px; color:#16a34a; font-weight:700; }
+  .prazo-warn{ font-size:11px; color:#d97706; font-weight:700; }
+  .prazo-venc{ font-size:11px; color:#dc2626; font-weight:800; }
+
+  /* Empty */
+  .empty-state{ text-align:center; padding:60px 20px; color:var(--muted); }
+  .empty-state .icon{ font-size:48px; margin-bottom:16px; }
+  .empty-state p{ font-size:14px; font-weight:700; }
+
+  /* Pager */
+  .tbl-pager{ display:flex; align-items:center; justify-content:center; gap:10px; padding:14px 0 4px; flex-wrap:wrap; }
+  .tbl-pager-btn{ border:1px solid #e5e7eb; background:#fff; border-radius:8px; padding:6px 16px; font-size:12px; font-weight:800; cursor:pointer; color:#1f2937; transition:.15s; font-family:inherit; }
+  .tbl-pager-btn:hover:not(:disabled){ background:var(--dhl-red); color:#fff; border-color:var(--dhl-red); }
+  .tbl-pager-btn:disabled{ opacity:.35; cursor:default; }
+  .tbl-pager-info{ font-size:12px; font-weight:700; color:#6b7280; }
+
+  /* Modal detalhes */
+  .modal-overlay{ display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:9000; align-items:center; justify-content:center; padding:20px; }
+  .modal-overlay.open{ display:flex; }
+  .modal-box{ background:#fff; border-radius:20px; box-shadow:0 24px 60px rgba(0,0,0,.18); width:100%; max-width:520px; overflow:hidden; animation:modalIn .18s ease; }
+  @keyframes modalIn{ from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
+  .modal-head{ padding:18px 24px; display:flex; align-items:center; justify-content:space-between; background:var(--dhl-red); }
+  .modal-head h3{ margin:0; font-size:16px; font-weight:900; color:#fff; }
+  .modal-head-sub{ font-size:12px; color:rgba(255,255,255,.75); margin-top:2px; }
+  .modal-close{ background:rgba(255,255,255,.2); border:none; color:#fff; font-size:16px; cursor:pointer; padding:0; line-height:1; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; transition:.15s; flex-shrink:0; }
+  .modal-close:hover{ background:rgba(255,255,255,.35); }
+  .modal-body{ padding:22px 24px; }
+  .modal-foot{ padding:14px 24px; border-top:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .det-field{ margin-bottom:12px; }
+  .det-label{ font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
+  .det-val{ font-size:13px; font-weight:700; color:var(--text); line-height:1.45; }
+  .det-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+  .det-full{ grid-column:1/-1; }
+  .det-foto{ width:100%; max-height:180px; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer; margin-bottom:14px; }
+
+  /* Modal status */
+  .mstatus-box{ background:#fff; border-radius:20px; box-shadow:0 24px 60px rgba(0,0,0,.18); width:100%; max-width:380px; overflow:hidden; animation:modalIn .18s ease; }
+  .mfield label{ display:block; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  .mfield select,.mfield input[type=text]{ width:100%; padding:10px 13px; border:1.5px solid var(--line); border-radius:10px; font-size:13px; font-family:inherit; background:#fafbfc; color:var(--text); outline:none; transition:.15s; box-sizing:border-box; }
+  .mfield select:focus,.mfield input[type=text]:focus{ border-color:var(--dhl-red); background:#fff; }
+  .mfield{ margin-bottom:14px; }
+
+  /* Foto lightbox */
+  #foto-modal-overlay{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:9999; align-items:center; justify-content:center; cursor:pointer; }
+  #foto-modal-overlay.open{ display:flex; }
+  #foto-modal-overlay img{ max-width:90vw; max-height:85vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+</style>
+
+<!-- Filtros -->
+<div class="filter-bar">
+  <form method="GET" data-autofilter style="display:flex;gap:10px;flex:1;align-items:center;flex-wrap:wrap">
+    <input type="text" name="q" value="{{ q }}" placeholder="🔍 Buscar por objeto, responsável ou descrição...">
+    <input type="hidden" name="status" value="{{ f_status }}">
+    <button type="submit" class="btn btn-soft btn-sm">Buscar</button>
+    {% if q or f_status %}
+    <a href="{{ url_for('achados.lista') }}" class="btn btn-soft btn-sm" data-clear-filter>✕ Limpar</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Tabs de status -->
+<div class="tab-bar" style="margin-bottom:20px">
+  <a href="{{ url_for('achados.lista', q=q) }}"
+     class="tab-btn {{ 'active' if not f_status }}">Todos</a>
+  <a href="{{ url_for('achados.lista', q=q, status='Pendente') }}"
+     class="tab-btn {{ 'active' if f_status=='Pendente' }}">
+     ⏳ Pendentes{% if total_pendente %} ({{ total_pendente }}){% endif %}
+  </a>
+  <a href="{{ url_for('achados.lista', q=q, status='Entregue') }}"
+     class="tab-btn {{ 'active' if f_status=='Entregue' }}">✓ Entregues</a>
+  <a href="{{ url_for('achados.lista', q=q, status='Devolvido') }}"
+     class="tab-btn {{ 'active' if f_status=='Devolvido' }}">↩ Devolvidos</a>
+  <a href="{{ url_for('achados.lista', q=q, status='Doacao') }}"
+     class="tab-btn {{ 'active' if f_status=='Doacao' }}">🎁 Doação</a>
+</div>
+
+<!-- Tabela -->
+<div class="table-card">
+  <div class="table-head-bar">
+    <h3>{{ registros|length }} registro(s)</h3>
+  </div>
+
+  {% if registros %}
+  <div style="overflow-x:auto">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Foto</th>
+        <th>Objeto</th>
+        <th>Responsável</th>
+        <th>Data / Turno</th>
+        <th>Prazo (90d)</th>
+        <th>Status</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in registros %}
+      <tr>
+        <!-- ID -->
+        <td>
+          <strong style="font-size:13px">{{ r.id_registro }}</strong>
+        </td>
+
+        <!-- Foto -->
+        <td>
+          {% if r.foto_path %}
+          <img class="thumb" src="{{ url_for('static', filename=r.foto_path) }}"
+               onclick="abrirFoto('{{ url_for('static', filename=r.foto_path) }}')" alt="foto">
+          {% else %}
+          <span class="no-foto" title="Sem foto">📦</span>
+          {% endif %}
+        </td>
+
+        <!-- Objeto -->
+        <td>
+          <strong>{{ r.objeto }}</strong>
+          {% if r.descricao %}
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            {{ r.descricao[:80] }}
+          </div>
+          {% endif %}
+        </td>
+
+        <!-- Responsável -->
+        <td>{{ r.responsavel }}</td>
+
+        <!-- Data / Turno -->
+        <td style="white-space:nowrap">
+          {% if r.data %}
+          {{ r.data[8:10] }}/{{ r.data[5:7] }}/{{ r.data[0:4] }}
+          {% endif %}
+          <div style="font-size:11px;color:var(--muted)">{{ r.turno }}</div>
+        </td>
+
+        <!-- Prazo -->
+        <td style="white-space:nowrap">
+          {% if r.prazo_entrega %}
+            {% set parts = r.prazo_entrega.split('-') %}
+            {% if r.status in ('Entregue','Devolvido','Doacao') %}
+              <span class="prazo-ok">✔ Concluído</span>
+            {% elif r.prazo_vencido %}
+              <span class="prazo-venc">⚠ Vencido<br>{{ parts[2] }}/{{ parts[1] }}/{{ parts[0] }}</span>
+            {% else %}
+              <span class="prazo-warn">{{ parts[2] }}/{{ parts[1] }}/{{ parts[0] }}</span>
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+
+        <!-- Status -->
+        <td>
+          {% if r.status == 'Pendente' %}
+            <span class="badge badge-pendente">⏳ Pendente</span>
+          {% elif r.status == 'Entregue' %}
+            <span class="badge badge-entregue">✔ Entregue</span>
+          {% elif r.status == 'Devolvido' %}
+            <span class="badge badge-devolvido">↩ Devolvido</span>
+          {% elif r.status == 'Doacao' %}
+            <span class="badge badge-doacao">🎁 Doação</span>
+          {% else %}
+            <span class="badge">{{ r.status }}</span>
+          {% endif %}
+        </td>
+
+        <!-- Ações — único botão -->
+        <td>
+          <button class="btn btn-soft btn-sm" onclick="abrirDetalhes({{ r.id }})">
+            ☰ Detalhes
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <div class="tbl-pager">
+    <button class="tbl-pager-btn" id="pager-prev" onclick="pagerPrev()">‹ Anterior</button>
+    <span class="tbl-pager-info" id="pager-info">carregando...</span>
+    <button class="tbl-pager-btn" id="pager-next" onclick="pagerNext()">Próxima ›</button>
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <div class="icon">📦</div>
+    <p>Nenhum registro encontrado.</p>
+    <p style="font-size:13px;font-weight:500;margin-top:8px">
+      <a href="{{ url_for('achados.novo') }}" style="color:var(--dhl-red)">+ Criar novo registro</a>
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Lightbox foto -->
+<div id="foto-modal-overlay" onclick="fecharFoto()">
+  <img id="foto-modal-img" src="" alt="foto">
+</div>
+
+<!-- Dados dos registros para o JS -->
+<script type="application/json" id="registros-json">
+{{ registros | map(attribute='__dict__') | list | tojson if false else '{}' }}
+</script>
+{% endblock %}
+
+{% block modals %}
+
+<!-- ═══ Modal Detalhes ═══ -->
+<div class="modal-overlay" id="modal-detalhes" onclick="if(event.target===this)fecharDetalhes()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <div>
+        <h3 id="det-titulo">Detalhes do Registro</h3>
+        <div class="modal-head-sub" id="det-subtitulo"></div>
+      </div>
+      <button class="modal-close" onclick="fecharDetalhes()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Foto (se houver) -->
+      <img id="det-foto" class="det-foto" src="" alt="foto"
+           onclick="abrirFoto(this.src)" style="display:none">
+
+      <div class="det-grid">
+        <div class="det-field">
+          <div class="det-label">Status</div>
+          <div class="det-val" id="det-status"></div>
+        </div>
+        <div class="det-field">
+          <div class="det-label">Turno</div>
+          <div class="det-val" id="det-turno"></div>
+        </div>
+        <div class="det-field">
+          <div class="det-label">Data do achado</div>
+          <div class="det-val" id="det-data"></div>
+        </div>
+        <div class="det-field">
+          <div class="det-label">Responsável</div>
+          <div class="det-val" id="det-responsavel"></div>
+        </div>
+        <div class="det-field det-full">
+          <div class="det-label">Descrição</div>
+          <div class="det-val" id="det-descricao" style="white-space:pre-wrap;line-height:1.55"></div>
+        </div>
+        <div class="det-field" id="det-retirado-wrap" style="display:none">
+          <div class="det-label">Retirado / Recebido por</div>
+          <div class="det-val" id="det-retirado"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-soft btn-sm"
+        onclick="abrirModalStatus(window._detId, window._detStatus, window._detRetirado)">
+        ✏ Status
+      </button>
+      <a id="det-btn-pdf" href="#" class="btn btn-soft btn-sm">📄 PDF</a>
+      <a id="det-btn-email" href="#" class="btn btn-soft btn-sm">✉ E-mail</a>
+      <a id="det-btn-editar" href="#" class="btn btn-soft btn-sm">✏ Editar</a>
+      <form id="det-form-excluir" method="POST" hx-boost="false" style="margin-left:auto">
+        <button type="submit" class="btn btn-sm"
+          style="background:#fee2e2;color:#991b1b;border:none;cursor:pointer"
+          id="det-btn-excluir"
+          onclick="return confirm('Excluir este registro?')">🗑 Excluir</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal Atualizar Status ═══ -->
+<div class="modal-overlay" id="modal-status" onclick="if(event.target===this)fecharStatus()">
+  <div class="mstatus-box" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3>✏ Atualizar Status</h3>
+      <button class="modal-close" onclick="fecharStatus()">✕</button>
+    </div>
+    <form id="form-status" method="POST" hx-boost="false">
+      <div class="modal-body" style="padding:22px 24px">
+        <div class="mfield">
+          <label>Novo status</label>
+          <select name="status" id="modal-status-sel">
+            <option value="Pendente">⏳ Pendente</option>
+            <option value="Entregue">✔ Entregue</option>
+            <option value="Devolvido">↩ Devolvido</option>
+            <option value="Doacao">🎁 Doação</option>
+          </select>
+        </div>
+        <div class="mfield">
+          <label>Retirado / Recebido por</label>
+          <input type="text" name="retirado_por" id="modal-retirado" placeholder="Nome da pessoa (se aplicável)">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-soft btn-sm" onclick="fecharStatus()">Cancelar</button>
+        <button type="submit" class="btn btn-red btn-sm">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+/* ── Mapa de registros (populado pelo Jinja) ── */
+var _regs = {
+  {% for r in registros %}
+  {{ r.id }}: {
+    id:          {{ r.id }},
+    id_registro: {{ r.id_registro }},
+    site:        {{ (r.site or '')|tojson }},
+    objeto:      {{ r.objeto|tojson }},
+    responsavel: {{ r.responsavel|tojson }},
+    data:        {{ (r.data or '')|tojson }},
+    turno:       {{ (r.turno|string)|tojson }},
+    descricao:   {{ (r.descricao or '')|tojson }},
+    status:      {{ (r.status or 'Pendente')|tojson }},
+    retirado_por:{{ (r.retirado_por or '')|tojson }},
+    foto_path:   {{ (r.foto_path or '')|tojson }},
+    url_pdf:     {{ url_for('achados.pdf',         row_id=r.id)|tojson }},
+    url_email:   {{ url_for('achados.enviar_email',row_id=r.id)|tojson }},
+    url_editar:  {{ url_for('achados.editar',      row_id=r.id)|tojson }},
+    url_excluir: {{ url_for('achados.excluir',     row_id=r.id)|tojson }}
+  }{% if not loop.last %},{% endif %}
+  {% endfor %}
+};
+
+/* ── Helpers de badge ── */
+function _badgeHtml(status) {
+  var map = {
+    'Pendente': '<span style="background:#fff4db;color:#92400e;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800">⏳ Pendente</span>',
+    'Entregue': '<span style="background:#dcfce7;color:#166534;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800">✔ Entregue</span>',
+    'Devolvido':'<span style="background:#dcfce7;color:#166534;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800">↩ Devolvido</span>',
+    'Doacao':   '<span style="background:#eff6ff;color:#1d4ed8;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800">🎁 Doação</span>'
+  };
+  return map[status] || ('<span style="font-weight:700">'+status+'</span>');
+}
+
+/* ── Abrir modal detalhes ── */
+function abrirDetalhes(id) {
+  var r = _regs[id];
+  if (!r) return;
+  window._detId       = id;
+  window._detStatus   = r.status;
+  window._detRetirado = r.retirado_por;
+
+  document.getElementById('det-titulo').textContent   = r.id_registro + ' — ' + r.objeto;
+  document.getElementById('det-subtitulo').textContent = r.site || '';
+  document.getElementById('det-status').innerHTML     = _badgeHtml(r.status);
+  document.getElementById('det-turno').textContent    = r.turno || '—';
+  document.getElementById('det-responsavel').textContent = r.responsavel || '—';
+  document.getElementById('det-descricao').textContent   = r.descricao   || '—';
+
+  // Data formatada DD/MM/YYYY
+  var d = r.data;
+  document.getElementById('det-data').textContent = d.length >= 10
+    ? d.substring(8,10)+'/'+d.substring(5,7)+'/'+d.substring(0,4) : d;
+
+  // Retirado por
+  var rwrap = document.getElementById('det-retirado-wrap');
+  if (r.retirado_por) {
+    rwrap.style.display = '';
+    document.getElementById('det-retirado').textContent = r.retirado_por;
+  } else {
+    rwrap.style.display = 'none';
+  }
+
+  // Foto
+  var fotoEl = document.getElementById('det-foto');
+  if (r.foto_path) {
+    fotoEl.src = '/static/' + r.foto_path;
+    fotoEl.style.display = 'block';
+  } else {
+    fotoEl.style.display = 'none';
+  }
+
+  // Links de ação
+  document.getElementById('det-btn-pdf').href    = r.url_pdf;
+  document.getElementById('det-btn-pdf').setAttribute('data-filename', 'achado-' + r.id_registro + '.pdf');
+  document.getElementById('det-btn-email').href  = r.url_email;
+  document.getElementById('det-btn-editar').href = r.url_editar;
+  document.getElementById('det-form-excluir').action = r.url_excluir;
+
+  document.getElementById('modal-detalhes').classList.add('open');
+}
+function fecharDetalhes() {
+  document.getElementById('modal-detalhes').classList.remove('open');
+}
+
+/* ── Modal de status ── */
+function abrirModalStatus(id, status, retirado) {
+  document.getElementById('modal-detalhes').classList.remove('open');
+  document.getElementById('form-status').action = '/achados/' + id + '/status';
+  var sel = document.getElementById('modal-status-sel');
+  for (var o of sel.options) { o.selected = (o.value === status); }
+  document.getElementById('modal-retirado').value = retirado || '';
+  document.getElementById('modal-status').classList.add('open');
+}
+function fecharStatus() { document.getElementById('modal-status').classList.remove('open'); }
+
+/* ── Lightbox foto ── */
+function abrirFoto(src) {
+  document.getElementById('foto-modal-img').src = src;
+  document.getElementById('foto-modal-overlay').classList.add('open');
+}
+function fecharFoto() { document.getElementById('foto-modal-overlay').classList.remove('open'); }
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { fecharDetalhes(); fecharStatus(); fecharFoto(); }
+});
+
+/* ── Paginador ── */
+(function(){
+  var PER=15, pg=1, snap=null;
+  var tb=document.querySelector('tbody');
+  if(!tb) return;
+  function rows(){ return Array.from(tb.querySelectorAll('tr')); }
+  function render(){
+    if(!snap) snap=rows().filter(function(r){ return r.style.display!=='none'; });
+    var tot=snap.length, totPg=Math.max(1,Math.ceil(tot/PER));
+    if(pg>totPg) pg=totPg;
+    rows().forEach(function(r){ r.style.display='none'; });
+    snap.forEach(function(r,i){ if(i>=(pg-1)*PER && i<pg*PER) r.style.display=''; });
+    var info=document.getElementById('pager-info');
+    var prev=document.getElementById('pager-prev');
+    var next=document.getElementById('pager-next');
+    if(info) info.textContent='Pág. '+pg+' / '+totPg+'  ·  '+tot+' registro'+(tot!==1?'s':'');
+    if(prev) prev.disabled=pg<=1;
+    if(next) next.disabled=pg>=totPg;
+  }
+  window.pagerPrev=function(){ if(pg>1){ pg--; render(); } };
+  window.pagerNext=function(){ pg++; render(); };
+  render();
+})();
+</script>
+{% endblock %}

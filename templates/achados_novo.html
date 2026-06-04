@@ -1,0 +1,173 @@
+{% extends "base_app.html" %}
+{% block page_title %}Novo Registro — Achados e Perdidos | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🔍 Achados e Perdidos — Novo Registro{% endblock %}
+{% block topbar_subtitle %}Registre um novo objeto encontrado nas dependências{% endblock %}
+{% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('achados.novo') }}" class="adm-tab active">➕ Novo</a>
+    <a href="{{ url_for('achados.lista') }}" class="adm-tab">📦 Registros</a>
+    <a href="{{ url_for('achados.dashboard') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:18px; padding:32px 36px; box-shadow:0 4px 16px rgba(0,0,0,.06); max-width:760px; }
+  .section-title{ font-size:13px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin:24px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  .section-title:first-child{ margin-top:0; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  .field input,.field select,.field textarea{ width:100%; padding:11px 14px; border:1.5px solid var(--line); border-radius:11px; font-size:13px; font-family:inherit; background:#fafbfc; color:var(--text); outline:none; transition:.15s; box-sizing:border-box; }
+  .field input:focus,.field select:focus,.field textarea:focus{ border-color:var(--dhl-red); background:#fff; box-shadow:0 0 0 3px rgba(212,5,17,.07); }
+  .field textarea{ min-height:110px; resize:vertical; }
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid-3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  @media(max-width:600px){ .grid-2,.grid-3{ grid-template-columns:1fr; } }
+
+  /* Upload de foto */
+  .foto-wrapper{ position:relative; }
+  .foto-wrapper input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .foto-display{ display:flex; align-items:center; gap:12px; padding:12px 16px; border:1.5px dashed var(--line); border-radius:11px; background:#fafbfc; cursor:pointer; transition:.15s; min-height:52px; }
+  .foto-display:hover{ border-color:var(--dhl-red); background:#fff9f9; }
+  .foto-display .fi{ font-size:20px; flex-shrink:0; }
+  .foto-display .ft{ font-size:13px; color:var(--muted); font-weight:600; }
+  .foto-display .ft.chosen{ color:var(--text); font-weight:700; }
+  .foto-preview{ margin-top:10px; display:none; }
+  .foto-preview img{ max-height:180px; border-radius:10px; border:1px solid var(--line); }
+
+  /* ID badge */
+  .id-badge{ display:inline-flex; align-items:center; gap:8px; background:#fff4e0; border:1.5px solid #ffcc00; border-radius:12px; padding:8px 16px; margin-bottom:20px; }
+  .id-badge .id-num{ font-size:22px; font-weight:900; color:#92400e; }
+  .id-badge .id-label{ font-size:11px; font-weight:700; color:#92400e; }
+
+  .form-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:28px; padding-top:20px; border-top:1px solid var(--line); }
+</style>
+
+<div class="form-card">
+  <div class="id-badge">
+    <span class="id-num">{{ next_id }}</span>
+    <span class="id-label">Próximo ID de registro</span>
+  </div>
+
+  <form method="POST" action="{{ url_for('achados.salvar') }}" enctype="multipart/form-data"
+        onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+
+    <!-- Identificação -->
+    <div class="section-title">Identificação</div>
+    <div class="field" style="max-width:340px">
+      <label>Responsável pelo registro</label>
+      <div class="field-locked">
+        <span class="lock-icon">🔒</span>
+        {{ session.get('user_nome', '') }}
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="field">
+        <label>Data do achado *</label>
+        <input type="date" name="data" required value="{{ today }}">
+      </div>
+      <div class="field">
+        <label>Turno *</label>
+        <select name="turno" required>
+          <option value="">Selecione...</option>
+          <option value="Turno 1">Turno 1</option>
+          <option value="Turno 2">Turno 2</option>
+          <option value="Turno 3">Turno 3</option>
+          <option value="Turno Diurno">Turno Diurno</option>
+          <option value="Turno Noturno">Turno Noturno</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Status inicial</label>
+        <select name="status" disabled>
+          <option>Pendente</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Objeto -->
+    <div class="section-title">Objeto Encontrado</div>
+    <div class="field">
+      <label>Descrição do objeto *</label>
+      <input type="text" name="objeto" required placeholder="Ex.: Carteira de couro preta, Celular Samsung Galaxy...">
+    </div>
+    <div class="field">
+      <label>Descrição detalhada *</label>
+      <textarea name="descricao" required
+        placeholder="Descreva o local onde foi encontrado, características, conteúdo (se aplicável), estado de conservação..."></textarea>
+    </div>
+
+    <!-- Foto -->
+    <div class="section-title">Foto do Objeto <span style="font-weight:500;text-transform:none;font-size:11px">(opcional)</span></div>
+    <div class="field">
+      <label>Imagem</label>
+      <div class="foto-wrapper">
+        <div class="foto-display" id="foto-display">
+          <span class="fi">📷</span>
+          <span class="ft" id="foto-txt">Clique para anexar uma foto (PNG, JPG, WEBP, GIF)</span>
+        </div>
+        <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp,.gif" onchange="previewFoto(this)">
+      </div>
+      <div class="foto-preview" id="foto-preview">
+        <img id="foto-img" src="" alt="preview">
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="{{ url_for('achados.lista') }}" class="btn btn-soft">Cancelar</a>
+      <button type="submit" class="btn btn-red">💾 Salvar Registro {{ next_id }}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function previewFoto(input) {
+  var display = document.getElementById('foto-display');
+  var txt     = document.getElementById('foto-txt');
+  var preview = document.getElementById('foto-preview');
+  var img     = document.getElementById('foto-img');
+
+  if (input.files && input.files[0]) {
+    var file = input.files[0];
+    txt.textContent = file.name + '  (' + (file.size / 1048576).toFixed(1) + ' MB)';
+    txt.classList.add('chosen');
+    display.style.borderColor = '#16a34a';
+    display.style.borderStyle = 'solid';
+    display.style.background  = '#f0fdf4';
+    display.querySelector('.fi').textContent = '✔';
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      img.src = e.target.result;
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  } else {
+    txt.textContent = 'Clique para anexar uma foto (PNG, JPG, WEBP, GIF)';
+    txt.classList.remove('chosen');
+    display.style.borderColor = '';
+    display.style.borderStyle = 'dashed';
+    display.style.background  = '';
+    display.querySelector('.fi').textContent = '📷';
+    preview.style.display = 'none';
+  }
+}
+
+// Preenche data de hoje por padrão
+document.addEventListener('DOMContentLoaded', function() {
+  var d = document.querySelector('input[name=data]');
+  if (d && !d.value) {
+    var t = new Date();
+    d.value = t.toISOString().substring(0,10);
+  }
+});
+</script>
+{% endblock %}

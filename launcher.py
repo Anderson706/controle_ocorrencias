@@ -1,8 +1,10 @@
 import sys
 import os
+import socket
 import threading
 import time
 import urllib.request
+import urllib.error
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
@@ -21,12 +23,15 @@ def _run_flask():
 
 
 def _aguardar_flask(timeout=20):
+    """Aguarda o Flask abrir a porta TCP — sem fazer requisições HTTP.
+    Checagem por socket evita disparar queries Oracle antes da janela abrir."""
     inicio = time.time()
     while time.time() - inicio < timeout:
         try:
-            urllib.request.urlopen(URL, timeout=1)
+            s = socket.create_connection(("127.0.0.1", PORT), timeout=0.5)
+            s.close()
             return True
-        except Exception:
+        except OSError:
             time.sleep(0.1)
     return False
 
@@ -135,9 +140,11 @@ def main():
     # 3. Aguarda Flask estar pronto (provavelmente já está)
     _aguardar_flask()
 
-    # 4. Migrações de schema — sincronamente, garante colunas existem antes de abrir a janela
+    # 4. Migrações de schema — fire-and-forget em daemon thread.
+    #    Não bloqueamos a thread principal: o app abre imediatamente após o Flask subir.
+    #    As migrações são todas idempotentes (try/except), então rodam sem risco em background.
     from app import _init_db
-    _init_db()
+    threading.Thread(target=_init_db, daemon=True).start()
 
     # 5. Fecha o splash nativo do PyInstaller
     try:

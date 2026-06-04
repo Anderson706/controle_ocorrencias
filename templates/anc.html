@@ -5,12 +5,23 @@
 {% block topbar_subtitle %}CCTV Control Panel — Avisos de Não Conformidade{% endblock %}
 
 {% block topbar_actions %}
-<a href="{{ url_for('nova_anc') }}" class="btn btn-red btn-sm">+ Nova ANC</a>
-<a href="{{ url_for('exportar_anc_excel') }}" class="btn btn-soft btn-sm" hx-boost="false">Exportar Excel</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('nova_anc') }}" class="adm-tab">⚠️ Nova ANC</a>
+    <a href="{{ url_for('anc') }}" class="adm-tab active">📋 Controle</a>
+    <a href="{{ url_for('dashboard_anc') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
+  <div class="adm-sep"></div>
+  <a href="{{ url_for('nova_anc') }}" class="btn btn-red btn-sm">+ Nova ANC</a>
+  <a href="{{ url_for('exportar_anc_excel') }}" class="btn btn-soft btn-sm" hx-boost="false">Exportar Excel</a>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .kpi-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px; }
   .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px 18px; box-shadow:var(--shadow); border-left:5px solid var(--dhl-yellow); display:flex; flex-direction:column; gap:4px; }
   .kpi-label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
@@ -66,7 +77,7 @@
     <h3>🔍 Filtros</h3>
     <span class="section-chip">Consulta dinâmica</span>
   </div>
-  <form method="GET" action="{{ url_for('anc') }}" hx-boost="false">
+  <form method="GET" data-autofilter action="{{ url_for('anc') }}" hx-boost="false">
     <div class="filters">
       <div>
         <label>Data inicial</label>
@@ -86,15 +97,6 @@
         </select>
       </div>
       <div>
-        <label>Gravidade</label>
-        <select name="gravidade">
-          <option value="">Todas as gravidades</option>
-          {% for g in ['BAIXA','MÉDIA','ALTA','CRÍTICA'] %}
-          <option value="{{ g }}" {% if filtros.gravidade == g %}selected{% endif %}>{{ g }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
         <label>Turno</label>
         <select name="turno">
           <option value="">Todos os turnos</option>
@@ -105,7 +107,12 @@
       </div>
       <div>
         <label>Natureza</label>
-        <input type="text" name="natureza" placeholder="Filtrar por natureza..." value="{{ filtros.natureza }}">
+        <select name="natureza">
+          <option value="">Filtrar por natureza...</option>
+          {% for nat in todos_naturezas %}
+          <option value="{{ nat }}" {% if filtros.natureza == nat %}selected{% endif %}>{{ nat }}</option>
+          {% endfor %}
+        </select>
       </div>
       {% if is_admin %}
       <div>
@@ -121,8 +128,8 @@
     </div>
     <div class="filter-actions">
       <button type="submit" class="btn btn-red">Aplicar filtros</button>
-      <a href="{{ url_for('anc') }}" class="btn btn-soft">Limpar</a>
-      {% if filtros.data_inicial or filtros.data_final or filtros.status or filtros.gravidade or filtros.turno or filtros.natureza %}
+      <a href="{{ url_for('anc') }}" class="btn btn-soft" data-clear-filter>Limpar</a>
+      {% if filtros.data_inicial or filtros.data_final or filtros.status or filtros.turno or filtros.natureza %}
       <span style="font-size:12px;font-weight:700;color:var(--muted);">Filtro ativo</span>
       {% endif %}
     </div>
@@ -141,19 +148,15 @@
     <table>
       <thead>
         <tr>
-          <th>Nº ANC</th><th>Data</th><th>Hora</th>
-          {% if is_admin %}<th>Site</th>{% endif %}
-          <th>Setor</th><th>Gravidade</th><th>Natureza</th><th>Turno</th><th>Responsável</th><th>Plano de Ação</th><th>Ações</th>
+          <th>Identificação</th><th>Data</th>
+          <th>Gravidade</th><th>Natureza</th><th>Responsável</th><th>Plano de Ação</th><th>Ações</th>
         </tr>
       </thead>
       <tbody>
         {% for r in registros %}
         <tr>
-          <td><strong style="color:var(--dhl-red);">{{ r.numero_site or r.id }}</strong></td>
+          <td><strong style="color:var(--dhl-red); font-family:monospace; letter-spacing:.5px;">{{ r.numero_anc or ('ANC-' ~ r.id) }}</strong></td>
           <td>{{ r.data_nc or '—' }}</td>
-          <td>{{ r.hora_nc or '—' }}</td>
-          {% if is_admin %}<td>{{ r.site or '—' }}</td>{% endif %}
-          <td>{{ r.setor or '—' }}</td>
           <td>
             {% set g = (r.gravidade or '').upper() %}
             {% if g == 'CRÍTICA' %}<span class="badge badge-critica">{{ r.gravidade }}</span>
@@ -162,7 +165,6 @@
             {% else %}<span class="badge badge-baixa">{{ r.gravidade or '—' }}</span>{% endif %}
           </td>
           <td class="desc-cell" title="{{ r.natureza }}">{{ r.natureza or '—' }}</td>
-          <td>{{ r.turno or '—' }}</td>
           <td>{{ r.responsavel or '—' }}</td>
           <td>
             {% set st = (r.status or '').upper() %}
@@ -172,9 +174,9 @@
           </td>
           <td>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button type="button" class="btn btn-outline btn-sm" onclick="abrirModal(this)"
+              <button type="button" class="btn btn-outline btn-sm" onclick="abrirModalAnc(this)"
                 data-id="{{ r.id }}"
-                data-numero="{{ r.numero_site or r.id }}"
+                data-numero="{{ r.numero_anc or ('ANC-' ~ r.id) }}"
                 data-data="{{ r.data_nc or '—' }}"
                 data-hora="{{ r.hora_nc or '—' }}"
                 data-site="{{ r.site or '—' }}"
@@ -210,7 +212,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="{{ 11 if is_admin else 10 }}" style="text-align:center; color:var(--muted); padding:32px;">Nenhum ANC encontrado com os filtros selecionados.</td>
+          <td colspan="7" style="text-align:center; color:var(--muted); padding:32px;">Nenhum ANC encontrado com os filtros selecionados.</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -225,11 +227,11 @@
 {% endblock %}
 
 {% block modals %}
-<div class="modal-overlay" id="modal" onclick="fecharModalFora(event)">
+<div class="modal-overlay" id="modal" onclick="fecharModalAncFora(event)">
   <div class="modal-box">
     <div class="modal-head">
       <h3 id="m-numero" style="color:var(--dhl-red);">ANC</h3>
-      <button class="modal-close" onclick="fecharModal()">×</button>
+      <button class="modal-close" onclick="fecharModalAnc()">×</button>
     </div>
     <div class="modal-body">
       <div class="modal-grid">
@@ -286,76 +288,83 @@
 
 {% block page_scripts %}
 <script>
-const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
-const CURRENT_USER = "{{ session.get('user_nome', '') }}";
+(function(){
+  /* IS_ADMIN e CURRENT_USER renderizados pelo Jinja e capturados no closure.
+     Ficam dentro do IIFE para não poluir o escopo global — evita SyntaxError
+     na re-navegação HTMX ("Identifier already declared"). */
+  var _IS_ADMIN     = {{ 'true' if is_admin else 'false' }};
+  var _CURRENT_USER = "{{ session.get('user_nome', '') }}";
 
-function abrirModal(btn) {
-  const d = btn.dataset;
-  document.getElementById('m-numero').textContent         = d.numero;
-  document.getElementById('m-data').textContent           = d.data;
-  document.getElementById('m-hora').textContent           = d.hora;
-  document.getElementById('m-site').textContent           = d.site;
-  document.getElementById('m-setor').textContent          = d.setor;
-  document.getElementById('m-tipo-ocorrencia').textContent= d.tipoOcorrencia;
-  document.getElementById('m-turno').textContent          = d.turno;
-  document.getElementById('m-gravidade').textContent      = d.gravidade;
-  document.getElementById('m-valor').textContent          = d.valor || '—';
-  document.getElementById('m-natureza').textContent       = d.natureza;
-  document.getElementById('m-status').textContent         = d.status;
-  document.getElementById('m-responsavel').textContent    = d.responsavel;
-  document.getElementById('m-gestor').textContent         = d.gestor;
-  document.getElementById('m-cargo').textContent          = d.cargo;
-  document.getElementById('m-envolvido').textContent      = d.envolvido;
-  document.getElementById('m-descricao').textContent      = d.descricao;
+  window.abrirModalAnc = function(btn) {
+    var d = btn.dataset;
+    document.getElementById('m-numero').textContent         = d.numero;
+    document.getElementById('m-data').textContent           = d.data;
+    document.getElementById('m-hora').textContent           = d.hora;
+    document.getElementById('m-site').textContent           = d.site;
+    document.getElementById('m-setor').textContent          = d.setor;
+    document.getElementById('m-tipo-ocorrencia').textContent= d.tipoOcorrencia;
+    document.getElementById('m-turno').textContent          = d.turno;
+    document.getElementById('m-gravidade').textContent      = d.gravidade;
+    document.getElementById('m-valor').textContent          = d.valor || '—';
+    document.getElementById('m-natureza').textContent       = d.natureza;
+    document.getElementById('m-status').textContent         = d.status;
+    document.getElementById('m-responsavel').textContent    = d.responsavel;
+    document.getElementById('m-gestor').textContent         = d.gestor;
+    document.getElementById('m-cargo').textContent          = d.cargo;
+    document.getElementById('m-envolvido').textContent      = d.envolvido;
+    document.getElementById('m-descricao').textContent      = d.descricao;
 
-  const pdfLink = document.getElementById('m-pdf');
-  pdfLink.href = d.urlPdf;
-  const ano = d.ano || new Date().getFullYear();
-  const num = String(d.numero).padStart(4, '0');
-  pdfLink.dataset.filename = `ANC-${ano}-${num} - ${d.natureza} - ${d.site}.pdf`;
+    var pdfLink = document.getElementById('m-pdf');
+    pdfLink.href = d.urlPdf;
+    var ano = d.ano || new Date().getFullYear();
+    var num = String(d.numero).padStart(4, '0');
+    pdfLink.dataset.filename = 'ANC-' + ano + '-' + num + ' - ' + d.natureza + ' - ' + d.site + '.pdf';
 
-  document.getElementById('m-email-anc').href = d.urlEmail;
+    document.getElementById('m-email-anc').href = d.urlEmail;
 
-  const editar = document.getElementById('m-editar');
-  if (editar) {
-    editar.href = d.urlEditar;
-    const podeEditar = (IS_ADMIN || d.criadoPor === CURRENT_USER) && (d.status || '').toUpperCase() !== 'CONCLUÍDO';
-    editar.style.display = podeEditar ? '' : 'none';
-  }
-  const formExcluir = document.getElementById('m-form-excluir');
-  if (formExcluir) formExcluir.action = d.urlExcluir;
+    var editar = document.getElementById('m-editar');
+    if (editar) {
+      editar.href = d.urlEditar;
+      var podeEditar = (_IS_ADMIN || d.criadoPor === _CURRENT_USER) && (d.status || '').toUpperCase() !== 'CONCLUÍDO';
+      editar.style.display = podeEditar ? '' : 'none';
+    }
+    var formExcluir = document.getElementById('m-form-excluir');
+    if (formExcluir) formExcluir.action = d.urlExcluir;
 
-  const concluido = (d.status || '').toUpperCase() === 'CONCLUÍDO';
-  const infoFecha = document.getElementById('m-info-fechamento');
-  if (concluido && d.planoAcaoTexto) {
-    document.getElementById('m-fechado-por').textContent      = d.fechadoPor || '—';
-    document.getElementById('m-fechado-em').textContent       = d.fechadoEm  || '—';
-    document.getElementById('m-plano-acao-texto').textContent = d.planoAcaoTexto || '';
-    const blocoAnexo = document.getElementById('m-bloco-anexo');
-    const linkAnexo  = document.getElementById('m-anexo-link');
-    if (d.temAnexo === '1') { blocoAnexo.style.display = ''; linkAnexo.href = d.urlAnexo; }
-    else { blocoAnexo.style.display = 'none'; }
-    infoFecha.style.display = '';
-  } else { infoFecha.style.display = 'none'; }
+    var concluido = (d.status || '').toUpperCase() === 'CONCLUÍDO';
+    var infoFecha = document.getElementById('m-info-fechamento');
+    if (concluido && d.planoAcaoTexto) {
+      document.getElementById('m-fechado-por').textContent      = d.fechadoPor || '—';
+      document.getElementById('m-fechado-em').textContent       = d.fechadoEm  || '—';
+      document.getElementById('m-plano-acao-texto').textContent = d.planoAcaoTexto || '';
+      var blocoAnexo = document.getElementById('m-bloco-anexo');
+      var linkAnexo  = document.getElementById('m-anexo-link');
+      if (d.temAnexo === '1') { blocoAnexo.style.display = ''; linkAnexo.href = d.urlAnexo; }
+      else { blocoAnexo.style.display = 'none'; }
+      infoFecha.style.display = '';
+    } else { infoFecha.style.display = 'none'; }
 
-  const formFecharWrap = document.getElementById('m-form-fechar-wrap');
-  const podeFFechar = (IS_ADMIN || d.criadoPor === CURRENT_USER) && !concluido;
-  formFecharWrap.style.display = podeFFechar ? '' : 'none';
-  if (podeFFechar) {
-    document.getElementById('m-form-fechar').action = d.urlFechar;
-    document.getElementById('m-txt-fechamento').value = '';
-  }
-  document.getElementById('modal').classList.add('open');
-}
+    var formFecharWrap = document.getElementById('m-form-fechar-wrap');
+    var podeFFechar = (_IS_ADMIN || d.criadoPor === _CURRENT_USER) && !concluido;
+    formFecharWrap.style.display = podeFFechar ? '' : 'none';
+    if (podeFFechar) {
+      document.getElementById('m-form-fechar').action = d.urlFechar;
+      document.getElementById('m-txt-fechamento').value = '';
+    }
+    document.getElementById('modal').classList.add('open');
+  };
 
-function validarFechamento() {
-  const txt = (document.getElementById('m-txt-fechamento').value || '').trim();
-  if (!txt) { alert('Por favor, informe o plano de ação / texto de fechamento.'); return false; }
-  mostrarLoading(); return true;
-}
-function fecharModal() { document.getElementById('modal').classList.remove('open'); }
-function fecharModalFora(e) { if (e.target === document.getElementById('modal')) fecharModal(); }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
+  window.validarFechamento = function() {
+    var txt = (document.getElementById('m-txt-fechamento').value || '').trim();
+    if (!txt) { alert('Por favor, informe o plano de ação / texto de fechamento.'); return false; }
+    mostrarLoading(); return true;
+  };
+  window.fecharModalAnc     = function() { document.getElementById('modal').classList.remove('open'); };
+  window.fecharModalAncFora = function(e) { if (e.target === document.getElementById('modal')) window.fecharModalAnc(); };
+
+  /* Escape key — registrado uma única vez por este IIFE */
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') window.fecharModalAnc(); });
+})();
 </script>
 <script>
 (function(){

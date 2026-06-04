@@ -3,11 +3,20 @@
 {% block topbar_title %}🔐 Chave Reserva{% endblock %}
 {% block topbar_subtitle %}Controle de retirada e devolução das chaves reserva dos armários — {{ site }}{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('armarios.painel') }}" class="btn btn-dark btn-sm">← Painel de Armários</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('armarios.painel') }}" class="adm-tab">🗄️ Painel</a>
+    <a href="{{ url_for('armarios.chave_reserva') }}" class="adm-tab active">🔐 Chave Reserva</a>
+    <a href="{{ url_for('armarios.historico') }}" class="adm-tab">📋 Histórico</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .content{ max-width:1000px; margin:0 auto; }
 
   /* Section head */
@@ -99,6 +108,7 @@
           <td>
             <a href="{{ url_for('armarios.comprovante_chave_reserva', reg_id=r.id) }}"
                hx-boost="false"
+               data-filename="CRV-{{ '%05d'|format(r.id) }}.pdf"
                class="btn btn-soft btn-sm">📄 PDF</a>
           </td>
           <td>

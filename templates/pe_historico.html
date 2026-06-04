@@ -1,0 +1,87 @@
+{% extends "base_app.html" %}
+{% block page_title %}Histórico | {{ porta.codigo }}{% endblock %}
+{% block topbar_title %}📄 Histórico — {{ porta.codigo }}{% endblock %}
+{% block topbar_subtitle %}{{ porta.localizacao }} • {{ porta.setor or 'Setor não informado' }}{% endblock %}
+{% block topbar_actions %}
+  {% include 'pe_nav.html' %}
+  <a href="{{ url_for('pe.checklist', porta_id=porta.id) }}" class="btn btn-red btn-sm">+ Novo Checklist</a>
+{% endblock %}
+
+{% block page_content %}
+<div class="card" style="padding:0;overflow:hidden;">
+  <div style="padding:16px 20px;border-bottom:1px solid var(--line);">
+    <span style="font-weight:900;font-size:15px;color:var(--dhl-black);">{{ checklists|length }} checklist(s) registrado(s)</span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f8fafc;border-bottom:2px solid var(--line);">
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Data</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Inspetor</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Turno</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Status</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Itens OK</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Tratativa</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Observação</th>
+          <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if checklists|length == 0 %}
+        <tr>
+          <td colspan="8" style="padding:40px;text-align:center;color:var(--muted);font-size:13px;font-weight:700;">
+            Nenhum checklist registrado para esta porta.
+          </td>
+        </tr>
+        {% endif %}
+        {% for c in checklists %}
+        {% set ok_count = [c.porta_desobstruida, c.abre_normalmente, c.sinalizacao_ok, c.iluminacao_ok, c.alarme_ok]|select|list|length %}
+        <tr style="border-bottom:1px solid var(--line);">
+          <td style="padding:12px 14px;color:var(--muted);white-space:nowrap;">
+            {{ c.data_checklist.strftime('%d/%m/%Y %H:%M') if c.data_checklist else '—' }}
+          </td>
+          <td style="padding:12px 14px;font-weight:700;">{{ c.inspetor }}</td>
+          <td style="padding:12px 14px;color:var(--muted);">{{ c.turno or '—' }}</td>
+          <td style="padding:12px 14px;white-space:nowrap;">
+            {% if c.status == 'CONFORME' %}
+              <span class="badge badge-ok">CONFORME</span>
+            {% else %}
+              <span class="badge badge-red">NÃO CONFORME</span>
+            {% endif %}
+          </td>
+          <td style="padding:12px 14px;font-weight:800;color:{% if ok_count == 5 %}#146c43{% else %}var(--dhl-red){% endif %};">
+            {{ ok_count }}/5
+          </td>
+          <td style="padding:12px 14px;">
+            {% if c.status == 'CONFORME' %}
+              <span style="color:var(--muted);font-size:12px;">—</span>
+            {% elif c.conclusao %}
+              <span class="badge badge-ok" style="white-space:nowrap;">✔ TRATADO</span>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+                {{ c.concluido_por or '' }}
+                {% if c.data_conclusao %}• {{ c.data_conclusao.strftime('%d/%m/%Y') }}{% endif %}
+              </div>
+            {% else %}
+              <span class="badge badge-warn" style="white-space:nowrap;">⏳ PENDENTE</span>
+            {% endif %}
+          </td>
+          <td style="padding:12px 14px;color:var(--muted);max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ c.observacao or '' }}">
+            {{ c.observacao or '—' }}
+          </td>
+          <td style="padding:12px 14px;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <a href="{{ url_for('pe.pdf_checklist', checklist_id=c.id) }}"
+                 class="btn btn-soft btn-sm" data-filename="CHK-PE-{{ c.id }}.pdf">📄 PDF</a>
+              {% if c.status == 'NÃO CONFORME' and not c.conclusao %}
+                <a href="{{ url_for('pe.concluir_checklist', checklist_id=c.id) }}"
+                   class="btn btn-red btn-sm">🔧 Tratar NC</a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

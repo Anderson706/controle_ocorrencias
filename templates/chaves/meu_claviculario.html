@@ -3,13 +3,22 @@
 {% block topbar_title %}🔑 Meu Claviculário{% endblock %}
 {% block topbar_subtitle %}Gerenciamento de chaves do site {{ site }}{% endblock %}
 {% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('chaves.meu_claviculario') }}" class="adm-tab active">🗃️ Claviculário</a>
+    <a href="{{ url_for('chaves.realizar_retirada') }}" class="adm-tab">🔑 Retirada</a>
+    <a href="{{ url_for('chaves.realizar_devolucao') }}" class="adm-tab">↩ Devolução</a>
+  </div>
+  <div class="adm-sep"></div>
   <button type="button" class="btn btn-soft btn-sm" onclick="document.getElementById('filtro-historico').classList.toggle('open')">📊 Exportar Histórico</button>
-  <a href="{{ url_for('chaves.realizar_retirada') }}" class="btn btn-yellow btn-sm">🔑 Realizar Retirada</a>
-  <a href="{{ url_for('chaves.realizar_devolucao') }}" class="btn btn-soft btn-sm">↩ Devoluções</a>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   /* Export filter panel */
   #filtro-historico{ display:none; background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 20px; gap:14px; flex-wrap:wrap; align-items:flex-end; margin-bottom:20px; }
   #filtro-historico.open{ display:flex !important; }
@@ -144,8 +153,8 @@
   </div>
 </div>
 
-<!-- Formulário de adicionar (ADMIN) -->
-{% if is_admin %}
+<!-- Formulário de adicionar (GESTOR / KEYUSER / ADMIN) -->
+{% if can_manage %}
 <div class="add-form">
   <h3>➕ Adicionar Chave ao Claviculário</h3>
   <form method="POST">
@@ -185,13 +194,15 @@
   </div>
   {% endif %}
   {% if chaves %}
+  {% if is_admin %}
   <form method="POST" action="{{ url_for('chaves.excluir_lote_chaves') }}" id="form-lote-chaves" hx-boost="false">
+  {% endif %}
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
           {% if is_admin %}<th style="width:36px"><input type="checkbox" class="chk-sel" id="chk-all-chaves" onchange="selecionarTodos('tb-chaves','chk-all-chaves','bulk-chaves')"></th>{% endif %}
-          <th>Nº da Chave</th><th>Local</th><th>Site</th><th>Criador</th><th>Status</th><th>Ações</th>
+          <th>Nº da Chave</th><th>Local</th>{% if is_admin %}<th>Site</th>{% endif %}<th>Criador</th><th>Status</th><th>Ações</th>
         </tr>
       </thead>
       <tbody id="tb-chaves">
@@ -201,7 +212,7 @@
           {% if is_admin %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ chave.id }}" onchange="atualizarBulk('tb-chaves','chk-all-chaves','bulk-chaves')"></td>{% endif %}
           <td><strong>{{ chave.numero_chave }}</strong></td>
           <td>{{ chave.local }}</td>
-          <td>{{ chave.site }}</td>
+          {% if is_admin %}<td>{{ chave.site }}</td>{% endif %}
           <td>{{ chave.criador_nome }}</td>
           <td>
             {% if chave._retirada %}
@@ -212,8 +223,8 @@
           </td>
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <button class="btn btn-soft btn-sm" onclick="verDetalhe({{ chave.id }})">🔍 Detalhes</button>
-              {% if is_admin and not chave._retirada %}
+              <button type="button" class="btn btn-soft btn-sm" onclick="verDetalhe({{ chave.id }})">🔍 Detalhes</button>
+              {% if can_manage and not chave._retirada %}
               <form method="POST" action="{{ url_for('chaves.excluir_chave_clav', chave_id=chave.id) }}" onsubmit="return confirm('Remover esta chave do claviculário?')">
                 <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;">🗑️ Remover</button>
               </form>
@@ -227,7 +238,7 @@
   </div>
   {% if is_admin %}</form>{% endif %}
   {% else %}
-  <div class="card"><p class="empty">Nenhuma chave cadastrada para o site <strong>{{ site }}</strong>.{% if is_admin %} Use o formulário acima para adicionar.{% endif %}</p></div>
+  <div class="card"><p class="empty">Nenhuma chave cadastrada para o site <strong>{{ site }}</strong>.{% if can_manage %} Use o formulário acima para adicionar.{% endif %}</p></div>
   {% endif %}
 </div>
 
@@ -243,11 +254,11 @@
 {% endblock %}
 
 {% block modals %}
-<div class="modal-overlay" id="modalOverlay" onclick="fecharModal(event)">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-header">
+<div class="modal-overlay" id="modalOverlay" onclick="fecharModalChave(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-head">
       <h3>🔑 Detalhes da Chave</h3>
-      <button class="modal-close" onclick="fecharModal()">✕</button>
+      <button class="modal-close" onclick="fecharModalChave()">✕</button>
     </div>
     <div class="modal-body" id="modalBody">
       <p style="color:var(--muted);">Carregando...</p>
@@ -295,7 +306,7 @@ function verDetalhe(id){
     .catch(()=>{ document.getElementById('modalBody').innerHTML = '<p style="color:red">Erro ao carregar dados.</p>'; });
 }
 
-function fecharModal(e){
+function fecharModalChave(e){
   if(!e || e.target === document.getElementById('modalOverlay')){
     document.getElementById('modalOverlay').classList.remove('open');
   }

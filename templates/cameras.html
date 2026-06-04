@@ -3,12 +3,22 @@
 {% block topbar_title %}📷 Checklist de Câmeras{% endblock %}
 {% block topbar_subtitle %}{{ site }} — Controle de status e histórico de checklists{% endblock %}
 {% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('cameras_checklist_novo') }}" class="adm-tab">📷 Novo Checklist</a>
+    <a href="{{ url_for('cameras_index') }}" class="adm-tab active">📋 Controle</a>
+    {% if can_manage %}<a href="{{ url_for('cameras_cadastrar') }}" class="adm-tab">⚙️ Câmeras</a>{% endif %}
+  </div>
+  <div class="adm-sep"></div>
   <a href="{{ url_for('cameras_checklist_novo') }}" class="btn btn-red btn-sm">+ Novo Checklist</a>
-  <a href="{{ url_for('cameras_cadastrar') }}" class="btn btn-soft btn-sm">+ Câmeras</a>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .kpi-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:20px; }
   .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px;
              box-shadow:var(--shadow); display:flex; flex-direction:column; gap:4px; }
@@ -73,15 +83,15 @@
 <!-- KPIs -->
 <div class="kpi-row">
   <div class="kpi-card">
-    <div class="kpi-val">{{ cameras|length }}</div>
+    <div class="kpi-val" id="kpi-total">{{ cameras|length }}</div>
     <div class="kpi-lbl">Total de câmeras</div>
   </div>
   <div class="kpi-card">
-    <div class="kpi-val green">{{ ativas }}</div>
+    <div class="kpi-val green" id="kpi-ativas">{{ ativas }}</div>
     <div class="kpi-lbl">Ativas</div>
   </div>
   <div class="kpi-card">
-    <div class="kpi-val red">{{ inativas }}</div>
+    <div class="kpi-val red" id="kpi-inativas">{{ inativas }}</div>
     <div class="kpi-lbl">Desativadas</div>
   </div>
 </div>
@@ -114,20 +124,21 @@
     <table>
       <thead>
         <tr>
-          {% if is_admin %}<th style="width:36px"><input type="checkbox" class="chk-sel" id="chk-all-cams" onchange="selecionarTodos('tb-cams','chk-all-cams','bulk-cams',{{ cameras|length }})"></th>{% endif %}
+          {% if can_manage %}<th style="width:36px"><input type="checkbox" class="chk-sel" id="chk-all-cams" onchange="selecionarTodos('tb-cams','chk-all-cams','bulk-cams',{{ cameras|length }})"></th>{% endif %}
           <th>Número</th>
           <th>Nome</th>
           {% if is_admin %}<th>Site</th>{% endif %}
           <th>Status</th>
           <th>Cadastrada em</th>
-          <th>Ações</th>
+          {% if can_manage %}<th>Ações</th>{% endif %}
         </tr>
       </thead>
       <tbody id="tb-cams">
         {% for cam in cameras %}
         <tr data-search="{{ cam.numero|lower }} {{ (cam.nome or '')|lower }} {{ (cam.site or '')|lower }}"
-            data-site="{{ (cam.site or '')|lower }}">
-          {% if is_admin %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ cam.id }}" onchange="atualizarBulk('tb-cams','chk-all-cams','bulk-cams')"></td>{% endif %}
+            data-site="{{ (cam.site or '')|lower }}"
+            data-ativo="{{ '1' if cam.ativo else '0' }}">
+          {% if can_manage %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ cam.id }}" onchange="atualizarBulk('tb-cams','chk-all-cams','bulk-cams')"></td>{% endif %}
           <td><strong>{{ cam.numero }}</strong></td>
           <td>{{ cam.nome or '<span style="color:var(--muted)">—</span>' }}</td>
           {% if is_admin %}<td style="color:var(--muted);font-size:12px;">{{ cam.site or '—' }}</td>{% endif %}
@@ -139,6 +150,7 @@
             {% endif %}
           </td>
           <td style="color:var(--muted)">{{ cam.criado_em.strftime('%d/%m/%Y') if cam.criado_em else '—' }}</td>
+          {% if can_manage %}
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               <button class="btn btn-soft btn-sm"
@@ -151,6 +163,7 @@
               </form>
             </div>
           </td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -158,14 +171,14 @@
     {% else %}
     <div class="empty-state">
       <p>📷 Nenhuma câmera cadastrada para este site.</p>
-      <a href="{{ url_for('cameras_cadastrar') }}" class="btn btn-red" style="margin-top:12px;display:inline-block">+ Cadastrar Câmeras</a>
+      {% if can_manage %}<a href="{{ url_for('cameras_cadastrar') }}" class="btn btn-red" style="margin-top:12px;display:inline-block">+ Cadastrar Câmeras</a>{% endif %}
     </div>
     {% endif %}
-    {% if is_admin %}</form>{% endif %}
+    {% if can_manage %}</form>{% endif %}
   </div>
 </div>
 
-{% if is_admin %}
+{% if can_manage %}
 <div class="bulk-bar" id="bulk-cams">
   <span class="bulk-count"><span id="bulk-cams-cnt">0</span> selecionada(s)</span>
   <button type="button" class="btn btn-red btn-sm"
@@ -279,11 +292,24 @@ function trocarTab(id, btn){
 function filtrarCams(){
   const q    = (document.getElementById('inp-cams')?.value || '').toLowerCase();
   const site = (document.getElementById('sel-site-cams')?.value || '').toLowerCase();
+  let total = 0, ativas = 0, inativas = 0;
   document.querySelectorAll('#tb-cams tr').forEach(tr=>{
     const okQ    = !q    || tr.dataset.search.includes(q);
     const okSite = !site || tr.dataset.site === site;
-    tr.style.display = okQ && okSite ? '' : 'none';
+    const visible = okQ && okSite;
+    tr.style.display = visible ? '' : 'none';
+    if(visible){
+      total++;
+      if(tr.dataset.ativo === '1') ativas++; else inativas++;
+    }
   });
+  // Atualiza KPIs
+  const kT = document.getElementById('kpi-total');
+  const kA = document.getElementById('kpi-ativas');
+  const kI = document.getElementById('kpi-inativas');
+  if(kT) kT.textContent = total;
+  if(kA) kA.textContent = ativas;
+  if(kI) kI.textContent = inativas;
 }
 
 function filtrarHist(){

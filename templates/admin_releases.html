@@ -3,11 +3,26 @@
 {% block topbar_title %}📦 Releases — Auto-Update{% endblock %}
 {% block topbar_subtitle %}Publique novas versões do CCTV_ControlPanel.exe para distribuição automática{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('admin_usuarios') }}" class="btn btn-soft btn-sm">← Admin</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('admin_usuarios') }}" class="adm-tab">👥 Usuários</a>
+    <a href="{{ url_for('admin_solicitacoes') }}" class="adm-tab">
+      📋 Solicitações{% if pendentes %} <span class="adm-badge">{{ pendentes }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_multisites') }}" class="adm-tab">🌐 Multisites</a>
+    <a href="{{ url_for('admin_releases') }}" class="adm-tab active">📦 Releases</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  /* Admin nav tabs */
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-badge{ display:inline-flex; align-items:center; justify-content:center; background:#d40511; color:#fff; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:900; min-width:18px; }
+  .adm-tab.active .adm-badge{ background:rgba(255,255,255,.9); color:#d40511; }
+
   /* ── Info box ── */
   .info-box{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px 18px; font-size:13px; color:#1e40af; margin-bottom:22px; line-height:1.65; }
   .info-box code{ background:#dbeafe; border-radius:4px; padding:2px 6px; font-size:12px; font-family:monospace; }

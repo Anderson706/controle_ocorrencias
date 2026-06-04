@@ -1,0 +1,164 @@
+{% extends "base_app.html" %}
+{% block page_title %}Dashboard AF | CCTV Control Panel{% endblock %}
+{% block topbar_title %}📊 Dashboard — Abertura e Fechamento{% endblock %}
+{% block topbar_subtitle %}Visão analítica dos ciclos de abertura e fechamento de site{% endblock %}
+{% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('af.controle') }}"  class="adm-tab">📋 Controle</a>
+    <a href="{{ url_for('af.dashboard') }}" class="adm-tab active">📊 Dashboard</a>
+  </div>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
+
+  .kpi-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+  .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; box-shadow:var(--shadow); border-left:5px solid var(--dhl-yellow); }
+  .kpi-val{ font-size:30px; font-weight:900; color:var(--dhl-red); line-height:1; }
+  .kpi-lbl{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:6px; }
+
+  .charts-row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .chart-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:var(--shadow); }
+  .chart-title{ font-size:14px; font-weight:900; color:#1f2937; margin-bottom:16px; }
+
+  .filter-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 20px; margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .filter-card > div{ display:flex; flex-direction:column; gap:4px; }
+  .filter-card label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; }
+  .filter-card select, .filter-card input{ padding:9px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:13px; font-family:inherit; min-width:150px; }
+
+  /* NC list */
+  .nc-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:var(--shadow); }
+  .nc-item{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f1f3f5; font-size:13px; }
+  .nc-item:last-child{ border-bottom:none; }
+  .nc-count{ background:#fee2e2; color:#991b1b; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; }
+
+  @media(max-width:900px){ .charts-row{ grid-template-columns:1fr; } .kpi-row{ grid-template-columns:repeat(2,1fr); } }
+</style>
+
+<!-- Filtros -->
+<div class="filter-card">
+  <form method="GET" data-autofilter style="display:contents;">
+    {% if is_admin %}
+    <div>
+      <label>Site</label>
+      <select name="site_filtro">
+        <option value="">Todos</option>
+        {% for s in todos_sites %}<option value="{{ s }}" {{ 'selected' if filtros.site_filtro==s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div>
+      <label>Mês (AAAA-MM)</label>
+      <input type="month" name="mes" value="{{ filtros.mes or '' }}">
+    </div>
+    <button type="submit" style="display:none">Filtrar</button>
+  </form>
+</div>
+
+<!-- KPIs -->
+{% set total = todos|length %}
+{% set aprovados   = todos|selectattr('status','eq','APROVADO')|list|length %}
+{% set rejeitados  = todos|selectattr('status','eq','REJEITADO')|list|length %}
+{% set pendentes   = todos|selectattr('status','in',['AGUARDANDO_ABERTURA','PENDENTE_APROVACAO'])|list|length %}
+
+<div class="kpi-row">
+  <div class="kpi-card"><div class="kpi-val">{{ total }}</div><div class="kpi-lbl">Total de ciclos</div></div>
+  <div class="kpi-card" style="border-left-color:#22c55e;"><div class="kpi-val" style="color:#16a34a;">{{ aprovados }}</div><div class="kpi-lbl">Aprovados</div></div>
+  <div class="kpi-card" style="border-left-color:#d40511;"><div class="kpi-val" style="color:#d40511;">{{ rejeitados }}</div><div class="kpi-lbl">Rejeitados</div></div>
+  <div class="kpi-card" style="border-left-color:#f59e0b;"><div class="kpi-val" style="color:#b45309;">{{ pendentes }}</div><div class="kpi-lbl">Em andamento</div></div>
+</div>
+
+<!-- Gráficos -->
+<div class="charts-row">
+  <div class="chart-card">
+    <div class="chart-title">📊 Status dos Ciclos</div>
+    <canvas id="chartStatus" height="200"></canvas>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">🏭 Ciclos por Site</div>
+    <canvas id="chartSite" height="200"></canvas>
+  </div>
+</div>
+
+<!-- Não conformidades -->
+{% set nc_total = nc_fech + nc_aber %}
+<div class="charts-row">
+  <div class="nc-card">
+    <div class="chart-title">⚠️ Não Conformidades</div>
+    <div class="nc-item">
+      <span>🔒 No Fechamento</span>
+      <span class="nc-count">{{ nc_fech }}</span>
+    </div>
+    <div class="nc-item">
+      <span>🔓 Na Abertura</span>
+      <span class="nc-count">{{ nc_aber }}</span>
+    </div>
+    <div class="nc-item" style="font-weight:900;">
+      <span>Total</span>
+      <span class="nc-count">{{ nc_total }}</span>
+    </div>
+  </div>
+  <div class="nc-card">
+    <div class="chart-title">📋 Últimos Ciclos</div>
+    {% for r in todos[:8] %}
+    <div class="nc-item">
+      <span>#{{ r.id }} — {{ r.site }} ({{ r.fech_data or '—' }})</span>
+      <span style="font-size:11px;font-weight:800;
+        color:{% if r.status=='APROVADO' %}#16a34a{% elif r.status=='REJEITADO' %}#d40511{% else %}#b45309{% endif %};">
+        {{ r.status.replace('_',' ') }}
+      </span>
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:13px;">Nenhum ciclo encontrado.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+var statusData = {{ status_c | tojson }};
+var siteData   = {{ site_c   | tojson }};
+
+// Status chart
+new Chart(document.getElementById('chartStatus'), {
+  type: 'doughnut',
+  data: {
+    labels: Object.keys(statusData).map(function(s){ return s.replace(/_/g,' '); }),
+    datasets: [{
+      data: Object.values(statusData),
+      backgroundColor: ['#d40511','#f59e0b','#16a34a','#0ea5e9','#6b7280'],
+      borderWidth: 2, borderColor: '#fff'
+    }]
+  },
+  options: { plugins: { legend: { position: 'bottom' } }, responsive: true }
+});
+
+// Site chart
+new Chart(document.getElementById('chartSite'), {
+  type: 'bar',
+  data: {
+    labels: Object.keys(siteData),
+    datasets: [{
+      label: 'Ciclos',
+      data: Object.values(siteData),
+      backgroundColor: '#FFCC00',
+      borderColor: '#d40511',
+      borderWidth: 1,
+      borderRadius: 6
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    responsive: true,
+    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+  }
+});
+</script>
+{% endblock %}

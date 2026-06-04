@@ -1,0 +1,211 @@
+{% extends "base_app.html" %}
+{% block page_title %}Registrar Abertura | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🔓 Registrar Abertura de Site{% endblock %}
+{% block topbar_subtitle %}Ciclo #{{ ciclo.id }} — Fechamento realizado por {{ ciclo.fech_realizado_por or '—' }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('af.controle') }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .content{ max-width:860px; margin:0 auto; }
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; margin-bottom:20px; }
+  .form-card-hdr{ background:linear-gradient(90deg,#16a34a,#15803d); padding:16px 24px; display:flex; align-items:center; gap:10px; }
+  .form-card-hdr-bar{ width:5px; height:22px; background:#ffcc00; border-radius:3px; flex-shrink:0; }
+  .form-card-hdr-title{ color:#fff; font-size:14px; font-weight:900; }
+  .form-card-body{ padding:24px; }
+
+  /* Resumo fechamento */
+  .fech-resumo{ background:#f8fafc; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:20px; display:flex; gap:20px; flex-wrap:wrap; }
+  .fech-resumo-item{ }
+  .fech-resumo-label{ font-size:10px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .fech-resumo-val{ font-size:13px; font-weight:700; color:#1f2937; }
+  .nc-badge{ display:inline-flex; align-items:center; gap:4px; background:#fee2e2; color:#991b1b; padding:3px 8px; border-radius:999px; font-size:11px; font-weight:800; }
+
+  .sec-hdr{ background:linear-gradient(90deg,#16a34a,#15803d); color:#fff; font-size:11px; font-weight:900; letter-spacing:.8px; text-transform:uppercase; padding:8px 16px; border-radius:8px; margin:20px 0 14px; }
+  .sec-hdr:first-child{ margin-top:0; }
+  .chk-table{ width:100%; border-collapse:collapse; }
+  .chk-table th{ padding:10px 14px; background:#f0fdf4; font-size:11px; font-weight:900; color:#166534; text-transform:uppercase; letter-spacing:.4px; border-bottom:2px solid #86efac; text-align:left; }
+  .chk-table td{ padding:11px 14px; border-bottom:1px solid #f1f3f5; vertical-align:middle; }
+  .chk-table .item-num{ font-weight:900; color:#16a34a; width:32px; }
+  .chk-table .item-desc{ font-size:13px; color:#1f2937; }
+  .radio-group{ display:flex; gap:12px; }
+  .radio-group label{ display:flex; align-items:center; gap:5px; font-size:13px; font-weight:700; cursor:pointer; }
+  .radio-group input[type=radio]{ accent-color:#16a34a; width:16px; height:16px; }
+  .obs-input{ width:100%; padding:7px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:12px; font-family:inherit; background:#f9fafb; }
+  .obs-input:focus{ outline:none; border-color:#16a34a; background:#fff; }
+
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px; }
+  .field input, .field select, .field textarea{ width:100%; padding:11px 13px; border:1px solid #d1d5db; border-radius:10px; font-size:13px; font-family:inherit; outline:none; transition:border-color .18s; }
+  .field input:focus, .field select:focus, .field textarea:focus{ border-color:#16a34a; box-shadow:0 0 0 3px rgba(22,163,74,.08); }
+  .row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .row-2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-actions{ display:flex; gap:10px; padding-top:20px; border-top:1px solid var(--line); }
+  .sig-wrap{ border:2px dashed #86efac; border-radius:12px; overflow:hidden; background:#fff; cursor:crosshair; }
+  .sig-wrap canvas{ display:block; width:100%; height:140px; touch-action:none; }
+  .sig-toolbar{ display:flex; gap:8px; margin-top:8px; }
+  @media(max-width:700px){ .row,.row-2{ grid-template-columns:1fr; } }
+</style>
+
+<div class="content">
+
+  <!-- Resumo do fechamento -->
+  <div class="fech-resumo">
+    <div class="fech-resumo-item">
+      <div class="fech-resumo-label">Site</div>
+      <div class="fech-resumo-val">{{ ciclo.site }}</div>
+    </div>
+    <div class="fech-resumo-item">
+      <div class="fech-resumo-label">Fechamento</div>
+      <div class="fech-resumo-val">{{ ciclo.fech_data }} às {{ ciclo.fech_hora }}</div>
+    </div>
+    <div class="fech-resumo-item">
+      <div class="fech-resumo-label">Fechado por</div>
+      <div class="fech-resumo-val">{{ ciclo.fech_realizado_por or '—' }}</div>
+    </div>
+    <div class="fech-resumo-item">
+      <div class="fech-resumo-label">Encaminhado para</div>
+      <div class="fech-resumo-val">{{ ciclo.fech_encaminhado or '—' }}</div>
+    </div>
+    {% if ciclo.nao_conformes_fech() %}
+    <div class="fech-resumo-item">
+      <div class="fech-resumo-label">Não conformidades</div>
+      <div><span class="nc-badge">⚠ {{ ciclo.nao_conformes_fech()|length }} itens NC no fechamento</span></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-hdr">
+      <div class="form-card-hdr-bar"></div>
+      <div class="form-card-hdr-title">🔓 ABERTURA DO SITE — {{ ciclo.site }}</div>
+    </div>
+    <div class="form-card-body">
+      <form method="POST" hx-boost="false">
+
+        <div class="sec-hdr">📋 Identificação</div>
+        <div class="row">
+          <div class="field">
+            <label>Data *</label>
+            <input type="date" name="data" required value="{{ data_hoje }}">
+          </div>
+          <div class="field">
+            <label>Hora *</label>
+            <input type="time" name="hora" required value="{{ hora_atual }}">
+          </div>
+          <div class="field">
+            <label>Realizado por</label>
+            <input type="text" name="realizado_por" value="{{ user_nome }}" readonly style="background:#f3f4f6;color:#374151;cursor:not-allowed;">
+          </div>
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label>Unidade</label>
+            <input type="text" name="unidade" value="{{ ciclo.site }}" readonly style="background:#f3f4f6;color:#374151;cursor:not-allowed;">
+          </div>
+          <div class="field">
+            <label>Cliente</label>
+            <input type="text" name="cliente" placeholder="Nome do cliente">
+          </div>
+        </div>
+
+        <div class="sec-hdr">🚨 Acionamento do Sistema de Alarmes</div>
+        <div class="row">
+          <div class="field">
+            <label>Hora do acionamento</label>
+            <input type="time" name="alarme_hora">
+          </div>
+          <div class="field">
+            <label>Acionado por</label>
+            <input type="text" name="alarme_acionado_por" placeholder="Nome de quem acionou">
+          </div>
+          <div class="field">
+            <label>Função</label>
+            <input type="text" name="alarme_funcao" placeholder="Cargo / função">
+          </div>
+        </div>
+        <div class="field">
+          <label>Problemas notados no acionamento</label>
+          <textarea name="alarme_problemas" rows="2" placeholder="Descreva problemas se houver (opcional)"></textarea>
+        </div>
+
+        <div class="sec-hdr">✅ Check List de Abertura</div>
+        <div style="overflow-x:auto;">
+          <table class="chk-table">
+            <thead>
+              <tr>
+                <th style="width:32px;">#</th>
+                <th>Item</th>
+                <th style="width:120px;text-align:center;">Resposta</th>
+                <th>Comentários</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in itens %}
+              <tr>
+                <td class="item-num">{{ loop.index }}</td>
+                <td class="item-desc">{{ item }}</td>
+                <td>
+                  <div class="radio-group" style="justify-content:center;">
+                    <label><input type="radio" name="item_{{ loop.index0 }}_ok" value="S" required> Sim</label>
+                    <label><input type="radio" name="item_{{ loop.index0 }}_ok" value="N"> Não</label>
+                  </div>
+                </td>
+                <td><input type="text" name="item_{{ loop.index0 }}_obs" class="obs-input" placeholder="Observação (opcional)"></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="sec-hdr" style="background:linear-gradient(90deg,#16a34a,#15803d);margin-top:24px;">✍️ Assinatura do Responsável</div>
+        <div class="sig-wrap" id="sigWrap">
+          <canvas id="sigCanvas"></canvas>
+        </div>
+        <div class="sig-toolbar">
+          <button type="button" class="btn btn-soft btn-sm" onclick="limparSig()">🗑 Limpar</button>
+          <span style="font-size:11px;color:var(--muted);align-self:center;">Assine acima com o mouse ou toque</span>
+        </div>
+        <input type="hidden" name="assinatura" id="sigData">
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-sm" style="background:#16a34a;color:#fff;" onclick="capturarSig();document.getElementById('loading-overlay').classList.add('show')">🔓 Registrar Abertura</button>
+          <a href="{{ url_for('af.controle') }}" class="btn btn-soft">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+var sigCanvas = document.getElementById('sigCanvas');
+var sigCtx    = sigCanvas.getContext('2d');
+var drawing   = false;
+
+function _resize(){
+  sigCanvas.width  = sigCanvas.offsetWidth;
+  sigCanvas.height = 140;
+}
+_resize();
+window.addEventListener('resize', _resize);
+
+function _pos(e){
+  var r = sigCanvas.getBoundingClientRect();
+  if(e.touches) return {x:e.touches[0].clientX-r.left, y:e.touches[0].clientY-r.top};
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+sigCanvas.addEventListener('mousedown', function(e){ drawing=true; var p=_pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); });
+sigCanvas.addEventListener('mousemove', function(e){ if(!drawing) return; var p=_pos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); });
+sigCanvas.addEventListener('mouseup',   function(){ drawing=false; });
+sigCanvas.addEventListener('touchstart',function(e){ e.preventDefault(); drawing=true; var p=_pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); });
+sigCanvas.addEventListener('touchmove', function(e){ e.preventDefault(); if(!drawing) return; var p=_pos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); });
+sigCanvas.addEventListener('touchend',  function(){ drawing=false; });
+sigCtx.strokeStyle='#1f2937'; sigCtx.lineWidth=2; sigCtx.lineCap='round';
+
+function limparSig(){ sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height); document.getElementById('sigData').value=''; }
+function capturarSig(){ document.getElementById('sigData').value = sigCanvas.toDataURL('image/png'); }
+</script>
+{% endblock %}

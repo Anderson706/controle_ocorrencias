@@ -3,7 +3,11 @@
     "allow": [
       "PowerShell(Get-Item \"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\controle_ocorrencias\\\\dist\\\\CCTV_ControlPanel.exe\" | Select-Object Name, @{N='Tamanho';E={[math]::Round\\($_.Length/1MB,1\\).ToString\\(\\) + ' MB'}})",
       "PowerShell($f = Get-Item \"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\controle_ocorrencias\\\\dist\\\\CCTV_ControlPanel.exe\"; \"$\\($f.Name\\) — $\\([math]::Round\\($f.Length/1MB,1\\)\\) MB\")",
-      "PowerShell(& \"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\controle_ocorrencias\\\\venv\\\\Scripts\\\\pip.exe\" install pywebview 2>&1)"
+      "PowerShell(& \"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\controle_ocorrencias\\\\venv\\\\Scripts\\\\pip.exe\" install pywebview 2>&1)",
+      "Bash(call venv\\\\Scripts\\\\activate.bat)",
+      "Bash(pyinstaller cctv_panel.spec)",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -m PyInstaller cctv_panel.spec)",
+      "PowerShell($proj = \"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\controle_ocorrencias\"; Set-Location $proj; & \"$proj\\\\venv\\\\Scripts\\\\python.exe\" -m PyInstaller cctv_panel.spec --noconfirm 2>&1)"
     ]
   }
 }

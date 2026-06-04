@@ -50,7 +50,8 @@
         <label>Perfil de acesso</label>
         <select name="perfil">
           <option value="OPERACIONAL" {{ 'selected' if (dados.perfil if dados else '') == 'OPERACIONAL' }}>Operacional</option>
-          <option value="SUPERVISOR"  {{ 'selected' if (dados.perfil if dados else '') == 'SUPERVISOR' }}>Supervisor</option>
+          <option value="KEYUSER"     {{ 'selected' if (dados.perfil if dados else '') == 'KEYUSER' }}>Key User</option>
+          <option value="GESTOR"      {{ 'selected' if (dados.perfil if dados else '') == 'GESTOR' }}>Gestor</option>
           <option value="MULTISITES"  {{ 'selected' if (dados.perfil if dados else '') == 'MULTISITES' }}>Multisites</option>
           <option value="ADMIN"       {{ 'selected' if (dados.perfil if dados else '') == 'ADMIN' }}>Admin</option>
         </select>
@@ -61,6 +62,25 @@
           <option value="">Sem site vinculado</option>
           {% for s in todos_sites %}
           <option value="{{ s }}" {{ 'selected' if (dados.site if dados else '') == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Cargo / Função</label>
+        <select name="cargo">
+          <option value="">Selecione...</option>
+          {% set _cargos = [
+            'AUXILIAR DE SEGURANÇA PATRIMONIAL',
+            'ASSISTENTE DE SEGURANÇA PATRIMONIAL',
+            'ANALISTA DE SEGURANÇA PATRIMONIAL',
+            'COORDENADOR DE SEGURANÇA PATRIMONIAL',
+            'SUPERVISOR DE SEGURANÇA PATRIMONIAL',
+            'GERENTE DE SEGURANÇA PATRIMONIAL',
+            'GERENTE SR DE SEGURANÇA PATRIMONIAL',
+            'DIRETOR DE SEGURANÇA PATRIMONIAL'
+          ] %}
+          {% for c in _cargos %}
+          <option value="{{ c }}" {{ 'selected' if (dados.cargo if dados else '') == c }}>{{ c }}</option>
           {% endfor %}
         </select>
       </div>

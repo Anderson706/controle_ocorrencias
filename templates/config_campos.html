@@ -1,0 +1,258 @@
+{% extends "base_app.html" %}
+{% block page_title %}Config. de Campos | CCTV Control Panel{% endblock %}
+
+{% block topbar_title %}⚙️ Configuração de Campos{% endblock %}
+{% block topbar_subtitle %}Gerencie os valores de Natureza, Local e Setor por site{% endblock %}
+{% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('config_campos', tab='natureza', site=site_filtro if is_admin else '') }}" class="adm-tab {% if tab=='natureza' %}active{% endif %}">🏷️ Natureza</a>
+    <a href="{{ url_for('config_campos', tab='local',    site=site_filtro if is_admin else '') }}" class="adm-tab {% if tab=='local'    %}active{% endif %}">📍 Local</a>
+    <a href="{{ url_for('config_campos', tab='setor',    site=site_filtro if is_admin else '') }}" class="adm-tab {% if tab=='setor'    %}active{% endif %}">🏢 Setor</a>
+  </div>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
+
+  /* ── Layout dois painéis ── */
+  .cfg-layout{ display:grid; grid-template-columns:320px 1fr; gap:20px; align-items:start; }
+  @media(max-width:900px){ .cfg-layout{ grid-template-columns:1fr; } }
+
+  /* ── Painel de formulário ── */
+  .cfg-form-card{ background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; }
+  .cfg-form-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:16px 20px; display:flex; align-items:center; gap:10px; }
+  .cfg-form-hdr-bar{ width:5px; height:22px; background:#ffcc00; border-radius:3px; flex-shrink:0; }
+  .cfg-form-hdr-title{ color:#fff; font-size:14px; font-weight:900; }
+  .cfg-form-body{ padding:20px; }
+
+  /* ── Painel de listagem ── */
+  .cfg-list-card{ background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; }
+  .cfg-list-hdr{ padding:16px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .cfg-list-hdr-title{ font-size:15px; font-weight:900; color:var(--text); }
+  .cfg-count{ background:#f3f4f6; border-radius:999px; padding:4px 10px; font-size:11px; font-weight:800; color:var(--muted); }
+
+  /* ── Table ── */
+  .cfg-table-wrap{ overflow:auto; }
+  .cfg-table{ width:100%; border-collapse:collapse; }
+  .cfg-table th{ background:#f8fafc; padding:10px 14px; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .cfg-table td{ padding:10px 14px; font-size:13px; border-bottom:1px solid #f1f3f5; vertical-align:middle; }
+  .cfg-table tbody tr:hover{ background:#fafbfc; }
+  .cfg-table tbody tr:last-child td{ border-bottom:none; }
+  .cfg-table .td-valor{ font-weight:700; color:var(--text); }
+  .cfg-table .td-site{ color:var(--muted); font-size:12px; }
+  .cfg-table .td-date{ color:var(--muted); font-size:11px; white-space:nowrap; }
+  .cfg-table .td-user{ color:var(--muted); font-size:11px; white-space:nowrap; }
+  .cfg-table .td-acoes{ text-align:right; white-space:nowrap; }
+
+  /* ── Empty state ── */
+  .cfg-empty{ padding:48px 20px; text-align:center; color:var(--muted); }
+  .cfg-empty-icon{ font-size:36px; margin-bottom:10px; }
+  .cfg-empty-text{ font-size:13px; font-weight:600; }
+
+  /* ── Inline edit form ── */
+  .edit-row{ display:none; background:#fffdf5; }
+  .edit-row.show{ display:table-row; }
+  .edit-row td{ padding:10px 14px; border-bottom:1px solid #f1f3f5; }
+  .edit-inline{ display:flex; gap:8px; align-items:center; }
+  .edit-inline input{ flex:1; border:1.5px solid #d40511; border-radius:8px; padding:8px 12px; font-size:13px; font-family:inherit; outline:none; }
+
+  /* ── Filtro de site (admin) ── */
+  .site-filter-bar{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 18px; margin-bottom:18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; box-shadow:var(--shadow); }
+  .site-filter-label{ font-size:12px; font-weight:800; color:var(--muted); white-space:nowrap; }
+  .site-filter-bar select{ border:1px solid #d6dae1; border-radius:8px; padding:7px 12px; font-size:13px; font-family:inherit; outline:none; }
+  .site-filter-bar select:focus{ border-color:var(--dhl-red); }
+
+  /* ── Tab info box ── */
+  .tab-info{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:12px 16px; font-size:12px; color:#1e40af; margin-bottom:18px; display:flex; align-items:center; gap:10px; }
+  .tab-info b{ color:#1e3a8a; }
+
+  .btn-sm{ padding:5px 12px; font-size:12px; border-radius:7px; }
+  .btn-edit{ background:#fff; border:1px solid #e5e7eb; color:var(--muted); }
+  .btn-edit:hover{ background:#f3f4f6; color:var(--text); }
+  .btn-del{ background:none; border:1px solid #fca5a5; color:#b91c1c; }
+  .btn-del:hover{ background:#fee2e2; border-color:#f87171; }
+  .btn-save{ background:var(--dhl-red); color:#fff; border:none; }
+  .btn-save:hover{ background:var(--dhl-red-dark); }
+  .btn-cancel-edit{ background:#f3f4f6; border:none; color:var(--muted); }
+</style>
+
+<!-- Filtro de site (apenas para ADMIN) -->
+{% if is_admin %}
+<div class="site-filter-bar">
+  <span class="site-filter-label">🌐 Filtrar por site:</span>
+  <form method="GET" action="{{ url_for('config_campos') }}" hx-boost="false" style="display:flex;gap:8px;align-items:center;flex:1;flex-wrap:wrap;">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <select name="site" onchange="this.form.submit()" style="flex:1;min-width:200px;">
+      <option value="">— Todos os sites —</option>
+      {% for s in sites_disponiveis %}
+      <option value="{{ s }}" {% if s == site_filtro %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-soft btn-sm">Filtrar</button>
+  </form>
+</div>
+{% endif %}
+
+<!-- Info contextual da aba -->
+{% if tab == 'natureza' %}
+<div class="tab-info">ℹ️ <span><b>Natureza</b> — aparece nos formulários de Investigação e ANC como tipo de ocorrência.</span></div>
+{% elif tab == 'local' %}
+<div class="tab-info">ℹ️ <span><b>Local</b> — aparece no formulário de Investigação para indicar onde ocorreu o evento.</span></div>
+{% elif tab == 'setor' %}
+<div class="tab-info">ℹ️ <span><b>Setor</b> — aparece no formulário de Shift Handover para indicar a área de atuação.</span></div>
+{% endif %}
+
+<div class="cfg-layout">
+
+  <!-- ── Painel esquerdo: formulário de adição ── -->
+  <div class="cfg-form-card">
+    <div class="cfg-form-hdr">
+      <div class="cfg-form-hdr-bar"></div>
+      <div class="cfg-form-hdr-title">
+        {% if tab=='natureza' %}➕ Nova Natureza
+        {% elif tab=='local' %}➕ Novo Local
+        {% else %}➕ Novo Setor{% endif %}
+      </div>
+    </div>
+    <div class="cfg-form-body">
+      <form method="POST" action="{{ url_for('config_campos_novo', tipo=tab) }}" hx-boost="false">
+        {% if is_admin %}
+        <div class="field" style="margin-bottom:14px;">
+          <label>Site *</label>
+          <select name="site" required>
+            <option value="">Selecione o site...</option>
+            {% for s in sites_disponiveis %}
+            <option value="{{ s }}" {% if s == site_filtro %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% else %}
+        <input type="hidden" name="site" value="{{ site_ses }}">
+        <div class="field" style="margin-bottom:14px;">
+          <label>Site</label>
+          <div class="field-locked">🔒 {{ site_ses or '— não configurado —' }}</div>
+        </div>
+        {% endif %}
+
+        <div class="field" style="margin-bottom:18px;">
+          {% if tab == 'natureza' %}
+          <label>Natureza *</label>
+          <input type="text" name="natureza" placeholder="Ex: Furto, Acidente, Avaria..." required autofocus>
+          {% elif tab == 'local' %}
+          <label>Local *</label>
+          <input type="text" name="local" placeholder="Ex: Portaria, Inbound, Pátio..." required autofocus>
+          {% else %}
+          <label>Setor *</label>
+          <input type="text" name="setor" placeholder="Ex: PORTARIA, INBOUND, ADM..." required autofocus>
+          {% endif %}
+        </div>
+
+        <button type="submit" class="btn btn-red" style="width:100%;">✓ Adicionar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Painel direito: listagem ── -->
+  <div class="cfg-list-card">
+    <div class="cfg-list-hdr">
+      <div class="cfg-list-hdr-title">
+        {% if tab=='natureza' %}🏷️ Naturezas cadastradas
+        {% elif tab=='local' %}📍 Locais cadastrados
+        {% else %}🏢 Setores cadastrados{% endif %}
+      </div>
+      <span class="cfg-count">
+        {% if tab=='natureza' %}{{ naturezas|length }}
+        {% elif tab=='local' %}{{ locais|length }}
+        {% else %}{{ setores|length }}{% endif %} registro(s)
+      </span>
+    </div>
+
+    <div class="cfg-table-wrap">
+      {% if tab == 'natureza' %}
+        {% set items = naturezas %}
+        {% set campo = 'natureza' %}
+      {% elif tab == 'local' %}
+        {% set items = locais %}
+        {% set campo = 'local' %}
+      {% else %}
+        {% set items = setores %}
+        {% set campo = 'setor' %}
+      {% endif %}
+
+      {% if items %}
+      <table class="cfg-table">
+        <thead>
+          <tr>
+            <th>{{ campo|capitalize }}</th>
+            {% if is_admin %}<th>Site</th>{% endif %}
+            <th>Criado em</th>
+            <th>Criado por</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <!-- linha normal -->
+          <tr id="row-{{ item.id }}">
+            <td class="td-valor">{{ item[campo] }}</td>
+            {% if is_admin %}<td class="td-site">{{ item.site }}</td>{% endif %}
+            <td class="td-date">{{ item.data_criacao.strftime('%d/%m/%Y %H:%M') if item.data_criacao else '—' }}</td>
+            <td class="td-user">{{ item.usuario_criador or '—' }}</td>
+            <td class="td-acoes">
+              <button type="button" class="btn btn-edit btn-sm" onclick="abrirEdit({{ item.id }})">✏️ Editar</button>
+              <form method="POST" action="{{ url_for('config_campos_excluir', tipo=tab, item_id=item.id) }}" style="display:inline" hx-boost="false"
+                    onsubmit="return confirm('Excluir &quot;{{ item[campo] }}&quot;?');">
+                {% if is_admin %}<input type="hidden" name="site" value="{{ item.site }}">{% endif %}
+                <button type="submit" class="btn btn-del btn-sm">🗑️ Excluir</button>
+              </form>
+            </td>
+          </tr>
+          <!-- linha de edição inline -->
+          <tr class="edit-row" id="edit-{{ item.id }}">
+            <td colspan="{{ 5 if is_admin else 4 }}">
+              <form method="POST" action="{{ url_for('config_campos_editar', tipo=tab, item_id=item.id) }}" hx-boost="false">
+                {% if is_admin %}<input type="hidden" name="site" value="{{ item.site }}">{% endif %}
+                <div class="edit-inline">
+                  <input type="text" name="{{ campo }}" value="{{ item[campo] }}" required>
+                  <button type="submit" class="btn btn-save btn-sm">✓ Salvar</button>
+                  <button type="button" class="btn btn-cancel-edit btn-sm" onclick="fecharEdit({{ item.id }})">✕</button>
+                </div>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="cfg-empty">
+        <div class="cfg-empty-icon">
+          {% if tab=='natureza' %}🏷️{% elif tab=='local' %}📍{% else %}🏢{% endif %}
+        </div>
+        <div class="cfg-empty-text">Nenhum registro cadastrado ainda.<br>Use o formulário ao lado para adicionar.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+(function(){
+  window.abrirEdit = function(id){
+    document.querySelectorAll('.edit-row.show').forEach(function(r){ r.classList.remove('show'); });
+    var er = document.getElementById('edit-'+id);
+    if(er){ er.classList.add('show'); er.querySelector('input').focus(); }
+  };
+  window.fecharEdit = function(id){
+    var er = document.getElementById('edit-'+id);
+    if(er) er.classList.remove('show');
+  };
+})();
+</script>
+{% endblock %}

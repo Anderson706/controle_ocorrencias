@@ -4,10 +4,23 @@
 {% block topbar_title %}Gestão de Investigações{% endblock %}
 {% block topbar_subtitle %}Consulta e gestão de investigações operacionais{% endblock %}
 {% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('nova_investigacao') }}" class="adm-tab">➕ Nova</a>
+    <a href="{{ url_for('ocorrencias') }}" class="adm-tab active">📋 Controle</a>
+    <a href="{{ url_for('dashboard') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
+  <div class="adm-sep"></div>
   <a href="{{ url_for('nova_investigacao') }}" class="btn btn-red btn-sm">+ Nova Investigação</a>
 {% endblock %}
 
 {% block page_content %}
+<style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
+</style>
 <section class="hero">
   <h2>Gestão de Investigações</h2>
   <p>Consulte, filtre e gerencie todas as investigações operacionais. Para registrar uma nova investigação, clique em <strong>+ Nova Investigação</strong>.</p>
@@ -24,9 +37,9 @@
       <div class="label">Registros de hoje</div>
       <div class="value">{{ resumo.hoje }}</div>
     </div>
-    <div class="card kpi">
-      <div class="label">Com foto</div>
-      <div class="value">{{ resumo.com_foto }}</div>
+    <div class="card kpi" style="border-left-color:#d40511;">
+      <div class="label" style="color:#b91c1c;">🔴 Prioridade Alta</div>
+      <div class="value" style="color:#d40511;">{{ resumo.prioridade_alta }}</div>
     </div>
     <div class="card kpi">
       <div class="label">Pendentes</div>
@@ -40,18 +53,18 @@
   <div class="grid grid-4">
     <div class="card kpi" style="border-left:4px solid #16a34a;">
       <div class="label" style="color:#15803d;">✔ Valor Recuperado</div>
-      <div class="value" style="color:#16a34a;">{{ resumo.recuperado_count }}</div>
-      <div style="font-size:11px; color:var(--muted); margin-top:4px;">registro{{ 's' if resumo.recuperado_count != 1 else '' }}</div>
+      <div class="value" style="color:#16a34a; font-size:20px;">{{ resumo.recuperado_valor }}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">{{ resumo.recuperado_count }} registro{{ 's' if resumo.recuperado_count != 1 else '' }}</div>
     </div>
     <div class="card kpi" style="border-left:4px solid #2563eb;">
       <div class="label" style="color:#1d4ed8;">🛡 Valor Preventivo</div>
-      <div class="value" style="color:#2563eb;">{{ resumo.preventivo_count }}</div>
-      <div style="font-size:11px; color:var(--muted); margin-top:4px;">registro{{ 's' if resumo.preventivo_count != 1 else '' }}</div>
+      <div class="value" style="color:#2563eb; font-size:20px;">{{ resumo.preventivo_valor }}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">{{ resumo.preventivo_count }} registro{{ 's' if resumo.preventivo_count != 1 else '' }}</div>
     </div>
     <div class="card kpi" style="border-left:4px solid #d40511;">
       <div class="label" style="color:#b91c1c;">⚠ Prejuízo</div>
-      <div class="value" style="color:#d40511;">{{ resumo.prejuizo_count }}</div>
-      <div style="font-size:11px; color:var(--muted); margin-top:4px;">registro{{ 's' if resumo.prejuizo_count != 1 else '' }}</div>
+      <div class="value" style="color:#d40511; font-size:20px;">{{ resumo.prejuizo_valor }}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:4px;">{{ resumo.prejuizo_count }} registro{{ 's' if resumo.prejuizo_count != 1 else '' }}</div>
     </div>
     <div class="card kpi" style="border-left:4px solid #f59e0b;">
       <div class="label" style="color:#d97706;">📊 Com valor informado</div>
@@ -67,7 +80,7 @@
     <h3>🔍 Filtros</h3>
     <span class="section-chip">Consulta dinâmica</span>
   </div>
-  <form method="GET" action="{{ url_for('ocorrencias') }}" hx-boost="false">
+  <form method="GET" data-autofilter action="{{ url_for('ocorrencias') }}" hx-boost="false">
     <div class="filters">
       <div>
         <label>Data inicial</label>
@@ -79,7 +92,12 @@
       </div>
       <div>
         <label>Natureza</label>
-        <input type="text" name="natureza" value="{{ filtros.natureza or '' }}" placeholder="Filtrar por natureza...">
+        <select name="natureza">
+          <option value="">Filtrar por natureza...</option>
+          {% for nat in todos_naturezas %}
+          <option value="{{ nat }}" {% if filtros.natureza == nat %}selected{% endif %}>{{ nat }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div>
         <label>Operador</label>
@@ -114,7 +132,7 @@
     </div>
     <div class="filter-actions">
       <button type="submit" class="btn btn-red">Aplicar filtros</button>
-      <a href="{{ url_for('ocorrencias') }}" class="btn btn-soft">Limpar</a>
+      <a href="{{ url_for('ocorrencias') }}" class="btn btn-soft" data-clear-filter>Limpar</a>
       {% if filtros.data_inicial or filtros.data_final or filtros.status or filtros.operador or filtros.local or filtros.natureza or filtros.site_filtro %}
       <span style="font-size:12px;font-weight:700;color:var(--muted);">Filtro ativo</span>
       {% endif %}
@@ -138,11 +156,14 @@
           <th>Operador</th>
           <th>Prioridade</th>
           <th>Status</th>
+          <th>Vínculos</th>
           <th style="text-align:center;">Ações</th>
         </tr>
       </thead>
       <tbody>
         {% for r in registros %}
+        {% set _anc_cod = anc_lookup.get(r.anc_vinculada_id) if r.anc_vinculada_id else None %}
+        {% set _ai_cod  = analise_lookup.get(r.analise_vinculada_id) if r.analise_vinculada_id else None %}
         <tr>
           <td><strong style="color:#d40511; white-space:nowrap;">{{ r.codigo or r.id }}</strong></td>
           <td style="white-space:nowrap;">{{ r.data_hora }}</td>
@@ -158,8 +179,13 @@
             {% elif r.status == 'EM ANDAMENTO' %}<span class="badge badge-warning"> {{ r.status }}</span>
             {% else %}<span class="badge badge-danger">{{ r.status or 'PENDENTE' }}</span>{% endif %}
           </td>
+          <td style="white-space:nowrap;">
+            {% if _anc_cod %}<span class="badge" style="background:#fff0f0; color:#b91c1c; border:1px solid #fca5a5; font-size:10px; font-weight:800;" title="ANC vinculada">🔗 {{ _anc_cod }}</span>{% endif %}
+            {% if _ai_cod  %}<span class="badge" style="background:#eff6ff; color:#1d4ed8; border:1px solid #93c5fd; font-size:10px; font-weight:800; margin-left:4px;" title="Análise Investigativa vinculada">🔗 {{ _ai_cod }}</span>{% endif %}
+            {% if not _anc_cod and not _ai_cod %}<span style="color:var(--muted); font-size:11px;">—</span>{% endif %}
+          </td>
           <td style="text-align:center;">
-            <button type="button" class="btn btn-dark btn-sm" onclick="abrirModal(this)"
+            <button type="button" class="btn btn-dark btn-sm" onclick="abrirModalOc(this)"
               data-id="{{ r.id }}"
               data-codigo="{{ r.codigo or ('OC-' ~ r.id) }}"
               data-numero="{{ r.numero_site or r.id }}"
@@ -186,6 +212,8 @@
               data-custo="{{ r.custo or '—' }}"
               data-tipo_valor="{% if r.valor_recuperado %}RECUPERADO{% elif r.valor_preventivo %}PREVENTIVO{% elif r.prejuizo %}PREJUIZO{% else %}{% endif %}"
               data-valor_financeiro="{{ r.valor_recuperado or r.valor_preventivo or r.prejuizo or '—' }}"
+              data-anc_vinculada="{{ _anc_cod or '' }}"
+              data-ai_vinculada="{{ _ai_cod or '' }}"
               data-url_post="{{ url_for('post_ocorrencia', ocorrencia_id=r.id) }}"
               data-url_editar="{{ url_for('editar_ocorrencia', ocorrencia_id=r.id) }}"
               data-url_excluir="{{ url_for('excluir_ocorrencia', ocorrencia_id=r.id) }}"
@@ -199,7 +227,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" style="text-align:center; padding:28px; color:var(--muted); font-weight:700;">Nenhuma investigação encontrada.</td>
+          <td colspan="8" style="text-align:center; padding:28px; color:var(--muted); font-weight:700;">Nenhuma investigação encontrada.</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -214,14 +242,73 @@
 {% endblock %}
 
 {% block modals %}
-<div class="modal-overlay" id="modal" onclick="fecharModalFora(event)">
+<!-- Picker ANC — totalmente inline, sem dependência de CSS externo -->
+<div id="pk-anc"
+     style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:9200; align-items:center; justify-content:center; padding:20px;"
+     onclick="if(event.target===this)mFecharPicker('anc')">
+  <div style="background:#fff; border-radius:20px; box-shadow:0 24px 60px rgba(0,0,0,.22); width:100%; max-width:720px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden;" onclick="event.stopPropagation()">
+    <div style="background:#d40511; color:#fff; padding:16px 22px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0;">
+      <h3 style="margin:0; font-size:15px; font-weight:900;">⚠️ Selecionar ANC</h3>
+      <button onclick="mFecharPicker('anc')" style="background:rgba(255,255,255,.2); border:none; color:#fff; width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;">✕</button>
+    </div>
+    <div style="padding:18px 22px; flex:1; overflow-y:auto;">
+      <input id="pk-search-anc" placeholder="🔍 Buscar por número, setor, tipo..." oninput="mFiltrarPicker('anc',this.value)"
+             style="width:100%; padding:9px 13px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:13px; font-family:inherit; background:#fff; outline:none; box-sizing:border-box; margin-bottom:12px;">
+      <div style="max-height:310px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:10px;">
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead><tr style="background:#f9fafb;">
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb; white-space:nowrap;">Nº ANC</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Data</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Tipo</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Gravidade</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Status</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Setor</th>
+            <th style="padding:8px 12px; border-bottom:1px solid #e5e7eb;"></th>
+          </tr></thead>
+          <tbody id="pk-tbody-anc"><tr><td colspan="7" style="text-align:center; padding:28px; color:#6b7280; font-size:13px; font-weight:600;">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Picker Análise Investigativa — totalmente inline -->
+<div id="pk-ai"
+     style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:9200; align-items:center; justify-content:center; padding:20px;"
+     onclick="if(event.target===this)mFecharPicker('ai')">
+  <div style="background:#fff; border-radius:20px; box-shadow:0 24px 60px rgba(0,0,0,.22); width:100%; max-width:720px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden;" onclick="event.stopPropagation()">
+    <div style="background:#d40511; color:#fff; padding:16px 22px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0;">
+      <h3 style="margin:0; font-size:15px; font-weight:900;">🔍 Selecionar Análise Investigativa</h3>
+      <button onclick="mFecharPicker('ai')" style="background:rgba(255,255,255,.2); border:none; color:#fff; width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;">✕</button>
+    </div>
+    <div style="padding:18px 22px; flex:1; overflow-y:auto;">
+      <input id="pk-search-ai" placeholder="🔍 Buscar por código, responsável, classificação..." oninput="mFiltrarPicker('ai',this.value)"
+             style="width:100%; padding:9px 13px; border:1.5px solid #e5e7eb; border-radius:10px; font-size:13px; font-family:inherit; background:#fff; outline:none; box-sizing:border-box; margin-bottom:12px;">
+      <div style="max-height:310px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:10px;">
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead><tr style="background:#f9fafb;">
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb; white-space:nowrap;">Código</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Data</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Responsável</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Classificação</th>
+            <th style="padding:8px 12px; text-align:left; font-size:10px; font-weight:800; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid #e5e7eb;">Status</th>
+            <th style="padding:8px 12px; border-bottom:1px solid #e5e7eb;"></th>
+          </tr></thead>
+          <tbody id="pk-tbody-ai"><tr><td colspan="6" style="text-align:center; padding:28px; color:#6b7280; font-size:13px; font-weight:600;">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal" onclick="fecharModalOcFora(event)">
   <div class="modal-box">
     <div class="modal-head">
       <div>
         <h3>Detalhes da Investigação</h3>
         <div class="modal-sub" id="m-sub"></div>
       </div>
-      <button class="modal-close" onclick="fecharModal()">×</button>
+      <button class="modal-close" onclick="fecharModalOc()">×</button>
     </div>
     <div class="modal-body">
       <div class="modal-grid">
@@ -240,6 +327,10 @@
         <div class="modal-item"><div class="modal-lbl" id="m-lbl-valor">Valor</div><div class="modal-val" id="m-valor-financeiro" style="font-weight:800;"></div></div>
         <div class="modal-item"><div class="modal-lbl">Criado por</div><div class="modal-val" id="m-criado_por"></div></div>
         <div class="modal-item full"><div class="modal-lbl">Descrição</div><div class="modal-val" id="m-descricao" style="font-weight:500; color:#374151; white-space:pre-wrap;"></div></div>
+        <div class="modal-item full" id="m-vinculos-wrap" style="display:none;">
+          <div class="modal-lbl">Vínculos</div>
+          <div class="modal-val" id="m-vinculos" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+        </div>
       </div>
       <div id="m-info-encerramento" class="info-fechamento" style="display:none;">
         <strong>✔ Investigação encerrada</strong><br>
@@ -249,9 +340,13 @@
       <div id="m-form-fechar-wrap" style="display:none;">
         <div style="font-size:13px; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:10px; border-top:1px solid var(--line); padding-top:14px;">Encerrar investigação</div>
         <form id="m-form-fechar" method="POST" action="" enctype="multipart/form-data" hx-boost="false">
+          <!-- Campos ocultos de vínculo -->
+          <input type="hidden" name="anc_vinculada_id"     id="m-anc-vinc-id"     value="">
+          <input type="hidden" name="analise_vinculada_id" id="m-ai-vinc-id"      value="">
+
           <div class="fechar-field">
             <label>Conclusão *</label>
-            <select name="status_post" required>
+            <select name="status_post" id="m-sel-conclusao" required onchange="mOnConclusaoChange(this.value)">
               <option value="">Selecione</option>
               <option value="ANALISE INVESTIGATIVA">Análise investigativa</option>
               <option value="ANC">ANC</option>
@@ -259,6 +354,27 @@
               <option value="INCONCLUSIVA">Inconclusivo</option>
             </select>
           </div>
+
+          <!-- Vínculo ANC (aparece quando ANC selecionado) -->
+          <div id="m-vinc-anc" style="display:none; margin:10px 0; padding:12px 14px; background:#fff9f0; border:1.5px dashed #f5d066; border-radius:10px;">
+            <div style="font-size:11px; font-weight:800; color:#92400e; text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px;">⚠️ Vincular ANC</div>
+            <div id="m-anc-badge-wrap" style="display:none; margin-bottom:8px; align-items:center; gap:8px;">
+              <span id="m-anc-badge" style="display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:8px; background:#fff4db; color:#92400e; border:1.5px solid #f5d066; font-size:12px; font-weight:800;"></span>
+              <button type="button" onclick="mLimparVinculo('anc')" style="background:none; border:none; cursor:pointer; color:#9ca3af; font-size:15px; padding:0 4px;" title="Remover">✕</button>
+            </div>
+            <button type="button" class="btn btn-soft btn-sm" onclick="mAbrirPicker('anc')">🔗 Escolher ANC</button>
+          </div>
+
+          <!-- Vínculo Análise Investigativa -->
+          <div id="m-vinc-ai" style="display:none; margin:10px 0; padding:12px 14px; background:#eff6ff; border:1.5px dashed #93c5fd; border-radius:10px;">
+            <div style="font-size:11px; font-weight:800; color:#1d4ed8; text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px;">🔍 Vincular Análise Investigativa</div>
+            <div id="m-ai-badge-wrap" style="display:none; margin-bottom:8px; align-items:center; gap:8px;">
+              <span id="m-ai-badge" style="display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:8px; background:#eff6ff; color:#1d4ed8; border:1.5px solid #93c5fd; font-size:12px; font-weight:800;"></span>
+              <button type="button" onclick="mLimparVinculo('ai')" style="background:none; border:none; cursor:pointer; color:#9ca3af; font-size:15px; padding:0 4px;" title="Remover">✕</button>
+            </div>
+            <button type="button" class="btn btn-soft btn-sm" onclick="mAbrirPicker('ai')">🔗 Escolher Análise</button>
+          </div>
+
           <div class="fechar-field">
             <label>Responsável pelo encerramento *</label>
             <input type="text" name="responsavel_fechamento" id="m-resp-input" placeholder="Nome do responsável" required>
@@ -297,91 +413,251 @@
 
 {% block page_scripts %}
 <script>
-function abrirModal(btn) {
-  const d = btn.dataset;
-  document.getElementById('m-sub').textContent = d.site + ' — ' + d.data;
-  document.getElementById('m-numero').textContent   = d.numero;
-  document.getElementById('m-data').textContent     = d.data;
-  document.getElementById('m-hora').textContent     = d.hora;
-  document.getElementById('m-site').textContent     = d.site;
-  document.getElementById('m-natureza').textContent = d.natureza;
-  document.getElementById('m-local').textContent    = d.local;
-  document.getElementById('m-operador').textContent = d.operador;
-  document.getElementById('m-gc').textContent       = d.gc;
-  document.getElementById('m-envolvido').textContent  = d.envolvido;
-  document.getElementById('m-prioridade').textContent = d.prioridade;
-  document.getElementById('m-status').textContent     = d.status;
-  document.getElementById('m-criado_por').textContent = d.criado_por;
-  document.getElementById('m-boletim').textContent    = d.boletim || 'Não';
-  document.getElementById('m-descricao').textContent  = d.descricao || '—';
-  const TIPO_LABELS = { RECUPERADO: '✔ Valor Recuperado', PREVENTIVO: '🛡 Valor Preventivo', PREJUIZO: '⚠ Prejuízo' };
-  const TIPO_COLORS = { RECUPERADO: '#16a34a', PREVENTIVO: '#2563eb', PREJUIZO: '#d40511' };
-  var lblValor = document.getElementById('m-lbl-valor');
-  var valValor = document.getElementById('m-valor-financeiro');
-  if (d.tipo_valor) {
-    lblValor.textContent = TIPO_LABELS[d.tipo_valor] || 'Valor';
-    valValor.textContent = d.valor_financeiro || '—';
-    valValor.style.color = TIPO_COLORS[d.tipo_valor] || 'inherit';
-  } else {
-    lblValor.textContent = 'Valor';
-    valValor.textContent = '—';
-    valValor.style.color = 'inherit';
-  }
+/* ─── dados dos pickers (carregados uma vez por visita) ─── */
+var _mAncsData    = [];
+var _mAnalisesData = [];
+fetch('/api/ancs-site').then(function(r){ return r.json(); }).then(function(d){ _mAncsData = d; }).catch(function(){});
+fetch('/api/analises-site').then(function(r){ return r.json(); }).then(function(d){ _mAnalisesData = d; }).catch(function(){});
 
-  document.getElementById('m-btn-post').href = d.url_post;
-  var btnPdf = document.getElementById('m-btn-pdf');
-  btnPdf.href = d.url_pdf;
-  var _site     = (d.site     || 'DHL').replace(/[\/\\:*?"<>|]/g, '');
-  var _natureza = (d.natureza || 'Ocorrencia').replace(/[\/\\:*?"<>|]/g, '');
-  var _codigo   = (d.codigo   || ('OC-' + d.id)).replace(/[\/\\:*?"<>|]/g, '');
-  btnPdf.setAttribute('data-filename', _codigo + ' - ' + _natureza + ' - ' + _site + '.pdf');
-  const formExcluir = document.getElementById('m-form-excluir');
-  if (formExcluir) formExcluir.action = d.url_excluir;
+/* ─── abre/fecha modal principal ─── */
+function fecharModalOc() {
+  var m = document.getElementById('modal');
+  if (m) m.classList.remove('open');
+}
+function fecharModalOcFora(e) { if (e.target === document.getElementById('modal')) fecharModalOc(); }
 
-  const statusFechado = ['CONCLUIDO','INCONCLUSIVA'].includes(d.status.trim().toUpperCase());
-  const btnEditar = document.getElementById('m-btn-editar');
-  if (btnEditar) {
-    btnEditar.href = d.url_editar;
-    const IS_ADMIN_OC = {{ 'true' if is_admin else 'false' }};
-    const CURRENT_USER_OC = "{{ session.get('user_nome', '') }}";
-    const podeEditar = (IS_ADMIN_OC || d.criado_por === CURRENT_USER_OC) && !statusFechado;
-    btnEditar.style.display = podeEditar ? '' : 'none';
-  }
-
-  const infoEnc  = document.getElementById('m-info-encerramento');
-  const formWrap = document.getElementById('m-form-fechar-wrap');
-  const formFech = document.getElementById('m-form-fechar');
-
-  if (statusFechado) {
-    infoEnc.style.display  = '';
-    formWrap.style.display = 'none';
-    document.getElementById('m-encerrado-por').textContent = 'Responsável: ' + (d.resp_fechamento || '—');
-    const anexosWrap = document.getElementById('m-anexos-wrap');
-    anexosWrap.innerHTML = '';
-    [{tem: d.tem_anexo1, nome: d.anexo1_nome || 'Anexo 1', url: d.url_anexo1},
-     {tem: d.tem_anexo2, nome: d.anexo2_nome || 'Anexo 2', url: d.url_anexo2},
-     {tem: d.tem_anexo3, nome: d.anexo3_nome || 'Anexo 3', url: d.url_anexo3}
-    ].forEach(function(a) {
-      if (a.tem === '1') {
-        const link = document.createElement('a');
-        link.href = a.url; link.textContent = ' ' + a.nome;
-        link.className = 'btn btn-dark btn-sm'; link.style.fontSize = '11px';
-        anexosWrap.appendChild(link);
-      }
-    });
-  } else {
-    infoEnc.style.display  = 'none';
-    formWrap.style.display = '';
-    if (formFech) formFech.action = d.url_fechar;
-    const respInput = document.getElementById('m-resp-input');
-    if (respInput) respInput.value = d.resp_fechamento || '';
-  }
-  document.getElementById('modal').classList.add('open');
+/* ─── mostra/oculta seção de vínculo no formulário inline ─── */
+function mOnConclusaoChange(val) {
+  var va = document.getElementById('m-vinc-anc');
+  var vi = document.getElementById('m-vinc-ai');
+  if (va) va.style.display = (val === 'ANC') ? '' : 'none';
+  if (vi) vi.style.display  = (val === 'ANALISE INVESTIGATIVA') ? '' : 'none';
+  if (val !== 'ANC')                   mLimparVinculo('anc');
+  if (val !== 'ANALISE INVESTIGATIVA') mLimparVinculo('ai');
 }
 
-function fecharModal() { document.getElementById('modal').classList.remove('open'); }
-function fecharModalFora(e) { if (e.target === document.getElementById('modal')) fecharModal(); }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') fecharModal(); });
+/* ─── pickers inline ─── */
+function mAbrirPicker(tipo) {
+  var el = document.getElementById('pk-' + tipo);
+  var sr = document.getElementById('pk-search-' + tipo);
+  if (!el || !sr) return;
+  el.style.display = 'flex';
+  sr.value = '';
+  mRenderPicker(tipo, '');
+}
+function mFecharPicker(tipo) {
+  var el = document.getElementById('pk-' + tipo);
+  if (el) el.style.display = 'none';
+}
+function mFiltrarPicker(tipo, q) { mRenderPicker(tipo, q.toLowerCase()); }
+
+function mRenderPicker(tipo, q) {
+  var tbody = document.getElementById('pk-tbody-' + tipo);
+  if (!tbody) return;
+  var data = tipo === 'anc' ? _mAncsData : _mAnalisesData;
+  var rows = data.filter(function(r) {
+    return !q || Object.values(r).join(' ').toLowerCase().indexOf(q) !== -1;
+  });
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="pk-empty">Nenhum registro encontrado.</td></tr>';
+    return;
+  }
+  /* Guarda os registros filtrados para acesso via índice */
+  tbody._pkRows = rows;
+  tbody.innerHTML = rows.map(function(r, i) {
+    var btn = '<button class="pk-sel-btn" data-idx="' + i + '" data-tipo="' + tipo + '">Selecionar</button>';
+    if (tipo === 'anc') {
+      var gCor = r.gravidade==='CRÍTICA'?'#dc2626':r.gravidade==='ALTA'?'#d97706':'#16a34a';
+      return '<tr><td><strong>' + (r.numero_anc||'') + '</strong></td><td>' + (r.data_nc||'') + '</td><td>' + (r.tipo_ocorrencia||'') + '</td><td><span style="color:'+gCor+';font-weight:800">' + (r.gravidade||'') + '</span></td><td>' + (r.status||'') + '</td><td>' + (r.setor||'') + '</td><td>' + btn + '</td></tr>';
+    } else {
+      return '<tr><td><strong>' + (r.codigo||'') + '</strong></td><td>' + (r.data_levantamento||'') + '</td><td>' + (r.responsavel||'') + '</td><td>' + (r.classificacao||'') + '</td><td>' + (r.status_analise||'') + '</td><td>' + btn + '</td></tr>';
+    }
+  }).join('');
+  /* Delegação de evento — um listener no tbody, sem inline onclick */
+  tbody.onclick = function(e) {
+    var btn = e.target.closest('[data-idx]');
+    if (!btn) return;
+    var idx  = parseInt(btn.dataset.idx, 10);
+    var tipo = btn.dataset.tipo;
+    var tbody2 = document.getElementById('pk-tbody-' + tipo);
+    if (tbody2 && tbody2._pkRows) mSelecionarDoc(tipo, tbody2._pkRows[idx]);
+  };
+}
+
+function mSelecionarDoc(tipo, r) {
+  if (tipo === 'anc') {
+    var inp  = document.getElementById('m-anc-vinc-id');
+    var bdg  = document.getElementById('m-anc-badge');
+    var wrap = document.getElementById('m-anc-badge-wrap');
+    if (inp)  inp.value = r.id;
+    if (bdg)  bdg.textContent = '⚠️ ' + r.numero_anc;
+    if (wrap) wrap.style.display = 'flex';
+  } else {
+    var inp  = document.getElementById('m-ai-vinc-id');
+    var bdg  = document.getElementById('m-ai-badge');
+    var wrap = document.getElementById('m-ai-badge-wrap');
+    if (inp)  inp.value = r.id;
+    if (bdg)  bdg.textContent = '🔍 ' + r.codigo;
+    if (wrap) wrap.style.display = 'flex';
+  }
+  mFecharPicker(tipo);
+}
+
+function mLimparVinculo(tipo) {
+  if (tipo === 'anc') {
+    var inp  = document.getElementById('m-anc-vinc-id');
+    var wrap = document.getElementById('m-anc-badge-wrap');
+    if (inp)  inp.value = '';
+    if (wrap) wrap.style.display = 'none';
+  } else {
+    var inp  = document.getElementById('m-ai-vinc-id');
+    var wrap = document.getElementById('m-ai-badge-wrap');
+    if (inp)  inp.value = '';
+    if (wrap) wrap.style.display = 'none';
+  }
+}
+
+/* ─── abrirModalOc — blindado contra erros ─── */
+function abrirModalOc(btn) {
+  var modal = document.getElementById('modal');
+  if (!modal) return;
+
+  try {
+    var d = btn.dataset;
+
+    /* Preenche campos do modal */
+    function _set(id, v) { var el = document.getElementById(id); if (el) el.textContent = v || ''; }
+    _set('m-sub',      (d.site || '') + ' — ' + (d.data || ''));
+    _set('m-numero',   d.numero);
+    _set('m-data',     d.data);
+    _set('m-hora',     d.hora);
+    _set('m-site',     d.site);
+    _set('m-natureza', d.natureza);
+    _set('m-local',    d.local);
+    _set('m-operador', d.operador);
+    _set('m-gc',       d.gc);
+    _set('m-envolvido',  d.envolvido);
+    _set('m-prioridade', d.prioridade);
+    _set('m-status',     d.status);
+    _set('m-criado_por', d.criado_por);
+    _set('m-boletim',    d.boletim || 'Não');
+    _set('m-descricao',  d.descricao || '—');
+
+    /* Valor financeiro */
+    var TIPO_LABELS = { RECUPERADO: '✔ Valor Recuperado', PREVENTIVO: '🛡 Valor Preventivo', PREJUIZO: '⚠ Prejuízo' };
+    var TIPO_COLORS = { RECUPERADO: '#16a34a', PREVENTIVO: '#2563eb', PREJUIZO: '#d40511' };
+    var lblValor = document.getElementById('m-lbl-valor');
+    var valValor = document.getElementById('m-valor-financeiro');
+    if (lblValor && valValor) {
+      if (d.tipo_valor) {
+        lblValor.textContent = TIPO_LABELS[d.tipo_valor] || 'Valor';
+        valValor.textContent = d.valor_financeiro || '—';
+        valValor.style.color = TIPO_COLORS[d.tipo_valor] || 'inherit';
+      } else {
+        lblValor.textContent = 'Valor'; valValor.textContent = '—'; valValor.style.color = 'inherit';
+      }
+    }
+
+    /* Vínculos existentes (badges de leitura) */
+    var vinculosWrap = document.getElementById('m-vinculos-wrap');
+    var vinculosEl   = document.getElementById('m-vinculos');
+    if (vinculosEl) {
+      vinculosEl.innerHTML = '';
+      if (d.anc_vinculada || d.ai_vinculada) {
+        if (d.anc_vinculada) {
+          var s1 = document.createElement('span');
+          s1.style.cssText = 'background:#fff0f0;color:#b91c1c;border:1px solid #fca5a5;font-size:11px;font-weight:800;padding:4px 10px;border-radius:6px;';
+          s1.textContent = '🔗 ' + d.anc_vinculada;
+          vinculosEl.appendChild(s1);
+        }
+        if (d.ai_vinculada) {
+          var s2 = document.createElement('span');
+          s2.style.cssText = 'background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;font-size:11px;font-weight:800;padding:4px 10px;border-radius:6px;';
+          s2.textContent = '🔗 ' + d.ai_vinculada;
+          vinculosEl.appendChild(s2);
+        }
+        if (vinculosWrap) vinculosWrap.style.display = '';
+      } else {
+        if (vinculosWrap) vinculosWrap.style.display = 'none';
+      }
+    }
+
+    /* Links / botões */
+    var btnPost = document.getElementById('m-btn-post');
+    if (btnPost) btnPost.href = d.url_post || '#';
+
+    var btnPdf = document.getElementById('m-btn-pdf');
+    if (btnPdf) {
+      btnPdf.href = d.url_pdf || '#';
+      var _s = (d.site     || 'DHL').replace(/[\/\\:*?"<>|]/g,'');
+      var _n = (d.natureza || 'Ocorrencia').replace(/[\/\\:*?"<>|]/g,'');
+      var _c = (d.codigo   || ('OC-' + d.id)).replace(/[\/\\:*?"<>|]/g,'');
+      btnPdf.setAttribute('data-filename', _c + ' - ' + _n + ' - ' + _s + '.pdf');
+    }
+
+    var formExcluir = document.getElementById('m-form-excluir');
+    if (formExcluir) formExcluir.action = d.url_excluir || '';
+
+    var statusFechado = ['CONCLUIDO','INCONCLUSIVA'].includes((d.status || '').trim().toUpperCase());
+
+    var btnEditar = document.getElementById('m-btn-editar');
+    if (btnEditar) {
+      btnEditar.href = d.url_editar || '#';
+      var IS_ADMIN_OC      = {{ 'true' if is_admin else 'false' }};
+      var CURRENT_USER_OC  = "{{ session.get('user_nome', '') | e }}";
+      btnEditar.style.display = ((IS_ADMIN_OC || d.criado_por === CURRENT_USER_OC) && !statusFechado) ? '' : 'none';
+    }
+
+    var infoEnc  = document.getElementById('m-info-encerramento');
+    var formWrap = document.getElementById('m-form-fechar-wrap');
+    var formFech = document.getElementById('m-form-fechar');
+    var selConc  = document.getElementById('m-sel-conclusao');
+
+    if (statusFechado) {
+      if (infoEnc)  infoEnc.style.display  = '';
+      if (formWrap) formWrap.style.display = 'none';
+      var encPor = document.getElementById('m-encerrado-por');
+      if (encPor) encPor.textContent = 'Responsável: ' + (d.resp_fechamento || '—');
+      var anexosWrap = document.getElementById('m-anexos-wrap');
+      if (anexosWrap) {
+        anexosWrap.innerHTML = '';
+        [{tem:d.tem_anexo1, nome:d.anexo1_nome||'Anexo 1', url:d.url_anexo1},
+         {tem:d.tem_anexo2, nome:d.anexo2_nome||'Anexo 2', url:d.url_anexo2},
+         {tem:d.tem_anexo3, nome:d.anexo3_nome||'Anexo 3', url:d.url_anexo3}
+        ].forEach(function(a) {
+          if (a.tem === '1') {
+            var lnk = document.createElement('a');
+            lnk.href = a.url; lnk.textContent = ' ' + a.nome;
+            lnk.className = 'btn btn-dark btn-sm'; lnk.style.fontSize = '11px';
+            anexosWrap.appendChild(lnk);
+          }
+        });
+      }
+    } else {
+      if (infoEnc)  infoEnc.style.display  = 'none';
+      if (formWrap) formWrap.style.display = '';
+      if (formFech) formFech.action = d.url_fechar || '';
+      var respInput = document.getElementById('m-resp-input');
+      if (respInput) respInput.value = d.resp_fechamento || '';
+      /* Reseta o select e seções de vínculo */
+      if (selConc) { selConc.value = ''; mOnConclusaoChange(''); }
+      mLimparVinculo('anc'); mLimparVinculo('ai');
+    }
+  } catch(err) {
+    console.error('abrirModal:', err);
+  }
+
+  /* Abre o modal — sempre, mesmo se houve erro interno */
+  modal.classList.add('open');
+}
+
+/* Fecha pickers se Escape pressionado */
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Escape') return;
+  fecharModalOc();
+  mFecharPicker('anc');
+  mFecharPicker('ai');
+});
 </script>
 <script>
 (function(){

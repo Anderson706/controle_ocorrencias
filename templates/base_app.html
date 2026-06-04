@@ -34,20 +34,31 @@
   #loading-overlay.show{ display:flex; }
 
   /* ══ Sidebar ════════════════════════════════════════════════ */
-  .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow-y:auto; display:flex; flex-direction:column; }
+  .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow:hidden; display:flex; flex-direction:column; }
   .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
   .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
   .brand-title{ font-size:15px; font-weight:900; line-height:1.2; color:#fff; }
-  .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; }
-  .nav-section{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:rgba(255,255,255,.58); font-size:12px; font-weight:900; letter-spacing:.5px; text-transform:uppercase; transition:.18s; border:1px solid transparent; text-decoration:none; }
-  .nav-section:hover{ color:#fff; background:rgba(255,255,255,.06); }
-  .nav-section.active{ color:#fff; background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.12); }
-  .nav-icon{ font-size:15px; flex-shrink:0; }
-  .nav-chevron{ margin-left:auto; font-size:11px; opacity:.65; }
-  .sub-nav{ display:flex; flex-direction:column; gap:1px; margin:2px 0 6px 16px; padding-left:14px; border-left:2px solid rgba(255,255,255,.10); }
-  .sub-link{ display:block; padding:8px 10px; border-radius:8px; color:rgba(255,255,255,.52); font-size:13px; font-weight:600; transition:.15s; text-decoration:none; }
-  .sub-link:hover{ color:#fff; background:rgba(255,255,255,.06); }
-  .sub-link.cur{ color:#ffcc00; font-weight:800; }
+  .main-nav{ display:flex; flex-direction:column; gap:3px; flex:1; overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.12) transparent; }
+  /* ── Nav groups ─────────────────────────────────────────────── */
+  .nav-group{ margin-bottom:4px; }
+  .nav-group-btn{ display:flex; align-items:center; gap:9px; width:100%; padding:8px 10px; border-radius:10px; color:rgba(255,255,255,.38); font-size:10px; font-weight:900; letter-spacing:.7px; text-transform:uppercase; background:none; border:none; cursor:pointer; transition:.15s; font-family:inherit; }
+  .nav-group-btn:hover{ color:rgba(255,255,255,.65); background:rgba(255,255,255,.04); }
+  .nav-group-btn.has-active{ color:rgba(255,255,255,.6); }
+  .nav-group-icon{ font-size:13px; flex-shrink:0; }
+  .nav-group-label{ flex:1; text-align:left; }
+  .nav-group-arrow{ margin-left:auto; font-size:10px; opacity:.5; transition:transform .2s; }
+  .nav-group-btn.open .nav-group-arrow{ transform:rotate(90deg); }
+  .nav-items{ display:flex; flex-direction:column; gap:1px; padding:2px 0 4px 8px; overflow:hidden; max-height:0; transition:max-height .25s ease; }
+  .nav-items.open{ max-height:400px; }
+  .nav-section{ display:flex; align-items:center; gap:9px; padding:9px 12px; border-radius:9px; color:rgba(255,255,255,.62); font-size:12.5px; font-weight:700; transition:.15s; border:1px solid transparent; text-decoration:none; }
+  .nav-section:hover{ color:#fff; background:rgba(255,255,255,.07); }
+  .nav-section.active{ color:#ffcc00; background:rgba(255,204,0,.12); border-color:rgba(255,204,0,.2); }
+  .nav-icon{ font-size:14px; flex-shrink:0; }
+  /* Linha direta (sem grupo) */
+  .nav-direct{ display:flex; align-items:center; gap:9px; padding:9px 10px; border-radius:10px; color:rgba(255,255,255,.62); font-size:12.5px; font-weight:700; transition:.15s; border:1px solid transparent; text-decoration:none; margin-bottom:2px; }
+  .nav-direct:hover{ color:#fff; background:rgba(255,255,255,.07); }
+  .nav-direct.active{ color:#ffcc00; background:rgba(255,204,0,.12); border-color:rgba(255,204,0,.2); }
+  .nav-sep{ border:none; border-top:1px solid rgba(255,255,255,.07); margin:8px 0; }
 
   /* ══ Profile widget ═════════════════════════════════════════ */
   .sp-wrap{ margin-top:auto; padding:10px 0 0; border-top:1px solid rgba(255,255,255,.08); position:relative; }
@@ -236,6 +247,7 @@
   </style>
   <script src="/static/htmx.min.js"></script>
   <script src="/static/panel.js"></script>
+  <script src="/static/filters.js"></script>
 </head>
 <body hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="outerHTML">
 
@@ -249,111 +261,117 @@
       <div class="brand-title">CCTV<br>CONTROL PANEL</div>
     </div>
 
-    <nav class="main-nav">
+    <nav class="main-nav" id="mainNav">
       {%- set sec_oc  = request.endpoint in ['ocorrencias','dashboard','nova_investigacao'] -%}
       {%- set sec_an  = request.endpoint in ['analises','analise_investigativa','confirmar_analise','dashboard_analise','editar_analise'] -%}
       {%- set sec_anc = request.endpoint in ['anc','dashboard_anc','nova_anc'] -%}
       {%- set sec_sh  = request.endpoint in ['sh_index','sh_dashboard','sh_assinar','sh_editar','sh_controle'] -%}
       {%- set sec_chv = request.endpoint is not none and request.endpoint.startswith('chaves.') -%}
       {%- set sec_arm = request.endpoint is not none and request.endpoint.startswith('armarios.') -%}
+      {%- set sec_ap  = request.endpoint is not none and request.endpoint.startswith('achados.') -%}
+      {%- set sec_pe  = request.endpoint is not none and request.endpoint.startswith('pe.') -%}
+      {%- set sec_af  = request.endpoint is not none and request.endpoint.startswith('af.') -%}
       {%- set sec_cam = request.endpoint in ['cameras_index','cameras_cadastrar','cameras_checklist_novo','cameras_checklist_ver'] -%}
+      {%- set sec_cfg = request.endpoint in ['config_campos','config_campos_novo','config_campos_editar','config_campos_excluir'] -%}
       {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
 
+      <!-- Overview — direto, sem grupo -->
       <a href="{{ url_for('overview') }}"
-         class="nav-section{{ ' active' if request.endpoint=='overview' else '' }}" data-sec="ov">
+         class="nav-direct{{ ' active' if request.endpoint=='overview' else '' }}">
         <span class="nav-icon">🌐</span><span>Overview</span>
       </a>
 
-      <a href="{{ url_for('ocorrencias') }}"
-         class="nav-section{{ ' active' if sec_oc else '' }}" data-sec="oc">
-        <span class="nav-icon">📋</span><span>Investigações</span>
-        <span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav" data-sec="oc"{% if not sec_oc %} style="display:none"{% endif %}>
-        <a href="{{ url_for('nova_investigacao') }}" class="sub-link{{ ' cur' if request.endpoint=='nova_investigacao' else '' }}">Nova Investigação</a>
-        <a href="{{ url_for('ocorrencias') }}"       class="sub-link{{ ' cur' if request.endpoint=='ocorrencias' else '' }}">Controle</a>
-        <a href="{{ url_for('dashboard') }}"         class="sub-link{{ ' cur' if request.endpoint=='dashboard' else '' }}">Dashboard</a>
+      <hr class="nav-sep">
+
+      <!-- GRUPO: Registros -->
+      {%- set g1_active = sec_oc or sec_an or sec_anc or sec_sh -%}
+      <div class="nav-group" data-group="registros">
+        <button class="nav-group-btn{{ ' has-active' if g1_active else '' }}" onclick="toggleGroup('registros')">
+          <span class="nav-group-icon">📋</span>
+          <span class="nav-group-label">Registros</span>
+          <span class="nav-group-arrow">▶</span>
+        </button>
+        <div class="nav-items" id="grp-registros">
+          <a href="{{ url_for('ocorrencias') }}" class="nav-section{{ ' active' if sec_oc else '' }}">
+            <span class="nav-icon">📋</span><span>Investigações</span>
+          </a>
+          <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
+            <span class="nav-icon">🔍</span><span>Análises</span>
+          </a>
+          <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
+            <span class="nav-icon">⚠️</span><span>ANC</span>
+          </a>
+          <a href="{{ url_for('sh_index') }}" class="nav-section{{ ' active' if sec_sh else '' }}">
+            <span class="nav-icon">🔄</span><span>Shift Handover</span>
+          </a>
+        </div>
       </div>
 
-      <a href="{{ url_for('analises') }}"
-         class="nav-section{{ ' active' if sec_an else '' }}" data-sec="an">
-        <span class="nav-icon">🔍</span><span>Análises Investigativas</span>
-        <span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav" data-sec="an"{% if not sec_an %} style="display:none"{% endif %}>
-        <a href="{{ url_for('analise_investigativa') }}" class="sub-link{{ ' cur' if request.endpoint=='analise_investigativa' else '' }}">Nova Análise</a>
-        <a href="{{ url_for('analises') }}"              class="sub-link{{ ' cur' if request.endpoint in ['analises','confirmar_analise'] else '' }}">Controle</a>
-        <a href="{{ url_for('dashboard_analise') }}"     class="sub-link{{ ' cur' if request.endpoint=='dashboard_analise' else '' }}">Dashboard</a>
+      <!-- GRUPO: Patrimonial -->
+      {%- set g2_active = sec_chv or sec_arm or sec_ap or sec_af -%}
+      <div class="nav-group" data-group="patrimonial">
+        <button class="nav-group-btn{{ ' has-active' if g2_active else '' }}" onclick="toggleGroup('patrimonial')">
+          <span class="nav-group-icon">🏗️</span>
+          <span class="nav-group-label">Patrimonial</span>
+          <span class="nav-group-arrow">▶</span>
+        </button>
+        <div class="nav-items" id="grp-patrimonial">
+          <a href="{{ url_for('chaves.meu_claviculario') }}" class="nav-section{{ ' active' if sec_chv else '' }}">
+            <span class="nav-icon">🔑</span><span>Controle de Chaves</span>
+          </a>
+          <a href="{{ url_for('armarios.painel') }}" class="nav-section{{ ' active' if sec_arm else '' }}">
+            <span class="nav-icon">🗄️</span><span>Armários</span>
+          </a>
+          <a href="{{ url_for('achados.lista') }}" class="nav-section{{ ' active' if sec_ap else '' }}">
+            <span class="nav-icon">📦</span><span>Achados e Perdidos</span>
+          </a>
+          <a href="{{ url_for('af.controle') }}" class="nav-section{{ ' active' if sec_af else '' }}">
+            <span class="nav-icon">🔐</span><span>Abertura/Fechamento</span>
+          </a>
+        </div>
       </div>
 
-      <a href="{{ url_for('anc') }}"
-         class="nav-section{{ ' active' if sec_anc else '' }}" data-sec="anc">
-        <span class="nav-icon">⚠️</span><span>ANC</span>
-        <span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav" data-sec="anc"{% if not sec_anc %} style="display:none"{% endif %}>
-        <a href="{{ url_for('nova_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='nova_anc' else '' }}">Nova ANC</a>
-        <a href="{{ url_for('anc') }}"      class="sub-link{{ ' cur' if request.endpoint=='anc' else '' }}">Controle</a>
-        <a href="{{ url_for('dashboard_anc') }}" class="sub-link{{ ' cur' if request.endpoint=='dashboard_anc' else '' }}">Dashboard</a>
+      <!-- GRUPO: Segurança -->
+      {%- set g3_active = sec_pe or sec_cam -%}
+      <div class="nav-group" data-group="seguranca">
+        <button class="nav-group-btn{{ ' has-active' if g3_active else '' }}" onclick="toggleGroup('seguranca')">
+          <span class="nav-group-icon">🚨</span>
+          <span class="nav-group-label">Segurança</span>
+          <span class="nav-group-arrow">▶</span>
+        </button>
+        <div class="nav-items" id="grp-seguranca">
+          <a href="{{ url_for('pe.painel') }}" class="nav-section{{ ' active' if sec_pe else '' }}">
+            <span class="nav-icon">🚨</span><span>Gestão de Alarmes</span>
+          </a>
+          <a href="{{ url_for('cameras_index') }}" class="nav-section{{ ' active' if sec_cam else '' }}">
+            <span class="nav-icon">📷</span><span>Câmeras</span>
+          </a>
+        </div>
       </div>
 
-      <a href="{{ url_for('sh_index') }}"
-         class="nav-section{{ ' active' if sec_sh else '' }}" data-sec="sh">
-        <span class="nav-icon">🔄</span><span>Shift Handover</span>
-        <span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav" data-sec="sh"{% if not sec_sh %} style="display:none"{% endif %}>
-        <a href="{{ url_for('sh_index') }}"     class="sub-link{{ ' cur' if request.endpoint=='sh_index' else '' }}">Nova Passagem</a>
-        <a href="{{ url_for('sh_controle') }}"  class="sub-link{{ ' cur' if request.endpoint=='sh_controle' else '' }}">Controle</a>
-        <a href="{{ url_for('sh_dashboard') }}" class="sub-link{{ ' cur' if request.endpoint=='sh_dashboard' else '' }}">Dashboard</a>
-      </div>
-
-      <a href="{{ url_for('chaves.meu_claviculario') }}"
-         class="nav-section{{ ' active' if sec_chv else '' }}" data-sec="chv">
-        <span class="nav-icon">🔑</span><span>Controle de Chaves</span>
-        <span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav" data-sec="chv"{% if not sec_chv %} style="display:none"{% endif %}>
-        <a href="{{ url_for('chaves.meu_claviculario') }}"   class="sub-link{{ ' cur' if request.endpoint=='chaves.meu_claviculario' else '' }}">Meu Claviculário</a>
-        <a href="{{ url_for('chaves.realizar_retirada') }}"  class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_retirada' else '' }}">Realizar Retirada</a>
-        <a href="{{ url_for('chaves.realizar_devolucao') }}" class="sub-link{{ ' cur' if request.endpoint=='chaves.realizar_devolucao' else '' }}">Realizar Devolução</a>
-      </div>
-
-      <a href="{{ url_for('armarios.painel') }}"
-         class="nav-section{{ ' active' if sec_arm else '' }}" data-sec="arm">
-        <span class="nav-icon">🗄️</span><span>Gestão de Armários</span>
-        <span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav" data-sec="arm"{% if not sec_arm %} style="display:none"{% endif %}>
-        <a href="{{ url_for('armarios.painel') }}"        class="sub-link{{ ' cur' if request.endpoint=='armarios.painel' else '' }}">Painel de Armários</a>
-        <a href="{{ url_for('armarios.chave_reserva') }}" class="sub-link{{ ' cur' if request.endpoint=='armarios.chave_reserva' else '' }}">Chave Reserva</a>
-      </div>
-
-      <a href="{{ url_for('cameras_index') }}"
-         class="nav-section{{ ' active' if sec_cam else '' }}" data-sec="cam">
-        <span class="nav-icon">📷</span><span>Checklist de Câmeras</span>
-        <span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav" data-sec="cam"{% if not sec_cam %} style="display:none"{% endif %}>
-        <a href="{{ url_for('cameras_checklist_novo') }}" class="sub-link{{ ' cur' if request.endpoint=='cameras_checklist_novo' else '' }}">Novo Checklist</a>
-        <a href="{{ url_for('cameras_index') }}"          class="sub-link{{ ' cur' if request.endpoint=='cameras_index' else '' }}">Controle</a>
-        <a href="{{ url_for('cameras_cadastrar') }}"      class="sub-link{{ ' cur' if request.endpoint=='cameras_cadastrar' else '' }}">Cadastrar Câmeras</a>
-      </div>
-
-      {% if session.get('user_perfil','') == 'ADMIN' %}
-      {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites','admin_multisites','admin_releases','admin_release_download'] -%}
-      <a href="{{ url_for('admin_usuarios') }}"
-         class="nav-section{{ ' active' if sec_adm else '' }}" data-sec="adm">
-        <span class="nav-icon">⚙️</span><span>Administração</span>
-        <span class="nav-chevron">▾</span>
-      </a>
-      <div class="sub-nav" data-sec="adm"{% if not sec_adm %} style="display:none"{% endif %}>
-        <a href="{{ url_for('admin_usuarios') }}"     class="sub-link{{ ' cur' if request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar'] else '' }}">Usuários</a>
-        <a href="{{ url_for('admin_solicitacoes') }}" class="sub-link{{ ' cur' if request.endpoint=='admin_solicitacoes' else '' }}">Solicitações</a>
-        <a href="{{ url_for('admin_multisites') }}"   class="sub-link{{ ' cur' if request.endpoint=='admin_multisites' else '' }}">Gestão Multisites</a>
-        <a href="{{ url_for('admin_releases') }}"     class="sub-link{{ ' cur' if request.endpoint in ['admin_releases','admin_release_download'] else '' }}">📦 Releases</a>
+      <!-- GRUPO: Configuração -->
+      {%- set g4_active = sec_cfg or sec_adm -%}
+      {% if session.get('user_perfil','').upper() in ('ADMIN','GESTOR','KEYUSER') %}
+      <hr class="nav-sep">
+      <div class="nav-group" data-group="config">
+        <button class="nav-group-btn{{ ' has-active' if g4_active else '' }}" onclick="toggleGroup('config')">
+          <span class="nav-group-icon">⚙️</span>
+          <span class="nav-group-label">Configuração</span>
+          <span class="nav-group-arrow">▶</span>
+        </button>
+        <div class="nav-items" id="grp-config">
+          <a href="{{ url_for('config_campos') }}" class="nav-section{{ ' active' if sec_cfg else '' }}">
+            <span class="nav-icon">⚙️</span><span>Config. de Campos</span>
+          </a>
+          {% if session.get('user_perfil','').upper() == 'ADMIN' %}
+          <a href="{{ url_for('admin_usuarios') }}" class="nav-section{{ ' active' if sec_adm else '' }}">
+            <span class="nav-icon">👥</span><span>Administração</span>
+          </a>
+          {% endif %}
+        </div>
       </div>
       {% endif %}
+
     </nav>
 
     <!-- Profile widget -->
@@ -364,7 +382,13 @@
         </div>
         <div class="sp-info">
           <span class="sp-name">{{ session.get('user_nome','') }}</span>
-          <span class="sp-role">{{ session.get('user_site','') }}</span>
+          <span class="sp-role">
+            {{ session.get('user_site','') }}
+            {% set _p = session.get('user_perfil','').upper() %}
+            {% if _p == 'KEYUSER' %}<span style="display:inline-block;background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:900;padding:1px 5px;border-radius:4px;margin-left:4px;text-transform:uppercase;letter-spacing:.3px;">Key User</span>{% endif %}
+            {% if _p == 'ADMIN' %}<span style="display:inline-block;background:#fee2e2;color:#b91c1c;font-size:9px;font-weight:900;padding:1px 5px;border-radius:4px;margin-left:4px;text-transform:uppercase;letter-spacing:.3px;">Admin</span>{% endif %}
+            {% if _p == 'GESTOR' %}<span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:9px;font-weight:900;padding:1px 5px;border-radius:4px;margin-left:4px;text-transform:uppercase;letter-spacing:.3px;">Gestor</span>{% endif %}
+          </span>
         </div>
         <span class="sp-dots">⋮</span>
       </div>
@@ -376,6 +400,9 @@
           🌐 Trocar Site
           <small style="display:block;font-size:10px;color:#9ca3af;font-weight:600;margin-top:1px;">Ativo: {{ session.get('user_site','—') }}</small>
         </button>
+        {% endif %}
+        {% if session.get('user_perfil','').upper() == 'ADMIN' %}
+        <a href="{{ url_for('admin_usuarios') }}" class="sp-item">⚙️ Administração</a>
         {% endif %}
         <hr class="sp-sep">
         <a href="{{ url_for('logout') }}" class="sp-item sp-item-red" hx-boost="false">🚪 Sair</a>
@@ -472,53 +499,109 @@ function abrirModal(id){ var el=document.getElementById(id); if(el) el.classList
 function fecharModal(id, e){ var el=document.getElementById(id); if(el) el.classList.remove('open'); }
 document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ document.querySelectorAll('.modal-overlay.open').forEach(function(m){ m.classList.remove('open'); }); } });
 
-/* ── Atualização da sidebar após partial swap ── */
+/* ── Grupos colapsáveis da sidebar ── */
+function toggleGroup(name) {
+  var items = document.getElementById('grp-' + name);
+  var btn   = items && items.previousElementSibling;
+  if (!items) return;
+  var isOpen = items.classList.contains('open');
+  items.classList.toggle('open', !isOpen);
+  if (btn) btn.classList.toggle('open', !isOpen);
+  // Salva estado no localStorage
+  try {
+    var state = JSON.parse(localStorage.getItem('navGroups') || '{}');
+    state[name] = !isOpen;
+    localStorage.setItem('navGroups', JSON.stringify(state));
+  } catch(e) {}
+}
+
+(function initNavGroups() {
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem('navGroups') || '{}'); } catch(e) {}
+
+  document.querySelectorAll('.nav-group').forEach(function(g) {
+    var name  = g.dataset.group;
+    var items = document.getElementById('grp-' + name);
+    var btn   = items && items.previousElementSibling;
+    var hasActive = items && items.querySelector('.nav-section.active');
+
+    // Abre se tem item ativo OU se estava aberto antes
+    var shouldOpen = hasActive || state[name] === true;
+    if (shouldOpen && items) {
+      items.classList.add('open');
+      if (btn) btn.classList.add('open');
+    }
+  });
+})();
+
+/* ── Atualização da sidebar após partial swap (HTMX) ── */
 (function(){
-  /* Mapa de prefixos de URL → seção */
-  var _map = [
-    { key:'oc',  test:function(p){ return p.startsWith('/ocorrencias')||p.startsWith('/nova-investigacao')||p==='/dashboard'||p.startsWith('/post/')||p.startsWith('/excluir/'); } },
-    { key:'an',  test:function(p){ return p.startsWith('/analise')||p==='/gerar_docx'; } },
-    { key:'anc', test:function(p){ return p.startsWith('/anc')||p.startsWith('/nova-anc'); } },
-    { key:'sh',  test:function(p){ return p.startsWith('/shift-handover'); } },
-    { key:'chv', test:function(p){ return p.startsWith('/chaves'); } },
-    { key:'arm', test:function(p){ return p.startsWith('/armarios'); } },
-    { key:'cam', test:function(p){ return p.startsWith('/cameras'); } },
-    { key:'adm', test:function(p){ return p.startsWith('/admin'); } },
+  /* Mapa path → grupo */
+  var _groupMap = [
+    { group:'registros',  test:function(p){ return p.startsWith('/ocorrencias')||p.startsWith('/nova-investigacao')||p==='/dashboard'||p.startsWith('/post/')||p.startsWith('/analise')||p.startsWith('/anc')||p.startsWith('/nova-anc')||p.startsWith('/shift-handover'); } },
+    { group:'patrimonial',test:function(p){ return p.startsWith('/chaves')||p.startsWith('/armarios')||p.startsWith('/achados')||p.startsWith('/site-af'); } },
+    { group:'seguranca',  test:function(p){ return p.startsWith('/portas-emergencia')||p.startsWith('/cameras'); } },
+    { group:'config',     test:function(p){ return p.startsWith('/config-campos')||p.startsWith('/admin'); } },
   ];
 
-  function _secAtual(path){
-    if(path==='/overview') return 'ov';
-    for(var i=0;i<_map.length;i++){ if(_map[i].test(path)) return _map[i].key; }
-    return null;
+  function _matchHref(elHref, path) {
+    try {
+      var lp = new URL(elHref, window.location.origin).pathname;
+      /* Match exato ou prefixo (mínimo 4 chars para evitar falsos positivos) */
+      if(lp === path) return true;
+      if(lp.length >= 4 && path.startsWith(lp)) return true;
+    } catch(e){}
+    return false;
   }
 
   function _navUpdate(){
     var path = window.location.pathname;
-    var sec  = _secAtual(path);
 
-    /* Atualiza classe active dos itens principais */
-    document.querySelectorAll('.nav-section[data-sec]').forEach(function(el){
-      el.classList.toggle('active', el.getAttribute('data-sec')===sec);
+    /* 1. Remove active de todos os itens */
+    document.querySelectorAll('.nav-section.active, .nav-direct.active').forEach(function(el){
+      el.classList.remove('active');
     });
 
-    /* Mostra/oculta sub-navs */
-    document.querySelectorAll('.sub-nav[data-sec]').forEach(function(el){
-      el.style.display = (el.getAttribute('data-sec')===sec) ? '' : 'none';
-    });
-
-    /* Atualiza classe cur dos sub-links */
-    document.querySelectorAll('.sub-link').forEach(function(el){
+    /* 2. Marca o item que corresponde à URL atual */
+    var activeGroup = null;
+    document.querySelectorAll('.nav-section, .nav-direct').forEach(function(el){
       var href = el.getAttribute('href');
       if(!href) return;
-      try {
-        var lp = new URL(href, window.location.origin).pathname;
-        el.classList.toggle('cur', lp===path);
-      } catch(e){}
+      if(_matchHref(href, path)){
+        el.classList.add('active');
+        /* Descobre qual grupo pai */
+        var grpEl = el.closest('.nav-group');
+        if(grpEl) activeGroup = grpEl.dataset.group;
+      }
+    });
+
+    /* 3. Gerencia grupos: abre o grupo ativo, mantém os outros como estão */
+    if(activeGroup){
+      var grpItems = document.getElementById('grp-' + activeGroup);
+      var grpBtn   = grpItems && grpItems.previousElementSibling;
+      if(grpItems && !grpItems.classList.contains('open')){
+        grpItems.classList.add('open');
+        if(grpBtn) grpBtn.classList.add('open');
+        /* Salva no localStorage */
+        try{
+          var state = JSON.parse(localStorage.getItem('navGroups')||'{}');
+          state[activeGroup] = true;
+          localStorage.setItem('navGroups', JSON.stringify(state));
+        }catch(e){}
+      }
+    }
+
+    /* 4. Atualiza has-active nos botões de grupo */
+    document.querySelectorAll('.nav-group').forEach(function(g){
+      var btn = g.querySelector('.nav-group-btn');
+      if(!btn) return;
+      var hasActive = !!g.querySelector('.nav-section.active');
+      btn.classList.toggle('has-active', hasActive);
     });
   }
 
   document.addEventListener('DOMContentLoaded', _navUpdate);
-  document.addEventListener('htmx:afterSettle', _navUpdate);
+  document.addEventListener('htmx:afterSettle',  _navUpdate);
   document.addEventListener('htmx:historyRestore', _navUpdate);
 })();
 </script>

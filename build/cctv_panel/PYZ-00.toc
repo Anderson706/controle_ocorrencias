@@ -521,6 +521,10 @@
   ('_threading_local',
    'C:\\Users\\deivimar\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\_threading_local.py',
    'PYMODULE'),
+  ('achados_blueprint',
+   'C:\\Users\\deivimar\\OneDrive - '
+   'DPDHL\\Documents\\GitHub\\controle_ocorrencias\\achados_blueprint.py',
+   'PYMODULE'),
   ('altgraph',
    'C:\\Users\\deivimar\\OneDrive - '
    'DPDHL\\Documents\\GitHub\\controle_ocorrencias\\venv\\Lib\\site-packages\\altgraph\\__init__.py',
@@ -3393,6 +3397,10 @@
   ('platform',
    'C:\\Users\\deivimar\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\platform.py',
    'PYMODULE'),
+  ('portas_emergencia_blueprint',
+   'C:\\Users\\deivimar\\OneDrive - '
+   'DPDHL\\Documents\\GitHub\\controle_ocorrencias\\portas_emergencia_blueprint.py',
+   'PYMODULE'),
   ('pprint',
    'C:\\Users\\deivimar\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\pprint.py',
    'PYMODULE'),
@@ -4657,6 +4665,10 @@
    'PYMODULE'),
   ('site',
    'C:\\Users\\deivimar\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\site.py',
+   'PYMODULE'),
+  ('site_af_blueprint',
+   'C:\\Users\\deivimar\\OneDrive - '
+   'DPDHL\\Documents\\GitHub\\controle_ocorrencias\\site_af_blueprint.py',
    'PYMODULE'),
   ('smtplib',
    'C:\\Users\\deivimar\\AppData\\Local\\Programs\\Python\\Python314\\Lib\\smtplib.py',

@@ -1,0 +1,99 @@
+{% extends "base_app.html" %}
+{% block page_title %}Tratar NC | {{ porta.codigo }}{% endblock %}
+{% block topbar_title %}🔧 Tratativa de Não Conformidade{% endblock %}
+{% block topbar_subtitle %}{{ porta.codigo }} — {{ porta.localizacao }}{% endblock %}
+{% block topbar_actions %}
+  {% include 'pe_nav.html' %}
+  <a href="{{ url_for('pe.historico', porta_id=porta.id) }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:18px 24px; display:flex; align-items:center; gap:12px; }
+  .form-card-hdr-bar{ width:6px; height:28px; background:#ffcc00; border-radius:3px; flex-shrink:0; }
+  .form-card-hdr-title{ color:#fff; font-size:16px; font-weight:900; }
+  .form-card-hdr-sub{ color:rgba(255,255,255,.7); font-size:12px; margin-top:2px; }
+  .form-card-body{ padding:24px; }
+  .sec-hdr{ font-size:11px; font-weight:900; color:var(--dhl-red); text-transform:uppercase; letter-spacing:.5px; border-bottom:1.5px solid var(--dhl-red); padding-bottom:4px; margin:20px 0 14px; }
+  .sec-hdr:first-child{ margin-top:0; }
+  .form-actions{ display:flex; gap:10px; margin-top:20px; padding-top:20px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .content{ max-width:800px; margin:0 auto; width:100%; }
+  .item-check{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; border:1px solid var(--line); background:#fafafa; font-size:13px; font-weight:700; }
+  .item-check.ok{ border-color:#bbf7d0; background:#f0fdf4; color:#146c43; }
+  .item-check.nok{ border-color:#fecaca; background:#fff5f5; color:var(--dhl-red); }
+  .checks-grid{ display:flex; flex-direction:column; gap:6px; }
+</style>
+
+<div class="form-card">
+  <div class="form-card-hdr">
+    <div class="form-card-hdr-bar"></div>
+    <div>
+      <div class="form-card-hdr-title">🔧 TRATATIVA DE NÃO CONFORMIDADE</div>
+      <div class="form-card-hdr-sub">Descreva a ação tomada para resolver a não conformidade</div>
+    </div>
+  </div>
+  <div class="form-card-body">
+
+    <div class="sec-hdr">📋 Resumo do Checklist</div>
+    <div class="row">
+      <div class="field">
+        <label>Porta</label>
+        <input type="text" value="{{ porta.codigo }} — {{ porta.localizacao }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+      </div>
+      <div class="field">
+        <label>Data da inspeção</label>
+        <input type="text" value="{{ ck.data_checklist.strftime('%d/%m/%Y %H:%M') if ck.data_checklist else '—' }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+      </div>
+      <div class="field">
+        <label>Inspetor</label>
+        <input type="text" value="{{ ck.inspetor }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+      </div>
+    </div>
+
+    <div class="sec-hdr">❌ Itens Reprovados</div>
+    <div class="checks-grid">
+      {% set itens = [
+        (ck.porta_desobstruida, '🚪 Porta desobstruída'),
+        (ck.abre_normalmente,   '🔓 Abre normalmente'),
+        (ck.sinalizacao_ok,     '🔆 Sinalização OK'),
+        (ck.iluminacao_ok,      '💡 Iluminação de emergência OK'),
+        (ck.alarme_ok,          '🔔 Alarme associado funcional'),
+      ] %}
+      {% for ok, label in itens %}
+      <div class="item-check {{ 'ok' if ok else 'nok' }}">
+        <span>{{ '✔' if ok else '✘' }}</span>
+        <span>{{ label }}</span>
+        <span style="margin-left:auto;font-size:12px;">{{ 'CONFORME' if ok else 'NÃO CONFORME' }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if ck.observacao %}
+    <div class="sec-hdr">📝 Observação Original</div>
+    <div style="padding:12px 16px;background:#fafafa;border:1px solid var(--line);border-radius:10px;font-size:13px;color:var(--text);">
+      {{ ck.observacao }}
+    </div>
+    {% endif %}
+
+    <form method="post" style="margin-top:0;">
+      <div class="sec-hdr">✅ Ação Tomada</div>
+      <div class="field">
+        <label>Responsável pela tratativa</label>
+        <input type="text" value="{{ user_nome }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+      </div>
+      <div class="field">
+        <label>Descreva a ação tomada para resolver a não conformidade *</label>
+        <textarea name="conclusao" rows="4" required
+                  placeholder="Ex: Porta desobstruída, sinalização substituída, manutenção acionada..."></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-red">✔ Confirmar Tratativa</button>
+        <a href="{{ url_for('pe.historico', porta_id=porta.id) }}" class="btn btn-soft">Cancelar</a>
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

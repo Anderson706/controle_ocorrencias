@@ -109,14 +109,19 @@ def login_required_chaves(f):
 
 
 def _is_privileged():
-    """Retorna True se o usuário for ADMIN ou SUPERVISOR."""
-    return (session.get("user_perfil") or "").upper() in ("ADMIN", "SUPERVISOR")
+    """Retorna True se o usuário for ADMIN (acesso cross-site total no módulo de chaves).
+    GESTOR usa site próprio; KEYUSER usa site próprio."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN",)
+
+def _is_can_manage():
+    """Retorna True para perfis que podem gerenciar chaves (inclui KEYUSER)."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN", "GESTOR", "KEYUSER")
 
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not _is_privileged():
-            flash("Acesso restrito a administradores e supervisores.", "danger")
+        if not _is_can_manage():
+            flash("Acesso restrito a administradores, gestores e key users.", "danger")
             return redirect(url_for("chaves.meu_claviculario"))
         return f(*args, **kwargs)
     return decorated
@@ -141,8 +146,8 @@ def meu_claviculario():
     is_admin = _is_privileged()
 
     if request.method == "POST":
-        if not is_admin:
-            flash("Apenas administradores e supervisores podem adicionar chaves ao claviculário.", "danger")
+        if not _is_can_manage():
+            flash("Apenas administradores, gestores e key users podem adicionar chaves ao claviculário.", "danger")
             return redirect(url_for("chaves.meu_claviculario"))
 
         numero_chave = request.form.get("numero_chave", "").strip()
@@ -221,6 +226,7 @@ def meu_claviculario():
     return render_template(
         "chaves/meu_claviculario.html",
         chaves=chaves, resumo=resumo, site=site, is_admin=is_admin,
+        can_manage=_is_can_manage(),
         site_filtro=site_filtro, sites_lista=sites_lista,
     )
 

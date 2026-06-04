@@ -1,16 +1,23 @@
 {% extends "base_app.html" %}
 {% block page_title %}Dashboard · Análises | CCTV Control Panel{% endblock %}
 
-{% endblock %}
-
 {% block topbar_title %}Dashboard · Análises Investigativas{% endblock %}
 {% block topbar_subtitle %}Visão executiva consolidada das análises operacionais{% endblock %}
 {% block topbar_actions %}
-<a href="{{ url_for('analises') }}" class="btn btn-red">← Controle de Análises</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('analise_investigativa') }}" class="adm-tab">🔍 Nova Análise</a>
+    <a href="{{ url_for('analises') }}" class="adm-tab">📋 Controle</a>
+    <a href="{{ url_for('dashboard_analise') }}" class="adm-tab active">📊 Dashboard</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .hero{ position:relative; overflow:hidden; background:#1f2937; color:#fff; border-radius:24px; padding:24px 26px; box-shadow:var(--shadow); margin-bottom:20px; }
   .hero::before{ content:""; position:absolute; inset:0; background:radial-gradient(circle at 85% 18%, rgba(255,204,0,.18), transparent 20%),radial-gradient(circle at 10% 80%, rgba(212,5,17,.15), transparent 20%); pointer-events:none; }
   .hero-inner{ position:relative; z-index:1; display:flex; justify-content:space-between; gap:20px; align-items:flex-start; flex-wrap:wrap; }
@@ -84,7 +91,7 @@
     <h3>Filtros de análise</h3>
     <span class="section-chip">Consulta dinâmica</span>
   </div>
-  <form method="GET" hx-boost="false">
+  <form method="GET" data-autofilter hx-boost="false">
     <div class="filters{{ ' has-site' if is_admin else '' }}">
       <input type="date" name="data_inicial" value="{{ filtros.data_inicial }}" title="Data inicial">
       <input type="date" name="data_final"   value="{{ filtros.data_final  }}" title="Data final">
@@ -110,7 +117,7 @@
     </div>
     <div class="filter-actions">
       <button class="btn btn-red" type="submit">Aplicar filtros</button>
-      <a class="btn btn-dark" href="{{ url_for('dashboard_analise') }}">Limpar</a>
+      <a class="btn btn-dark" href="{{ url_for('dashboard_analise') }}" data-clear-filter>Limpar</a>
     </div>
   </form>
 </div>

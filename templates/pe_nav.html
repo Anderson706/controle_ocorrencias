@@ -1,0 +1,36 @@
+{# pe_nav.html — tabs de navegação do módulo Gestão de Alarmes #}
+<style>
+  .pe-tabs{ display:flex; gap:4px; align-items:center; }
+  .pe-tab{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 14px; border-radius:20px;
+    font-size:12px; font-weight:800; text-decoration:none;
+    border:1.5px solid transparent;
+    color:var(--muted); background:transparent;
+    transition:all .15s; white-space:nowrap; letter-spacing:.1px;
+  }
+  .pe-tab:hover{ background:#f3f4f6; color:var(--text); border-color:#d1d5db; }
+  .pe-tab.active{
+    background:#d40511; color:#ffcc00;
+    border-color:#b1030d;
+    box-shadow:0 2px 6px rgba(212,5,17,.25);
+  }
+  .pe-tab .pe-tab-icon{ font-size:14px; line-height:1; }
+  .pe-sep{ width:1px; height:22px; background:var(--line); margin:0 4px; }
+</style>
+
+<div class="pe-tabs">
+  <a href="{{ url_for('pe.painel') }}"
+     class="pe-tab{{ ' active' if request.endpoint in ['pe.painel','pe.nova_porta','pe.portas_lote','pe.checklist','pe.historico','pe.concluir_checklist'] else '' }}">
+    <span class="pe-tab-icon">🚪</span> Portas
+  </a>
+  <a href="{{ url_for('pe.alarmes') }}"
+     class="pe-tab{{ ' active' if request.endpoint in ['pe.alarmes','pe.novo_alarme'] else '' }}">
+    <span class="pe-tab-icon">🔔</span> Disparos de Alarme
+  </a>
+  <a href="{{ url_for('pe.botao_panico') }}"
+     class="pe-tab{{ ' active' if request.endpoint in ['pe.botao_panico','pe.novo_botao_panico'] else '' }}">
+    <span class="pe-tab-icon">🚨</span> Botões de Pânico
+  </a>
+</div>
+<div class="pe-sep"></div>

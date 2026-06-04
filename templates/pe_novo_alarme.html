@@ -1,0 +1,160 @@
+{% extends "base_app.html" %}
+{% block page_title %}Novo Disparo de Alarme | Portas de Emergência{% endblock %}
+{% block topbar_title %}🔔 Registrar Disparo de Alarme{% endblock %}
+{% block topbar_subtitle %}Registro operacional de acionamento, monitoramento e tratativas{% endblock %}
+{% block topbar_actions %}
+  {% include 'pe_nav.html' %}
+  <a href="{{ url_for('pe.alarmes') }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:18px 24px; display:flex; align-items:center; gap:12px; }
+  .form-card-hdr-bar{ width:6px; height:28px; background:#ffcc00; border-radius:3px; flex-shrink:0; }
+  .form-card-hdr-title{ color:#fff; font-size:16px; font-weight:900; }
+  .form-card-hdr-sub{ color:rgba(255,255,255,.7); font-size:12px; margin-top:2px; }
+  .form-card-body{ padding:24px; }
+  .sec-hdr{ font-size:11px; font-weight:900; color:var(--dhl-red); text-transform:uppercase; letter-spacing:.5px; border-bottom:1.5px solid var(--dhl-red); padding-bottom:4px; margin:20px 0 14px; }
+  .sec-hdr:first-child{ margin-top:0; }
+  .form-actions{ display:flex; gap:10px; margin-top:20px; padding-top:20px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .content{ max-width:900px; margin:0 auto; width:100%; }
+  .check-row{ display:flex; gap:24px; flex-wrap:wrap; }
+  .check-item{ display:flex; align-items:center; gap:10px; cursor:pointer; font-size:14px; font-weight:700; color:var(--text); }
+  .check-item input[type=checkbox]{ width:18px; height:18px; accent-color:var(--dhl-red); cursor:pointer; flex-shrink:0; }
+</style>
+
+<div class="form-card">
+  <div class="form-card-hdr">
+    <div class="form-card-hdr-bar"></div>
+    <div>
+      <div class="form-card-hdr-title">🔔 REGISTRAR DISPARO DE ALARME</div>
+      <div class="form-card-hdr-sub">Preencha todos os campos obrigatórios (*)</div>
+    </div>
+  </div>
+  <div class="form-card-body">
+    <form method="post">
+
+      <div class="sec-hdr">📅 Data e Hora</div>
+      <div class="row">
+        <div class="field">
+          <label>Data do disparo *</label>
+          <input type="date" name="data_disparo" required>
+        </div>
+        <div class="field">
+          <label>Hora do disparo *</label>
+          <input type="time" name="hora_disparo" required>
+        </div>
+        <div class="field">
+          <label>Hora ativado</label>
+          <input type="time" name="hora_ativado">
+        </div>
+        <div class="field">
+          <label>Hora desativado</label>
+          <input type="time" name="hora_desativado">
+        </div>
+      </div>
+
+      <div class="sec-hdr">📍 Localização</div>
+      <div class="row">
+        <div class="field">
+          <label>Localização *</label>
+          <select name="localizacao" required>
+            <option value="">Selecione a localização</option>
+            {% for l in locais %}
+            <option value="{{ l }}">{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Setor</label>
+          <select name="setor">
+            <option value="">Selecione o setor</option>
+            {% for s in setores %}
+            <option value="{{ s }}">{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Site</label>
+          <input type="text" value="{{ user_site }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+        </div>
+      </div>
+
+      <div class="sec-hdr">⚙️ Detalhes do Alarme</div>
+      <div class="row">
+        <div class="field">
+          <label>Tipo de alarme *</label>
+          <select name="tipo_alarme" required>
+            <option value="">Selecione</option>
+            <option value="INCÊNDIO">Incêndio</option>
+            <option value="EMERGÊNCIA">Emergência</option>
+            <option value="EVACUAÇÃO">Evacuação</option>
+            <option value="SENSOR">Sensor</option>
+            <option value="FALSO ALARME">Falso alarme</option>
+            <option value="TESTE">Teste</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Motivo identificado</label>
+          <input type="text" name="motivo" placeholder="Teste, falha, fumaça...">
+        </div>
+        <div class="field">
+          <label>Contato monitoramento</label>
+          <input type="text" name="contato_monitoramento" placeholder="Nome / telefone / central">
+        </div>
+      </div>
+
+      <div class="sec-hdr">👤 Responsável</div>
+      <div class="row">
+        <div class="field">
+          <label>Responsável</label>
+          <input type="text" value="{{ user_nome }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+        </div>
+        <div class="field">
+          <label>Turno</label>
+          <select name="turno">
+            <option value="ADM">ADM</option>
+            <option value="TURNO A">TURNO A</option>
+            <option value="TURNO B">TURNO B</option>
+            <option value="TURNO C">TURNO C</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select name="status">
+            <option value="EM ANÁLISE">Em análise</option>
+            <option value="TRATADO">Tratado</option>
+            <option value="FALSO ALARME">Falso alarme</option>
+            <option value="PENDENTE">Pendente</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sec-hdr">✅ Ações Realizadas</div>
+      <div class="check-row" style="padding:4px 0 8px;">
+        <label class="check-item">
+          <input type="checkbox" name="houve_evacuacao"> Houve evacuação
+        </label>
+        <label class="check-item">
+          <input type="checkbox" name="acionado_bombeiro"> Bombeiro acionado
+        </label>
+        <label class="check-item">
+          <input type="checkbox" name="acionado_seguranca"> Segurança acionada
+        </label>
+      </div>
+
+      <div class="sec-hdr">📝 Observação</div>
+      <div class="field">
+        <label>Descreva a ocorrência, causa, ação tomada e pendências</label>
+        <textarea name="observacao" rows="4" placeholder="Descreva a ocorrência, causa, ação tomada e pendências."></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-red">Salvar disparo de alarme</button>
+        <a href="{{ url_for('pe.alarmes') }}" class="btn btn-soft">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

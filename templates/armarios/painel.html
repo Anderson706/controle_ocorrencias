@@ -3,15 +3,25 @@
 {% block topbar_title %}🗄️ Gestão de Armários{% endblock %}
 {% block topbar_subtitle %}Controle de armários e chaves reserva — {{ site }}{% endblock %}
 {% block topbar_actions %}
-  <button type="button" class="btn btn-soft btn-sm" onclick="document.getElementById('filtro-export-arm').classList.toggle('open')">📊 Exportar Relatório</button>
-  <a href="{{ url_for('armarios.chave_reserva') }}" class="btn btn-dark">🔐 Chave Reserva</a>
-  {% if is_admin %}
-  <button class="btn btn-red" onclick="abrirModalLote()">＋ Criar Armários</button>
+  <div class="adm-tabs">
+    <a href="{{ url_for('armarios.painel') }}" class="adm-tab active">🗄️ Painel</a>
+    <a href="{{ url_for('armarios.chave_reserva') }}" class="adm-tab">🔐 Chave Reserva</a>
+    <a href="{{ url_for('armarios.historico') }}" class="adm-tab">📋 Histórico</a>
+  </div>
+  <div class="adm-sep"></div>
+  <button type="button" class="btn btn-soft btn-sm" onclick="document.getElementById('filtro-export-arm').classList.toggle('open')">📊 Exportar</button>
+  {% if can_manage %}
+  <button class="btn btn-red btn-sm" onclick="abrirModalLote()">＋ Criar Armários</button>
   {% endif %}
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .content{ max-width:1600px; margin:0 auto; }
 
   /* KPI */
@@ -157,7 +167,7 @@
 
 <!-- Filtros -->
 <div class="card" style="padding:16px 20px;">
-  <form method="GET" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;" hx-boost="false">
+  <form method="GET" data-autofilter style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;" hx-boost="false">
     {% if is_admin %}
     <div class="filter-field">
       <label>Site</label>
@@ -188,7 +198,7 @@
     </div>
     <button type="submit" class="btn btn-soft btn-sm">🔍 Filtrar</button>
     {% if bloco_filtro or status_filtro or site_filtro %}
-    <a href="{{ url_for('armarios.painel') }}" class="btn btn-soft btn-sm">✕ Limpar</a>
+    <a href="{{ url_for('armarios.painel') }}" class="btn btn-soft btn-sm" data-clear-filter>✕ Limpar</a>
     {% endif %}
   </form>
 </div>
@@ -200,12 +210,14 @@
     <span class="section-chip">{{ armarios|length }} resultado{{ 's' if armarios|length != 1 else '' }}</span>
   </div>
   {% if armarios %}
+  {% if can_manage %}
   <form method="POST" action="{{ url_for('armarios.excluir_lote') }}" id="form-lote-arm" hx-boost="false">
+  {% endif %}
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          {% if is_admin %}<th style="width:36px"><input type="checkbox" class="chk-sel" id="chk-all-arm" onchange="selecionarTodos('tb-arm','chk-all-arm','bulk-arm')"></th>{% endif %}
+          {% if can_manage %}<th style="width:36px"><input type="checkbox" class="chk-sel" id="chk-all-arm" onchange="selecionarTodos('tb-arm','chk-all-arm','bulk-arm')"></th>{% endif %}
           <th>Nº Armário</th>
           <th>Bloco</th>
           {% if is_admin %}<th>Site</th>{% endif %}
@@ -220,7 +232,7 @@
       <tbody id="tb-arm">
         {% for arm in armarios %}
         <tr>
-          {% if is_admin %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ arm.id }}" onchange="atualizarBulk('tb-arm','chk-all-arm','bulk-arm')"></td>{% endif %}
+          {% if can_manage %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ arm.id }}" onchange="atualizarBulk('tb-arm','chk-all-arm','bulk-arm')"></td>{% endif %}
           <td><strong>{{ arm.numero }}</strong></td>
           <td>{{ arm.bloco or '—' }}</td>
           {% if is_admin %}<td style="color:var(--muted);font-size:12px;">{{ arm.site or '—' }}</td>{% endif %}
@@ -244,22 +256,22 @@
             {% endif %}
           </td>
           <td>
-            <button class="btn btn-soft btn-sm" onclick="verDetalhe({{ arm.id }})">👁 Detalhes</button>
+            <button type="button" class="btn btn-soft btn-sm" onclick="verDetalhe({{ arm.id }})">👁 Detalhes</button>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {% if is_admin %}</form>{% endif %}
+  {% if can_manage %}</form>{% endif %}
   {% else %}
   <div class="card">
-    <p class="empty">Nenhum armário encontrado para os filtros selecionados.{% if is_admin %} Use o botão <strong>Criar Armários</strong> para adicionar.{% endif %}</p>
+    <p class="empty">Nenhum armário encontrado para os filtros selecionados.{% if can_manage %} Use o botão <strong>Criar Armários</strong> para adicionar.{% endif %}</p>
   </div>
   {% endif %}
 </div>
 
-{% if is_admin %}
+{% if can_manage %}
 <div class="bulk-bar" id="bulk-arm">
   <span class="bulk-count"><span id="bulk-arm-cnt">0</span> selecionado(s)</span>
   <button type="button" class="btn btn-red btn-sm"
@@ -333,8 +345,8 @@
   </div>
 </div>
 
-<!-- Modal: Editar Colaborador -->
-{% if is_admin %}
+<!-- Modal: Editar Colaborador — todos os usuários logados -->
+{% if true %}
 <div class="modal-overlay" id="modalEditarColab" onclick="fecharModal('modalEditarColab', event)">
   <div class="modal-box" onclick="event.stopPropagation()" style="max-width:440px">
     <div class="modal-head">
@@ -364,7 +376,7 @@
 {% endif %}
 
 <!-- Modal: Criar em Lote -->
-{% if is_admin %}
+{% if can_manage %}
 <div class="modal-overlay" id="modalLote" onclick="fecharModal('modalLote', event)">
   <div class="modal-box" onclick="event.stopPropagation()">
     <div class="modal-head">
@@ -552,12 +564,13 @@
     mostrarLoading();
   });
 
-  const IS_ADMIN    = {{ 'true' if is_admin else 'false' }};
-  const URL_ATRIBUIR       = "{{ url_for('armarios.atribuir',          arm_id=0) }}".replace(/\/0$/, '/');
-  const URL_LIBERAR        = "{{ url_for('armarios.liberar',           arm_id=0) }}".replace(/\/0$/, '/');
-  const URL_EXCLUIR        = "{{ url_for('armarios.excluir',           arm_id=0) }}".replace(/\/0$/, '/');
-  const URL_EDITAR_COLAB   = "{{ url_for('armarios.editar_colaborador',arm_id=0) }}".replace(/\/0$/, '/');
-  const URL_TERMO          = "{{ url_for('armarios.termo_atribuicao',  arm_id=0) }}".replace(/\/0$/, '/');
+  var IS_ADMIN    = {{ 'true' if is_admin else 'false' }};
+  var CAN_MANAGE  = {{ 'true' if can_manage else 'false' }};
+  var URL_ATRIBUIR       = "{{ url_for('armarios.atribuir',          arm_id=0) }}".replace(/\/0$/, '/');
+  var URL_LIBERAR        = "{{ url_for('armarios.liberar',           arm_id=0) }}".replace(/\/0$/, '/');
+  var URL_EXCLUIR        = "{{ url_for('armarios.excluir',           arm_id=0) }}".replace(/\/0$/, '/');
+  var URL_EDITAR_COLAB   = "{{ url_for('armarios.editar_colaborador',arm_id=0) }}".replace(/\/0$/, '/');
+  var URL_TERMO          = "{{ url_for('armarios.termo_atribuicao',  arm_id=0) }}".replace(/\/0$/, '/');
 
   function verDetalhe(armId){
     abrirModal('modalDetalhe');
@@ -607,22 +620,22 @@
                       style="display:inline-flex;align-items:center;gap:6px;padding:8px 13px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:10px;font-size:12px;font-weight:800;text-decoration:none;cursor:pointer;">📄 Baixar Termo</a>`;
         }
 
-        if(IS_ADMIN){
-          if(d.status === 'LIVRE'){
-            html += `<button onclick="fecharModal('modalDetalhe');abrirAtribuir(${d.id},'${d.numero}')"
-                       style="padding:8px 13px;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">👤 Atribuir</button>`;
-          } else {
-            html += `<button onclick="fecharModal('modalDetalhe');abrirEditarColab(${d.id},'${d.numero}','${d.colaborador_nome}','${d.colaborador_cpf}')"
-                       style="padding:8px 13px;background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">✏️ Editar</button>`;
-            html += `<form method="POST" action="${URL_LIBERAR}${d.id}" style="display:inline;" hx-boost="false" onsubmit="mostrarLoading()">
-                       <button type="submit" style="padding:8px 13px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">↩ Liberar</button>
-                     </form>`;
-          }
-          if(d.status === 'LIVRE' && !d.chave_retirada){
-            html += `<form method="POST" action="${URL_EXCLUIR}${d.id}" style="display:inline;" hx-boost="false" onsubmit="mostrarLoading()">
-                       <button type="submit" style="padding:8px 13px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">🗑 Remover</button>
-                     </form>`;
-          }
+        // Atribuir / Liberar / Editar — todos os usuários logados
+        if(d.status === 'LIVRE'){
+          html += `<button onclick="fecharModal('modalDetalhe');abrirAtribuir(${d.id},'${d.numero}')"
+                     style="padding:8px 13px;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">👤 Atribuir</button>`;
+        } else {
+          html += `<button onclick="fecharModal('modalDetalhe');abrirEditarColab(${d.id},'${d.numero}','${d.colaborador_nome}','${d.colaborador_cpf}')"
+                     style="padding:8px 13px;background:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">✏️ Editar</button>`;
+          html += `<form method="POST" action="${URL_LIBERAR}${d.id}" style="display:inline;" hx-boost="false" onsubmit="mostrarLoading()">
+                     <button type="submit" style="padding:8px 13px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">↩ Liberar</button>
+                   </form>`;
+        }
+        // Remover — apenas gestores e key users
+        if(CAN_MANAGE && d.status === 'LIVRE' && !d.chave_retirada){
+          html += `<form method="POST" action="${URL_EXCLUIR}${d.id}" style="display:inline;" hx-boost="false" onsubmit="mostrarLoading()">
+                     <button type="submit" style="padding:8px 13px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">🗑 Remover</button>
+                   </form>`;
         }
 
         html += `</div>`;

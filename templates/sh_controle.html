@@ -3,12 +3,23 @@
 {% block topbar_title %}🔄 Controle — Shift Handover{% endblock %}
 {% block topbar_subtitle %}Histórico e acompanhamento de passagens de turno{% endblock %}
 {% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('sh_index') }}" class="adm-tab">🔄 Nova Passagem</a>
+    <a href="{{ url_for('sh_controle') }}" class="adm-tab active">📋 Controle</a>
+    <a href="{{ url_for('sh_dashboard') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
+  <div class="adm-sep"></div>
   <a href="{{ url_for('sh_index') }}" class="btn btn-red btn-sm">+ Nova Passagem</a>
   <a href="{{ url_for('sh_excel') }}" class="btn btn-soft btn-sm" hx-boost="false">📊 Exportar Excel</a>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:24px; }
   .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px 20px; box-shadow:var(--shadow); border-left:6px solid var(--dhl-yellow); display:flex; flex-direction:column; gap:6px; position:relative; overflow:hidden; }
   .kpi-card::after{ content:""; position:absolute; right:-16px; top:-16px; width:72px; height:72px; border-radius:50%; background:rgba(255,204,0,.12); }
@@ -94,7 +105,7 @@
 <!-- Filtros -->
 <div class="filter-card">
   <div class="filter-title"><span></span> Filtros</div>
-  <form method="GET" action="{{ url_for('sh_controle') }}" hx-boost="false">
+  <form method="GET" data-autofilter action="{{ url_for('sh_controle') }}" hx-boost="false">
     <div class="filter-row">
       <div class="filter-group"><label>Data Inicial</label><input type="date" name="data_inicial" value="{{ filtros['data_inicial'] }}"></div>
       <div class="filter-group"><label>Data Final</label><input type="date" name="data_final" value="{{ filtros['data_final'] }}"></div>
@@ -129,7 +140,7 @@
       </div>
       <div class="filter-actions">
         <button type="submit" class="btn btn-yellow">Filtrar</button>
-        <a href="{{ url_for('sh_controle') }}" class="btn btn-dark">Limpar</a>
+        <a href="{{ url_for('sh_controle') }}" class="btn btn-dark" data-clear-filter>Limpar</a>
       </div>
     </div>
   </form>
@@ -167,7 +178,7 @@
           <td>{{ r.responsavel_saida }}</td>
           <td>{{ r.responsavel_entrada }}</td>
           <td style="text-align:right;">
-            <button type="button" class="btn btn-yellow btn-sm" onclick="abrirModal({{ r.id }})">Detalhes</button>
+            <button type="button" class="btn btn-yellow btn-sm" onclick="abrirSHModal({{ r.id }})">Detalhes</button>
           </td>
         </tr>
         {% else %}
@@ -192,14 +203,14 @@
         <h3 id="m-titulo">Passagem</h3>
         <span id="m-badge" class="badge badge-muted"></span>
       </div>
-      <button class="sh-modal-close" onclick="fecharModal()">&times;</button>
+      <button class="sh-modal-close" onclick="fecharSHModal()">&times;</button>
     </div>
     <div class="sh-modal-body" id="m-body">
       <div style="text-align:center;padding:40px;color:var(--muted);">Carregando...</div>
     </div>
     <div class="sh-modal-foot">
       <div id="m-actions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-      <button class="btn btn-dark btn-sm" onclick="fecharModal()">Fechar</button>
+      <button class="btn btn-dark btn-sm" onclick="fecharSHModal()">Fechar</button>
     </div>
   </div>
 </div>
@@ -207,76 +218,82 @@
 
 {% block page_scripts %}
 <script>
-const _ROWS=[]; document.querySelectorAll('tbody tr').forEach(r=>_ROWS.push(r));
-const PER=20; let _page=0;
-function _render(){
-  const total=_ROWS.length, pages=Math.max(1,Math.ceil(total/PER));
-  _ROWS.forEach((r,i)=>{ r.style.display=(i>=_page*PER&&i<(_page+1)*PER)?'':'none'; });
-  document.getElementById('pager-info').textContent=total?`Página ${_page+1} de ${pages} (${total} registros)`:'0 registros';
-  document.getElementById('pager-prev').disabled=_page===0;
-  document.getElementById('pager-next').disabled=_page>=pages-1;
-}
-function pagerPrev(){ if(_page>0){_page--;_render();} }
-function pagerNext(){ const p=Math.ceil(_ROWS.length/PER); if(_page<p-1){_page++;_render();} }
-_render();
+(function(){
+  var _ROWS=[]; document.querySelectorAll('tbody tr').forEach(function(r){_ROWS.push(r);});
+  var PER=10, _page=0;
+  function _render(){
+    var total=_ROWS.length, pages=Math.max(1,Math.ceil(total/PER));
+    _ROWS.forEach(function(r,i){ r.style.display=(i>=_page*PER&&i<(_page+1)*PER)?'':'none'; });
+    document.getElementById('pager-info').textContent=total?'Página '+(_page+1)+' de '+pages+' ('+total+' registros)':'0 registros';
+    document.getElementById('pager-prev').disabled=_page===0;
+    document.getElementById('pager-next').disabled=_page>=pages-1;
+  }
+  window.pagerPrev=function(){ if(_page>0){_page--;_render();} };
+  window.pagerNext=function(){ var p=Math.ceil(_ROWS.length/PER); if(_page<p-1){_page++;_render();} };
+  _render();
 
-const _USER_NOME={{ session.get('user_nome','')|tojson }};
-const _USER_PERF={{ session.get('user_perfil','')|tojson }};
-const _IS_ADMIN=['ADMIN','Admin','admin'].includes(_USER_PERF);
+  var _USER_NOME={{ session.get('user_nome','')|tojson }};
+  var _USER_PERF={{ session.get('user_perfil','')|tojson }};
+  var _IS_ADMIN=['ADMIN','Admin','admin'].includes(_USER_PERF);
 
-function _statusClass(s){ return s==='FINALIZADO'?'badge-ok':s==='EM ACOMPANHAMENTO'?'badge-warn':'badge-danger'; }
-function _prioClass(p){ return p==='CRITICA'?'badge-danger':p==='ALTA'?'badge-warn':'badge-muted'; }
-function _sigHtml(src,nome,label){
-  return `<div class="sig-card"><h4>${label}</h4>${src?`<div class="sig-preview"><img src="${src}"></div>`:`<div class="sig-pending">Pendente</div>`}<div class="sig-line"></div><div class="sig-label">${nome}</div></div>`;
-}
-function _imgsHtml(d){
-  const imgs=[d.imagem_1,d.imagem_2,d.imagem_3,d.imagem_4].filter(Boolean);
-  if(!imgs.length) return '';
-  return `<div class="section-label">Imagens</div><div class="img-grid">${imgs.map(s=>`<div class="img-item"><img src="${s}"></div>`).join('')}</div>`;
-}
+  function _statusClass(s){ return s==='FINALIZADO'?'badge-ok':s==='EM ACOMPANHAMENTO'?'badge-warn':'badge-danger'; }
+  function _prioClass(p){ return p==='CRITICA'?'badge-danger':p==='ALTA'?'badge-warn':'badge-muted'; }
+  function _sigHtml(src,nome,label){
+    return '<div class="sig-card"><h4>'+label+'</h4>'
+      +(src?'<div class="sig-preview"><img src="'+src+'"></div>':'<div class="sig-pending">Pendente</div>')
+      +'<div class="sig-line"></div><div class="sig-label">'+nome+'</div></div>';
+  }
+  function _imgsHtml(d){
+    var imgs=[d.imagem_1,d.imagem_2,d.imagem_3,d.imagem_4].filter(Boolean);
+    if(!imgs.length) return '';
+    return '<div class="section-label">Imagens</div><div class="img-grid">'
+      +imgs.map(function(s){return '<div class="img-item"><img src="'+s+'"></div>';}).join('')
+      +'</div>';
+  }
 
-function abrirModal(id){
-  document.getElementById('modalDetalhe').classList.add('active');
-  document.getElementById('m-titulo').textContent='Passagem #'+id;
-  document.getElementById('m-badge').className='badge badge-muted';
-  document.getElementById('m-badge').textContent='';
-  document.getElementById('m-actions').innerHTML='';
-  document.getElementById('m-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted);">Carregando...</div>';
-  fetch('/shift-handover/'+id+'/detalhe').then(r=>r.json()).then(d=>{
-    const badge=document.getElementById('m-badge');
-    badge.className='badge '+_statusClass(d.status); badge.textContent=d.status;
-    document.getElementById('m-body').innerHTML=
-      `<div class="info-grid">
-        <div class="info-box"><strong>Data</strong><div class="info-val">${d.data_ocorrencia||'—'}</div></div>
-        <div class="info-box"><strong>Hora</strong><div class="info-val">${d.data_hora_registro||'—'}</div></div>
-        <div class="info-box"><strong>Site</strong><div class="info-val">${d.site||'—'}</div></div>
-        <div class="info-box"><strong>Turno</strong><div class="info-val">${d.turno||'—'}</div></div>
-        <div class="info-box"><strong>Setor</strong><div class="info-val">${d.setor||'—'}</div></div>
-        <div class="info-box"><strong>Tipo</strong><div class="info-val">${d.tipo_ocorrencia||'—'}</div></div>
-        <div class="info-box"><strong>Prioridade</strong><div class="info-val"><span class="badge ${_prioClass(d.prioridade)}">${d.prioridade||'—'}</span></div></div>
-        <div class="info-box"><strong>Status</strong><div class="info-val"><span class="badge ${_statusClass(d.status)}">${d.status||'—'}</span></div></div>
-        <div class="info-box"><strong>Resp. Saída</strong><div class="info-val">${d.responsavel_saida||'—'}</div></div>
-        <div class="info-box"><strong>Resp. Entrada</strong><div class="info-val">${d.responsavel_entrada||'—'}</div></div>
-      </div>
-      <div class="section-label">Efetivo</div><div class="text-block">${d.efetivo||'—'}</div>
-      <div class="section-label">Descrição</div><div class="text-block">${d.descricao||'—'}</div>
-      <div class="section-label">Ações Tomadas</div><div class="text-block">${d.acoes_tomadas||'—'}</div>
-      <div class="section-label">Pendências</div><div class="text-block">${d.pendencias||'—'}</div>
-      <div class="section-label">Assinaturas</div>
-      <div class="sig-pair">${_sigHtml(d.assinatura_saida,d.responsavel_saida,'Responsável Saída')}${_sigHtml(d.assinatura_entrada,d.responsavel_entrada,'Responsável Entrada')}</div>
-      ${_imgsHtml(d)}`;
-    const acts=document.getElementById('m-actions');
-    if(d.pdf_url) acts.innerHTML+=`<a href="${d.pdf_url}" class="btn btn-dark btn-sm" data-filename="passagem-${id}.pdf">PDF</a>`;
-    if(!d.assinatura_entrada&&d.responsavel_entrada===_USER_NOME) acts.innerHTML+=`<a href="/shift-handover/${id}/assinar" class="btn btn-yellow btn-sm">Assinar Recebimento</a>`;
-    if(!d.assinatura_entrada&&d.criado_por===_USER_NOME) acts.innerHTML+=`<a href="/shift-handover/${id}/editar" class="btn btn-soft btn-sm">Editar</a>`;
-    if(d.status!=='FINALIZADO'&&d.assinatura_entrada&&d.responsavel_entrada===_USER_NOME){
-      const fForm=document.createElement('form'); fForm.method='POST'; fForm.action=`/shift-handover/${id}/fechar`;
-      fForm.innerHTML='<button type="submit" class="btn btn-green btn-sm">Finalizar</button>'; acts.appendChild(fForm);
-    }
-  }).catch(()=>{ document.getElementById('m-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--danger-text);">Erro ao carregar detalhes.</div>'; });
-}
+  window.abrirSHModal=function(id){
+    document.getElementById('modalDetalhe').classList.add('active');
+    document.getElementById('m-titulo').textContent='Passagem #'+id;
+    document.getElementById('m-badge').className='badge badge-muted';
+    document.getElementById('m-badge').textContent='';
+    document.getElementById('m-actions').innerHTML='';
+    document.getElementById('m-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted);">Carregando...</div>';
+    fetch('/shift-handover/'+id+'/detalhe').then(function(r){return r.json();}).then(function(d){
+      var badge=document.getElementById('m-badge');
+      badge.className='badge '+_statusClass(d.status); badge.textContent=d.status;
+      document.getElementById('m-body').innerHTML=
+        '<div class="info-grid">'+
+        '<div class="info-box"><strong>Data</strong><div class="info-val">'+(d.data_ocorrencia||'—')+'</div></div>'+
+        '<div class="info-box"><strong>Hora</strong><div class="info-val">'+(d.data_hora_registro||'—')+'</div></div>'+
+        '<div class="info-box"><strong>Site</strong><div class="info-val">'+(d.site||'—')+'</div></div>'+
+        '<div class="info-box"><strong>Turno</strong><div class="info-val">'+(d.turno||'—')+'</div></div>'+
+        '<div class="info-box"><strong>Setor</strong><div class="info-val">'+(d.setor||'—')+'</div></div>'+
+        '<div class="info-box"><strong>Tipo</strong><div class="info-val">'+(d.tipo_ocorrencia||'—')+'</div></div>'+
+        '<div class="info-box"><strong>Prioridade</strong><div class="info-val"><span class="badge '+_prioClass(d.prioridade)+'">'+(d.prioridade||'—')+'</span></div></div>'+
+        '<div class="info-box"><strong>Status</strong><div class="info-val"><span class="badge '+_statusClass(d.status)+'">'+(d.status||'—')+'</span></div></div>'+
+        '<div class="info-box"><strong>Resp. Saída</strong><div class="info-val">'+(d.responsavel_saida||'—')+'</div></div>'+
+        '<div class="info-box"><strong>Resp. Entrada</strong><div class="info-val">'+(d.responsavel_entrada||'—')+'</div></div>'+
+        '</div>'+
+        '<div class="section-label">Efetivo</div><div class="text-block">'+(d.efetivo||'—')+'</div>'+
+        '<div class="section-label">Descrição</div><div class="text-block">'+(d.descricao||'—')+'</div>'+
+        '<div class="section-label">Ações Tomadas</div><div class="text-block">'+(d.acoes_tomadas||'—')+'</div>'+
+        '<div class="section-label">Pendências</div><div class="text-block">'+(d.pendencias||'—')+'</div>'+
+        '<div class="section-label">Assinaturas</div>'+
+        '<div class="sig-pair">'+_sigHtml(d.assinatura_saida,d.responsavel_saida,'Responsável Saída')+_sigHtml(d.assinatura_entrada,d.responsavel_entrada,'Responsável Entrada')+'</div>'+
+        _imgsHtml(d);
+      var acts=document.getElementById('m-actions');
+      if(d.pdf_url) acts.innerHTML+='<a href="'+d.pdf_url+'" class="btn btn-dark btn-sm" data-filename="sh-'+id+'.pdf">PDF</a>';
+      if(!d.assinatura_entrada&&d.responsavel_entrada===_USER_NOME) acts.innerHTML+='<a href="/shift-handover/'+id+'/assinar" class="btn btn-yellow btn-sm">Assinar Recebimento</a>';
+      if(!d.assinatura_entrada&&d.criado_por===_USER_NOME) acts.innerHTML+='<a href="/shift-handover/'+id+'/editar" class="btn btn-soft btn-sm">Editar</a>';
+      if(d.status!=='FINALIZADO'&&d.assinatura_entrada&&d.responsavel_entrada===_USER_NOME){
+        var fForm=document.createElement('form'); fForm.method='POST'; fForm.action='/shift-handover/'+id+'/fechar';
+        fForm.innerHTML='<button type="submit" class="btn btn-green btn-sm">Finalizar</button>'; acts.appendChild(fForm);
+      }
+    }).catch(function(){ document.getElementById('m-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--danger-text);">Erro ao carregar detalhes.</div>'; });
+  };
 
-function fecharModal(){ document.getElementById('modalDetalhe').classList.remove('active'); }
-document.getElementById('modalDetalhe').addEventListener('click',function(e){ if(e.target===this) fecharModal(); });
+  window.fecharSHModal=function(){ document.getElementById('modalDetalhe').classList.remove('active'); };
+  document.getElementById('modalDetalhe').addEventListener('click',function(e){ if(e.target===this) window.fecharSHModal(); });
+})();
 </script>
 {% endblock %}

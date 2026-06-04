@@ -1,0 +1,85 @@
+{% extends "base_app.html" %}
+{% block page_title %}Nova Porta | Portas de Emergência{% endblock %}
+{% block topbar_title %}🚪 Nova Porta de Emergência{% endblock %}
+{% block topbar_subtitle %}Cadastro individual de porta de emergência{% endblock %}
+{% block topbar_actions %}
+  {% include 'pe_nav.html' %}
+  <a href="{{ url_for('pe.painel') }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:18px 24px; display:flex; align-items:center; gap:12px; }
+  .form-card-hdr-bar{ width:6px; height:28px; background:#ffcc00; border-radius:3px; flex-shrink:0; }
+  .form-card-hdr-title{ color:#fff; font-size:16px; font-weight:900; }
+  .form-card-hdr-sub{ color:rgba(255,255,255,.7); font-size:12px; margin-top:2px; }
+  .form-card-body{ padding:24px; }
+  .sec-hdr{ font-size:11px; font-weight:900; color:var(--dhl-red); text-transform:uppercase; letter-spacing:.5px; border-bottom:1.5px solid var(--dhl-red); padding-bottom:4px; margin:20px 0 14px; }
+  .sec-hdr:first-child{ margin-top:0; }
+  .form-actions{ display:flex; gap:10px; margin-top:20px; padding-top:20px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .content{ max-width:860px; margin:0 auto; width:100%; }
+</style>
+
+<div class="form-card">
+  <div class="form-card-hdr">
+    <div class="form-card-hdr-bar"></div>
+    <div>
+      <div class="form-card-hdr-title">🚪 CADASTRO DE PORTA DE EMERGÊNCIA</div>
+      <div class="form-card-hdr-sub">Preencha os campos obrigatórios (*)</div>
+    </div>
+  </div>
+  <div class="form-card-body">
+    <form method="post">
+      <div class="sec-hdr">🔖 Identificação</div>
+      <div class="row">
+        <div class="field">
+          <label>Código da porta *</label>
+          <input type="text" name="codigo" placeholder="PE-001" required>
+        </div>
+        <div class="field">
+          <label>Localização *</label>
+          <input type="text" name="localizacao" placeholder="Doca 01 / Corredor principal" required>
+        </div>
+        <div class="field">
+          <label>Site</label>
+          <input type="text" value="{{ user_site }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+        </div>
+      </div>
+
+      <div class="sec-hdr">📋 Detalhes</div>
+      <div class="row">
+        <div class="field">
+          <label>Setor</label>
+          <select name="setor">
+            <option value="">Selecione o setor</option>
+            {% for s in setores %}
+            <option value="{{ s }}">{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Rota de fuga</label>
+          <input type="text" name="rota_fuga" placeholder="Rota A / Rota B">
+        </div>
+        <div class="field">
+          <label>Responsável</label>
+          <input type="text" value="{{ user_nome }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px;">
+        <div class="field">
+          <label>Observação</label>
+          <textarea name="observacao" placeholder="Informações complementares" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-red">Salvar porta</button>
+        <a href="{{ url_for('pe.painel') }}" class="btn btn-soft">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

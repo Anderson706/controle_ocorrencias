@@ -1,0 +1,139 @@
+{% extends "base_app.html" %}
+{% block page_title %}Novo Botão de Pânico | Portas de Emergência{% endblock %}
+{% block topbar_title %}🚨 Controle de Botão de Pânico{% endblock %}
+{% block topbar_subtitle %}Cadastro e verificação operacional dos botões de pânico da operação{% endblock %}
+{% block topbar_actions %}
+  {% include 'pe_nav.html' %}
+  <a href="{{ url_for('pe.botao_panico') }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+  .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:18px 24px; display:flex; align-items:center; gap:12px; }
+  .form-card-hdr-bar{ width:6px; height:28px; background:#ffcc00; border-radius:3px; flex-shrink:0; }
+  .form-card-hdr-title{ color:#fff; font-size:16px; font-weight:900; }
+  .form-card-hdr-sub{ color:rgba(255,255,255,.7); font-size:12px; margin-top:2px; }
+  .form-card-body{ padding:24px; }
+  .sec-hdr{ font-size:11px; font-weight:900; color:var(--dhl-red); text-transform:uppercase; letter-spacing:.5px; border-bottom:1.5px solid var(--dhl-red); padding-bottom:4px; margin:20px 0 14px; }
+  .sec-hdr:first-child{ margin-top:0; }
+  .form-actions{ display:flex; gap:10px; margin-top:20px; padding-top:20px; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .content{ max-width:860px; margin:0 auto; width:100%; }
+  .check-item{ display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:12px; border:1px solid var(--line); background:#fafafa; cursor:pointer; font-size:14px; font-weight:700; color:var(--text); transition:.15s; }
+  .check-item:hover{ background:#f3f4f6; border-color:#c9d0d8; }
+  .check-item input[type=checkbox]{ width:20px; height:20px; accent-color:var(--dhl-red); cursor:pointer; flex-shrink:0; }
+  .checks-grid{ display:flex; flex-direction:column; gap:8px; }
+</style>
+
+<div class="form-card">
+  <div class="form-card-hdr">
+    <div class="form-card-hdr-bar"></div>
+    <div>
+      <div class="form-card-hdr-title">🚨 CONTROLE DE BOTÃO DE PÂNICO</div>
+      <div class="form-card-hdr-sub">Preencha os campos obrigatórios (*)</div>
+    </div>
+  </div>
+  <div class="form-card-body">
+    <form method="post">
+
+      <div class="sec-hdr">🔖 Identificação</div>
+      <div class="row">
+        <div class="field">
+          <label>Código do botão *</label>
+          <input type="text" name="codigo" placeholder="BP-001" required>
+        </div>
+        <div class="field">
+          <label>Localização *</label>
+          <select name="localizacao" required>
+            <option value="">Selecione a localização</option>
+            {% for l in locais %}
+            <option value="{{ l }}">{{ l }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="sec-hdr">📋 Detalhes</div>
+      <div class="row">
+        <div class="field">
+          <label>Setor</label>
+          <select name="setor">
+            <option value="">Selecione o setor</option>
+            {% for s in setores %}
+            <option value="{{ s }}">{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Tipo</label>
+          <select name="tipo">
+            <option value="FIXO">Fixo</option>
+            <option value="MÓVEL">Móvel</option>
+            <option value="SILENCIOSO">Silencioso</option>
+            <option value="OUTRO">Outro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Site</label>
+          <input type="text" value="{{ user_site }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+        </div>
+        <div class="field">
+          <label>Responsável</label>
+          <input type="text" value="{{ user_nome }}" disabled style="background:#f3f4f6;color:var(--muted);cursor:not-allowed;">
+        </div>
+        <div class="field">
+          <label>Turno</label>
+          <select name="turno">
+            <option value="ADM">ADM</option>
+            <option value="TURNO A">TURNO A</option>
+            <option value="TURNO B">TURNO B</option>
+            <option value="TURNO C">TURNO C</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sec-hdr">⏱️ Horários e Agente</div>
+      <div class="row">
+        <div class="field">
+          <label>Hora do teste</label>
+          <input type="time" name="hora_teste">
+        </div>
+        <div class="field">
+          <label>Hora de retorno</label>
+          <input type="time" name="hora_retorno">
+        </div>
+        <div class="field">
+          <label>Agente CFTV</label>
+          <input type="text" name="agente_cftv" placeholder="Nome do agente que acompanhou o teste">
+        </div>
+      </div>
+
+      <div class="sec-hdr">✅ Verificações</div>
+      <div class="checks-grid">
+        {% for nome, label in [
+          ('testado',              '🧪 Botão testado'),
+          ('sinal_recebido',       '📡 Sinal recebido na central'),
+          ('comunicacao_cftv',     '📷 Comunicação com CFTV realizada'),
+          ('necessita_manutencao', '🔧 Necessita manutenção')
+        ] %}
+        <label class="check-item">
+          <input type="checkbox" name="{{ nome }}">
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="sec-hdr">📝 Observação</div>
+      <div class="field">
+        <label>Validação, falha identificada ou ação tomada</label>
+        <textarea name="observacao" rows="3" placeholder="Descreva a validação, falha identificada ou ação tomada."></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-red">Salvar botão de pânico</button>
+        <a href="{{ url_for('pe.botao_panico') }}" class="btn btn-soft">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

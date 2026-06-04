@@ -3,11 +3,20 @@
 {% block topbar_title %}⚠️ {{ 'Editar ANC' if modo_edicao else 'Nova ANC' }}{% endblock %}
 {% block topbar_subtitle %}{{ 'Edite os campos para atualizar o ANC' if modo_edicao else 'Registre um novo Aviso de Não Conformidade' }}{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('anc') }}" class="btn btn-soft btn-sm">← Controle</a>
+  <div class="adm-tabs">
+    <a href="{{ url_for('nova_anc') }}" class="adm-tab active">⚠️ Nova ANC</a>
+    <a href="{{ url_for('anc') }}" class="adm-tab">📋 Controle</a>
+    <a href="{{ url_for('dashboard_anc') }}" class="adm-tab">📊 Dashboard</a>
+  </div>
 {% endblock %}
 
 {% block page_content %}
 <style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
   .content{ max-width:900px; margin:0 auto; }
   .form-card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
   .form-card-hdr{ background:linear-gradient(90deg,#d40511,#b1030d); padding:18px 24px; display:flex; align-items:center; gap:12px; }
@@ -61,12 +70,24 @@
       <div class="row">
         <div class="field">
           <label>Setor *</label>
+          {% if setores %}
+          <select name="setor" required>
+            <option value="">Selecione...</option>
+            {% for s in setores %}
+            <option value="{{ s }}" {{ 'selected' if modo_edicao and registro_edicao and registro_edicao.setor == s }}>{{ s }}</option>
+            {% endfor %}
+            {% if modo_edicao and registro_edicao and registro_edicao.setor and registro_edicao.setor not in setores %}
+            <option value="{{ registro_edicao.setor }}" selected>{{ registro_edicao.setor }}</option>
+            {% endif %}
+          </select>
+          {% else %}
           <select name="setor" required>
             <option value="">Selecione...</option>
             {% for s in ['Sorter','Docas','Inbound','Outbound','Portaria','Condomínio','Adm','Sala RF','Armários','Manutenção'] %}
-            <option value="{{ s }}">{{ s }}</option>
+            <option value="{{ s }}" {{ 'selected' if modo_edicao and registro_edicao and registro_edicao.setor == s }}>{{ s }}</option>
             {% endfor %}
           </select>
+          {% endif %}
         </div>
         <div class="field">
           <label>Tipo de Ocorrência *</label>
@@ -111,7 +132,16 @@
         </div>
         <div class="field">
           <label>Local *</label>
-          <input type="text" name="local" required placeholder="Ex: Portaria, Sorter, Docas..." value="{{ registro_edicao.local or '' if modo_edicao else '' }}">
+          <select name="local" required>
+            <option value="">Selecione o local...</option>
+            {% set _locais_lista = locais if locais else ['Sorter','Docas','Inbound','Outbound','Portaria','Condomínio','Adm','Sala RF','Armários','Manutenção'] %}
+            {% for l in _locais_lista %}
+            <option value="{{ l }}" {{ 'selected' if modo_edicao and registro_edicao and registro_edicao.local == l }}>{{ l }}</option>
+            {% endfor %}
+            {% if modo_edicao and registro_edicao and registro_edicao.local and registro_edicao.local not in _locais_lista %}
+            <option value="{{ registro_edicao.local }}" selected>{{ registro_edicao.local }}</option>
+            {% endif %}
+          </select>
         </div>
       </div>
 
@@ -131,19 +161,36 @@
       <div class="row">
         <div class="field">
           <label>Responsável pelo Levantamento *</label>
-          <input type="text" name="gestor_responsavel" required placeholder="Nome do responsável" value="{{ registro_edicao.gestor_responsavel or '' if modo_edicao else '' }}">
+          <input type="text" name="gestor_responsavel" required
+                 value="{{ registro_edicao.gestor_responsavel if modo_edicao else user_nome }}"
+                 readonly style="background:#f3f4f6; color:#374151; cursor:not-allowed;">
         </div>
         <div class="field">
           <label>Cargo</label>
-          <input type="text" name="cargo" placeholder="Ex: Analista, Supervisor..." value="{{ registro_edicao.cargo or '' if modo_edicao else '' }}">
+          <select name="cargo">
+            <option value="">Selecione...</option>
+            {% set _cargos = [
+              'AUXILIAR DE SEGURANÇA PATRIMONIAL',
+              'ASSISTENTE DE SEGURANÇA PATRIMONIAL',
+              'ANALISTA DE SEGURANÇA PATRIMONIAL',
+              'COORDENADOR DE SEGURANÇA PATRIMONIAL',
+              'SUPERVISOR DE SEGURANÇA PATRIMONIAL',
+              'GERENTE DE SEGURANÇA PATRIMONIAL',
+              'GERENTE SR DE SEGURANÇA PATRIMONIAL',
+              'DIRETOR DE SEGURANÇA PATRIMONIAL'
+            ] %}
+            {% set _cargo_atual = registro_edicao.cargo if modo_edicao else user_cargo %}
+            {% for c in _cargos %}
+            <option value="{{ c }}" {{ 'selected' if _cargo_atual == c }}>{{ c }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div class="field">
           <label>Plano de Ação</label>
-          <select name="status">
-            <option value="ABERTO">ABERTO</option>
-            <option value="EM ANDAMENTO" selected>EM ANDAMENTO</option>
-            <option value="CONCLUÍDO">CONCLUÍDO</option>
-          </select>
+          <div class="field-locked">
+            <span class="lock-icon">🔒</span>
+            {{ registro_edicao.status if modo_edicao else 'PENDENTE' }}
+          </div>
         </div>
       </div>
 
@@ -199,6 +246,18 @@
           <label>Imagem 3</label>
           <input type="file" name="imagem_3" accept="image/*">
         </div>
+        <div class="field">
+          <label>Imagem 4</label>
+          <input type="file" name="imagem_4" accept="image/*">
+        </div>
+        <div class="field">
+          <label>Imagem 5</label>
+          <input type="file" name="imagem_5" accept="image/*">
+        </div>
+        <div class="field">
+          <label>Imagem 6</label>
+          <input type="file" name="imagem_6" accept="image/*">
+        </div>
       </div>
 
       <div class="form-actions">
@@ -216,6 +275,7 @@
 (function(){
   var r = {
     setor:           {{ registro_edicao.setor           | tojson }},
+    local:           {{ registro_edicao.local           | tojson }},
     tipo_ocorrencia: {{ registro_edicao.tipo_ocorrencia | tojson }},
     turno:           {{ registro_edicao.turno           | tojson }},
     gravidade:       {{ registro_edicao.gravidade       | tojson }},

@@ -39,15 +39,6 @@
  backdrop-filter:blur(3px);
  }
  #loading-overlay.show{ display:flex; }
- .spinner{
- border:5px solid rgba(255,255,255,.25);
- border-radius:50%;
- border-top:5px solid var(--dhl-yellow);
- width:48px; height:48px;
- animation:spin .75s linear infinite;
- }
- @keyframes spin{ to{ transform:rotate(360deg); } }
- #loading-overlay p{ margin:18px 0 0; font-size:14px; font-weight:800; color:#fff; letter-spacing:.3px; }
 
  /* ── Page layout ── */
  .page{ min-height:100vh; display:flex; }
@@ -237,10 +228,7 @@
 </head>
 <body>
 
-<div id="loading-overlay">
- <div class="spinner"></div>
- <p>Processando, aguarde...</p>
-</div>
+<div id="loading-overlay"></div>
 
 <!-- Modal: Solicitar Cadastro -->
 <div class="modal-overlay" id="modal-cadastro">

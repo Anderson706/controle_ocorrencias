@@ -121,7 +121,7 @@
   }
 </style>
 
-<form method="GET" action="{{ url_for('overview') }}" hx-boost="false">
+<form method="GET" data-autofilter action="{{ url_for('overview') }}" hx-boost="false">
 <div class="ov-filter-bar">
   <div class="ff">
     <label>De</label>
@@ -144,7 +144,7 @@
   {% endif %}
   <button type="submit" class="btn btn-red btn-sm" style="align-self:flex-end;">🔍 Filtrar</button>
   {% if filtros_ativos %}
-  <a href="{{ url_for('overview') }}" class="btn btn-soft btn-sm" style="align-self:flex-end;">✕ Limpar</a>
+  <a href="{{ url_for('overview') }}" class="btn btn-soft btn-sm" style="align-self:flex-end;" data-clear-filter>✕ Limpar</a>
   <span class="ov-filtros-ativos">
     ⚡ Filtrado
     {% if f_ini %} · De {{ f_ini }}{% endif %}

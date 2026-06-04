@@ -15,7 +15,7 @@ from functools import wraps
 import oracledb
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, session, send_file, current_app
+    flash, session, send_file, current_app, jsonify
 )
 
 from flask_sqlalchemy import SQLAlchemy
@@ -180,7 +180,7 @@ def _erro_500(e):
 # =========================
 # CONTROLE DE VERSÃO
 # =========================
-APP_VERSION = "3.5"
+APP_VERSION = "4.1"
 
 SMTP_HOST     = "smtp.dhl.com"
 SMTP_PORT     = 25
@@ -335,8 +335,10 @@ class Usuario(db.Model):
     is_active = db.Column("IS_ACTIVE", db.Boolean, nullable=False, default=True)
     created_at = db.Column("CREATED_AT", db.DateTime, nullable=False, default=datetime.utcnow)
     foto_perfil  = db.Column("FOTO_PERFIL",  db.Text,       nullable=True)
+    tem_foto     = db.Column("TEM_FOTO",     db.String(1),  nullable=True, default="N")
     lgpd_aceito  = db.Column("LGPD_ACEITO",  db.String(3),  nullable=True, default=None)
     lgpd_aceito_em = db.Column("LGPD_ACEITO_EM", db.DateTime, nullable=True, default=None)
+    cargo        = db.Column("CARGO",        db.String(120), nullable=True)
 
     def set_password(self, senha: str):
         self.password_hash = generate_password_hash(senha)
@@ -498,13 +500,66 @@ _NATUREZAS_PADRAO = [
 ]
 
 
-def _get_naturezas():
-    """Retorna lista de nomes ordenados da tabela NATUREZAS_OCORRENCIA.
-    Fallback para _NATUREZAS_PADRAO se a tabela ainda não existir."""
+# =========================
+# CONFIG. DE CAMPOS — MODELS
+# =========================
+class NaturezaConfig(db.Model):
+    """Naturezas configuradas por site."""
+    __tablename__ = "NATUREZA_CONFIG"
+    id              = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    natureza        = db.Column(db.String(200), nullable=False)
+    site            = db.Column(db.String(128), nullable=False, index=True)
+    data_criacao    = db.Column(db.DateTime, default=datetime.utcnow)
+    usuario_criador = db.Column(db.String(120), nullable=True)
+
+class LocalConfig(db.Model):
+    """Locais configurados por site."""
+    __tablename__ = "LOCAL_CONFIG"
+    id              = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    local           = db.Column(db.String(200), nullable=False)
+    site            = db.Column(db.String(128), nullable=False, index=True)
+    data_criacao    = db.Column(db.DateTime, default=datetime.utcnow)
+    usuario_criador = db.Column(db.String(120), nullable=True)
+
+class SetorConfig(db.Model):
+    """Setores configurados por site."""
+    __tablename__ = "SETOR_CONFIG"
+    id              = db.Column(db.Integer, db.Identity(start=1), primary_key=True)
+    setor           = db.Column(db.String(200), nullable=False)
+    site            = db.Column(db.String(128), nullable=False, index=True)
+    data_criacao    = db.Column(db.DateTime, default=datetime.utcnow)
+    usuario_criador = db.Column(db.String(120), nullable=True)
+
+
+def _get_naturezas(site=None):
+    """Retorna lista de naturezas: padrão (hardcode) + adições criadas pelos gestores/keyusers.
+    Os valores padrão são sempre mantidos; o DB só adiciona, nunca substitui."""
     try:
-        return [n.nome for n in NaturezaOcorrencia.query.order_by(NaturezaOcorrencia.nome).all()]
+        rows = db.session.query(NaturezaOcorrencia.nome).all()
+        db_nomes = {r[0] for r in rows}
+        return sorted(set(_NATUREZAS_PADRAO) | db_nomes)
     except Exception:
         return sorted(_NATUREZAS_PADRAO)
+
+def _get_locais(site=None):
+    """Retorna lista de locais configurados para o site."""
+    try:
+        q = LocalConfig.query
+        if site:
+            q = q.filter_by(site=site)
+        return [c.local for c in q.order_by(LocalConfig.local).all()]
+    except Exception:
+        return []
+
+def _get_setores(site=None):
+    """Retorna lista de setores configurados para o site."""
+    try:
+        q = SetorConfig.query
+        if site:
+            q = q.filter_by(site=site)
+        return [c.setor for c in q.order_by(SetorConfig.setor).all()]
+    except Exception:
+        return []
 
 
 # =========================
@@ -879,6 +934,10 @@ class Ocorrencia(db.Model):
     anexo_post_3      = db.Column(db.Text, nullable=True)
     anexo_post_nome_3 = db.Column(db.String(255), nullable=True)
 
+    # Vínculos com outros documentos
+    anc_vinculada_id     = db.Column(db.Integer, nullable=True)
+    analise_vinculada_id = db.Column(db.Integer, nullable=True)
+
 
 # =========================
 # HELPERS
@@ -938,34 +997,35 @@ def aplicar_filtros_anc(query):
     data_inicial = (request.args.get("data_inicial") or "").strip()
     data_final   = (request.args.get("data_final")   or "").strip()
     status       = (request.args.get("status")        or "").strip().upper()
-    gravidade    = (request.args.get("gravidade")     or "").strip().upper()
     turno        = (request.args.get("turno")         or "").strip().upper()
     setor        = (request.args.get("setor")         or "").strip()
     natureza     = (request.args.get("natureza")      or "").strip()
     site_filtro  = (request.args.get("site_filtro")   or "").strip()
 
+    # Empurra todos os filtros para o SQL — sem Python-level filtering
+    if data_inicial:
+        query = query.filter(ANC.data_nc >= data_inicial)
+    if data_final:
+        query = query.filter(ANC.data_nc <= data_final)
+    if status:
+        query = query.filter(func.upper(ANC.status) == status)
+    if turno:
+        query = query.filter(func.upper(ANC.turno) == turno)
+    if setor:
+        query = query.filter(func.lower(ANC.setor).contains(setor.lower()))
+    if natureza:
+        query = query.filter(func.lower(ANC.natureza) == natureza.lower())
+    if site_filtro:
+        query = query.filter(ANC.site == site_filtro)
+
     registros = query.all()
-    filtrados = []
-    for r in registros:
-        ok = True
-        if data_inicial: ok = ok and ((r.data_nc or "") >= data_inicial)
-        if data_final:   ok = ok and ((r.data_nc or "") <= data_final)
-        if status:       ok = ok and ((r.status or "").upper() == status)
-        if gravidade:    ok = ok and ((r.gravidade or "").upper() == gravidade)
-        if turno:        ok = ok and ((r.turno or "").upper() == turno)
-        if setor:        ok = ok and (setor.lower() in (r.setor or "").lower())
-        if natureza:     ok = ok and (natureza.lower() in (r.natureza or "").lower())
-        if site_filtro:  ok = ok and ((r.site or "") == site_filtro)
-        if ok:
-            filtrados.append(r)
 
     filtros = {
         "data_inicial": data_inicial, "data_final": data_final,
-        "status": status, "gravidade": gravidade,
-        "turno": turno, "setor": setor, "natureza": natureza,
-        "site_filtro": site_filtro,
+        "status": status, "turno": turno, "setor": setor,
+        "natureza": natureza, "site_filtro": site_filtro,
     }
-    return filtrados, filtros
+    return registros, filtros
 
 
 _LGPD_TEXT = (
@@ -1011,19 +1071,19 @@ def gerar_pdf_anc_bytes(anc):
     BLACK   = colors.black
     YELLOW  = colors.HexColor("#FFCC00")
 
-    pw = A4[0] - 3.0 * rcm
+    pw = A4[0] - 2.6 * rcm
     doc_pdf = SimpleDocTemplate(
         buffer, pagesize=A4,
-        leftMargin=1.5*rcm, rightMargin=1.5*rcm,
-        topMargin=1.5*rcm, bottomMargin=2.5*rcm,
+        leftMargin=1.3*rcm, rightMargin=1.3*rcm,
+        topMargin=0.8*rcm, bottomMargin=2.0*rcm,
     )
 
-    s_normal = ParagraphStyle("an", fontName="Helvetica",      fontSize=9,  textColor=BLACK)
-    s_th     = ParagraphStyle("ath",fontName="Helvetica-Bold", fontSize=9,  textColor=BLACK, alignment=TA_CENTER)
-    s_td     = ParagraphStyle("atd",fontName="Helvetica",      fontSize=9,  textColor=BLACK, alignment=TA_CENTER)
-    s_h3     = ParagraphStyle("ah3",fontName="Helvetica-Bold", fontSize=11, textColor=BLACK)
-    s_title  = ParagraphStyle("ati",fontName="Helvetica-Bold", fontSize=13, textColor=BLACK, alignment=TA_CENTER)
-    s_foot   = ParagraphStyle("afo",fontName="Helvetica",      fontSize=9,  textColor=BLACK)
+    s_normal = ParagraphStyle("an", fontName="Helvetica",      fontSize=8,  textColor=BLACK, leading=10)
+    s_th     = ParagraphStyle("ath",fontName="Helvetica-Bold", fontSize=8,  textColor=BLACK, alignment=TA_CENTER, leading=10)
+    s_td     = ParagraphStyle("atd",fontName="Helvetica",      fontSize=8,  textColor=BLACK, alignment=TA_CENTER, leading=10)
+    s_h3     = ParagraphStyle("ah3",fontName="Helvetica-Bold", fontSize=9,  textColor=BLACK)
+    s_title  = ParagraphStyle("ati",fontName="Helvetica-Bold", fontSize=11, textColor=BLACK, alignment=TA_CENTER)
+    s_foot   = ParagraphStyle("afo",fontName="Helvetica",      fontSize=8,  textColor=BLACK)
 
     def _fit_img(source, max_w, max_h):
         """Retorna RLImage escalada proporcionalmente para caber em max_w × max_h."""
@@ -1042,9 +1102,9 @@ def gerar_pdf_anc_bytes(anc):
         t.setStyle(TableStyle([
             ("BACKGROUND",    (0,0),(-1,-1), YELLOW),
             ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
-            ("TOPPADDING",    (0,0),(-1,-1), 5),
-            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
-            ("LEFTPADDING",   (0,0),(-1,-1), 8),
+            ("TOPPADDING",    (0,0),(-1,-1), 3),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 3),
+            ("LEFTPADDING",   (0,0),(-1,-1), 6),
         ]))
         return t
 
@@ -1054,7 +1114,7 @@ def gerar_pdf_anc_bytes(anc):
     logo_path = os.path.join(app.root_path, "static", "logo.png")
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as _lf:
-            logo_cell = _fit_img(BytesIO(_lf.read()), max_w=pw * 0.22, max_h=1.6*rcm)
+            logo_cell = _fit_img(BytesIO(_lf.read()), max_w=pw * 0.22, max_h=1.2*rcm)
     else:
         logo_cell = Paragraph("<b>DHL</b>", s_normal)
 
@@ -1067,12 +1127,12 @@ def gerar_pdf_anc_bytes(anc):
         ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
         ("INNERGRID",     (0,0),(-1,-1), 0.5, BLACK),
         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-        ("TOPPADDING",    (0,0),(-1,-1), 8),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 8),
-        ("LEFTPADDING",   (0,0),(-1,-1), 8),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 8),
+        ("TOPPADDING",    (0,0),(-1,-1), 4),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 4),
+        ("LEFTPADDING",   (0,0),(-1,-1), 6),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 6),
     ]))
-    story += [hdr, Spacer(1, 0.5*rcm)]
+    story += [hdr, Spacer(1, 0.2*rcm)]
 
     # ── 2. TABELA DE IDENTIFICAÇÃO ────────────────────────────────
     id_heads = ["DATA", "HORA DA\nOCORRÊNCIA", "NATUREZA", "LOCAL",
@@ -1091,22 +1151,22 @@ def gerar_pdf_anc_bytes(anc):
         ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
         ("INNERGRID",     (0,0),(-1,-1), 0.5, BLACK),
         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-        ("TOPPADDING",    (0,0),(-1,-1), 6),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+        ("TOPPADDING",    (0,0),(-1,-1), 3),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 3),
     ]))
-    story += [id_tbl, Spacer(1, 0.5*rcm)]
+    story += [id_tbl, Spacer(1, 0.2*rcm)]
 
     # ── 3. DESCRIÇÃO ──────────────────────────────────────────────
     story.append(yellow_bar("Descrição da ocorrência:"))
     desc_tbl = Table([[Paragraph(anc.descricao or "—", s_normal)]], colWidths=[pw])
     desc_tbl.setStyle(TableStyle([
         ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
-        ("TOPPADDING",    (0,0),(-1,-1), 10),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 40),
-        ("LEFTPADDING",   (0,0),(-1,-1), 10),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 10),
+        ("TOPPADDING",    (0,0),(-1,-1), 5),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 8),
+        ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 8),
     ]))
-    story += [desc_tbl, Spacer(1, 0.5*rcm)]
+    story += [desc_tbl, Spacer(1, 0.2*rcm)]
 
     # ── 4. GRAVIDADE / RESPONSÁVEL / PLANO DE AÇÃO ───────────────
     grav_tbl = Table(
@@ -1122,10 +1182,10 @@ def gerar_pdf_anc_bytes(anc):
         ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
         ("INNERGRID",     (0,0),(-1,-1), 0.5, BLACK),
         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-        ("TOPPADDING",    (0,0),(-1,-1), 6),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 6),
+        ("TOPPADDING",    (0,0),(-1,-1), 3),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 3),
     ]))
-    story += [grav_tbl, Spacer(1, 0.5*rcm)]
+    story += [grav_tbl, Spacer(1, 0.2*rcm)]
 
     # ── 5. REGISTROS FOTOGRÁFICOS (até 6 imagens, 2 por linha) ───
     story.append(yellow_bar("Registros Fotográficos:"))
@@ -1135,34 +1195,34 @@ def gerar_pdf_anc_bytes(anc):
         anc.imagem_4, anc.imagem_5, anc.imagem_6,
     ] if x]
 
-    img_col_w = pw / 2
-    img_h     = 6.5 * rcm
+    img_col_w = pw / 3
+    img_h     = 3.8 * rcm
 
     foto_rows = []
-    for i in range(0, max(len(imgs_b64), 2), 2):
+    for i in range(0, max(len(imgs_b64), 3), 3):
         row = []
-        for j in range(2):
+        for j in range(3):
             idx = i + j
             cell = ""
             if idx < len(imgs_b64):
                 try:
-                    cell = _fit_img(imgs_b64[idx], img_col_w - 1.0*rcm, img_h)
+                    cell = _fit_img(imgs_b64[idx], img_col_w - 0.6*rcm, img_h)
                 except Exception:
                     pass
             row.append(cell)
         foto_rows.append(row)
 
-    foto_tbl = Table(foto_rows, colWidths=[img_col_w, img_col_w])
+    foto_tbl = Table(foto_rows, colWidths=[img_col_w, img_col_w, img_col_w])
     foto_tbl.setStyle(TableStyle([
         ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
         ("INNERGRID",     (0,0),(-1,-1), 0.5, BLACK),
         ("ALIGN",         (0,0),(-1,-1), "CENTER"),
         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-        ("TOPPADDING",    (0,0),(-1,-1), 8),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 8),
+        ("TOPPADDING",    (0,0),(-1,-1), 4),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 4),
         ("MINROWHEIGHT",  (0,0),(-1,-1), img_h),
     ]))
-    story += [foto_tbl, Spacer(1, 1.0*rcm)]
+    story += [foto_tbl, Spacer(1, 0.2*rcm)]
 
     # ── 6. RESPONSÁVEL PELO LEVANTAMENTO ──────────────────────────
     resp_tbl = Table(
@@ -1176,12 +1236,12 @@ def gerar_pdf_anc_bytes(anc):
         ("BOX",           (0,0),(-1,-1), 0.5, BLACK),
         ("INNERGRID",     (0,0),(-1,-1), 0.5, BLACK),
         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-        ("TOPPADDING",    (0,0),(-1,-1), 6),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 10),
-        ("LEFTPADDING",   (0,0),(-1,-1), 8),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 8),
+        ("TOPPADDING",    (0,0),(-1,-1), 3),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 5),
+        ("LEFTPADDING",   (0,0),(-1,-1), 6),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 6),
     ]))
-    story += [resp_tbl, Spacer(1, 0.5*rcm)]
+    story += [resp_tbl, Spacer(1, 0.2*rcm)]
 
     # ── 7. PLANO DE AÇÃO / FECHAMENTO (se houver) ─────────────────
     if anc.plano_acao_texto:
@@ -1662,16 +1722,23 @@ def cameras_index():
 
     ativas   = sum(1 for c in cameras if c.ativo)
     inativas = sum(1 for c in cameras if not c.ativo)
+
+    # Sites distintos para os dropdowns de filtro (só relevante para admin)
+    sites_cam = sorted({c.site for c in cameras if c.site}) if is_admin else []
+    sites_chk = sorted({c.site for c in checklists if c.site}) if is_admin else []
+
     return render_template("cameras.html",
         cameras=cameras, checklists=checklists,
-        ativas=ativas, inativas=inativas, site=site, is_admin=is_admin)
+        ativas=ativas, inativas=inativas, site=site,
+        is_admin=is_admin, can_manage=_is_can_manage(),
+        sites_cam=sites_cam, sites_chk=sites_chk)
 
 
 @app.route("/cameras/cadastrar", methods=["GET", "POST"])
 @login_required
 def cameras_cadastrar():
-    if not _is_privileged():
-        flash("Acesso restrito a administradores e supervisores.", "danger")
+    if not _is_can_manage():
+        flash("Acesso restrito a administradores, gestores e key users.", "danger")
         return redirect(url_for("cameras_index"))
     site = session.get("user_site") or ""
     if request.method == "POST":
@@ -1726,8 +1793,8 @@ def cameras_cadastrar():
 @app.route("/cameras/<int:cam_id>/toggle", methods=["POST"])
 @login_required
 def cameras_toggle(cam_id):
-    if not _is_privileged():
-        flash("Acesso restrito a administradores e supervisores.", "danger")
+    if not _is_can_manage():
+        flash("Acesso restrito a administradores, gestores e key users.", "danger")
         return redirect(url_for("cameras_index"))
     site = session.get("user_site") or ""
     cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
@@ -1740,8 +1807,8 @@ def cameras_toggle(cam_id):
 @app.route("/cameras/<int:cam_id>/editar", methods=["POST"])
 @login_required
 def cameras_editar(cam_id):
-    if not _is_privileged():
-        flash("Acesso restrito a administradores e supervisores.", "danger")
+    if not _is_can_manage():
+        flash("Acesso restrito a administradores, gestores e key users.", "danger")
         return redirect(url_for("cameras_index"))
     site = session.get("user_site") or ""
     cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
@@ -1755,8 +1822,8 @@ def cameras_editar(cam_id):
 @app.route("/cameras/excluir-lote", methods=["POST"])
 @login_required
 def cameras_excluir_lote():
-    if not _is_privileged():
-        flash("Acesso restrito a administradores e supervisores.", "danger")
+    if not _is_can_manage():
+        flash("Acesso restrito a administradores, gestores e key users.", "danger")
         return redirect(url_for("cameras_index"))
     ids  = request.form.getlist("ids")
     site = session.get("user_site") or ""
@@ -1881,8 +1948,17 @@ def cameras_checklist_anexo(chk_id):
 
 
 def _is_privileged():
-    """Retorna True se o usuário logado for ADMIN, SUPERVISOR ou MULTISITES."""
-    return (session.get("user_perfil") or "").upper() in ("ADMIN", "SUPERVISOR", "MULTISITES")
+    """Retorna True se o usuário logado for ADMIN ou MULTISITES (acesso cross-site total).
+    GESTOR agora usa UsuarioSite (como MULTISITES) — não tem cross-site irrestrito."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN", "MULTISITES")
+
+
+def _is_can_manage():
+    """Retorna True se o usuário pode gerenciar recursos (criar/editar).
+    Inclui KEYUSER além dos perfis de _is_privileged().
+    KEYUSER opera apenas dentro do próprio site (sem acesso cross-site).
+    """
+    return (session.get("user_perfil") or "").upper() in ("ADMIN", "GESTOR", "MULTISITES", "KEYUSER")
 
 
 @app.context_processor
@@ -1924,7 +2000,7 @@ def aplicar_filtros(query):
         if data_inicial: ok = ok and (data_base >= data_inicial)
         if data_final:   ok = ok and (data_base <= data_final)
         if local:        ok = ok and (local.lower()    in (r.local    or "").lower())
-        if natureza:     ok = ok and (natureza.lower() in (r.natureza or "").lower())
+        if natureza:     ok = ok and (natureza.lower() == (r.natureza or "").lower())
         if status:       ok = ok and (normalizar_status(r.status) == status)
         if operador:     ok = ok and (operador.lower() in (r.operador or "").lower())
         if site_f:       ok = ok and ((r.site or "") == site_f)
@@ -2534,7 +2610,7 @@ def dashboard_anc():
 
     _sem_imgs = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3),
                  defer(ANC.imagem_4), defer(ANC.imagem_5), defer(ANC.imagem_6),
-                 defer(ANC.anexo_fechamento)]
+                 defer(ANC.anexo_fechamento), defer(ANC.descricao), defer(ANC.plano_acao_texto)]
 
     if is_admin:
         base = ANC.query.options(*_sem_imgs).order_by(ANC.id.desc()).all()
@@ -2670,15 +2746,20 @@ def anc():
     modo_edicao = False
     editar_id = request.args.get("editar", type=int)
     if editar_id:
-        registro_edicao = ANC.query.get_or_404(editar_id)
-        _can_edit_anc = is_admin or registro_edicao.criado_por == session.get("user_nome", "")
-        _is_closed_anc = (registro_edicao.status or "").upper() == "CONCLUÍDO"
+        # Verifica permissão antes de carregar o registro completo (com CLOBs)
+        _chk = db.session.query(ANC.id, ANC.criado_por, ANC.status).filter_by(id=editar_id).first()
+        if not _chk:
+            flash("ANC não encontrado.", "danger")
+            return redirect(url_for("anc"))
+        _can_edit_anc = is_admin or _chk.criado_por == session.get("user_nome", "")
+        _is_closed_anc = (_chk.status or "").upper() == "CONCLUÍDO"
         if not _can_edit_anc:
             flash("Você não tem permissão para editar esta ANC.", "danger")
             return redirect(url_for("anc"))
         if _is_closed_anc:
             flash("Esta ANC já foi concluída e não pode ser editada.", "warning")
             return redirect(url_for("anc"))
+        registro_edicao = ANC.query.get(editar_id)
         modo_edicao = True
 
     if request.method == "POST":
@@ -2721,22 +2802,27 @@ def anc():
                 imgs.append(None)
 
         if anc_id:
-            reg = ANC.query.get_or_404(anc_id)
-            _can_edit = is_admin or reg.criado_por == session.get("user_nome", "")
-            _is_closed = (reg.status or "").upper() == "CONCLUÍDO"
+            # Verifica permissão sem carregar CLOBs de imagem
+            _chk = db.session.query(ANC.id, ANC.criado_por, ANC.status).filter_by(id=anc_id).first()
+            if not _chk:
+                flash("ANC não encontrado.", "danger")
+                return redirect(url_for("anc"))
+            _can_edit = is_admin or _chk.criado_por == session.get("user_nome", "")
+            _is_closed = (_chk.status or "").upper() == "CONCLUÍDO"
             if not _can_edit:
                 flash("Você não tem permissão para editar esta ANC.", "danger")
                 return redirect(url_for("anc"))
             if _is_closed:
                 flash("Esta ANC já foi concluída e não pode ser editada.", "warning")
                 return redirect(url_for("anc"))
+            reg = ANC.query.get(anc_id)
             reg.data_nc = data_nc; reg.hora_nc = hora_nc; reg.site = site_val
             reg.setor = setor; reg.tipo_ocorrencia = tipo_ocorrencia
             reg.gravidade = gravidade; reg.natureza = natureza
             reg.responsavel = responsavel; reg.gestor_responsavel = gestor_responsavel
             reg.cargo = cargo
             reg.local = local_val; reg.envolvido = envolvido
-            reg.tipo = tipo; reg.turno = turno; reg.status = status
+            reg.tipo = tipo; reg.turno = turno
             reg.descricao = descricao
             reg.inicio_investigacao = inicio_investigacao
             reg.fim_investigacao = fim_investigacao
@@ -2760,7 +2846,7 @@ def anc():
             responsavel=responsavel, gestor_responsavel=gestor_responsavel,
             cargo=cargo,
             local=local_val, envolvido=envolvido,
-            tipo=tipo, turno=turno, status=status,
+            tipo=tipo, turno=turno, status="PENDENTE",
             descricao=descricao,
             inicio_investigacao=inicio_investigacao,
             fim_investigacao=fim_investigacao,
@@ -2776,7 +2862,8 @@ def anc():
         return redirect(url_for("anc"))
 
     _sem_imgs = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3),
-                 defer(ANC.anexo_fechamento)]
+                 defer(ANC.imagem_4), defer(ANC.imagem_5), defer(ANC.imagem_6),
+                 defer(ANC.anexo_fechamento), defer(ANC.descricao), defer(ANC.plano_acao_texto)]
     if is_admin:
         query = ANC.query.options(*_sem_imgs).order_by(ANC.id.desc())
     else:
@@ -2795,7 +2882,10 @@ def anc():
         "valor_total": _formatar_valor(sum(_parse_valor(r.valor) for r in registros if r.valor)),
     }
 
-    todos_sites_anc = sorted(set(r.site for r in ANC.query.with_entities(ANC.site).all() if r.site)) if is_admin else []
+    todos_sites_anc = sorted(
+        r[0] for r in db.session.query(ANC.site).distinct().all() if r[0]
+    ) if is_admin else []
+    naturezas_lista = _get_naturezas(site_usuario)
     return render_template(
         "anc.html",
         registros=registros, resumo=resumo, filtros=filtros,
@@ -2803,7 +2893,8 @@ def anc():
         modo_edicao=modo_edicao, registro_edicao=registro_edicao,
         agora=datetime.now().strftime("%Y-%m-%dT%H:%M"),
         hora_atual=datetime.now().strftime("%H:%M"),
-        naturezas=_get_naturezas(),
+        naturezas=naturezas_lista,
+        todos_naturezas=naturezas_lista,
         todos_sites=todos_sites_anc,
     )
 
@@ -2899,7 +2990,11 @@ def nova_anc():
     return render_template("nova_anc.html",
         site_usuario=site_usuario, hora_atual=hora_atual,
         registro_edicao=registro_edicao, modo_edicao=modo_edicao,
-        naturezas=_get_naturezas(),
+        naturezas=_get_naturezas(site_usuario),
+        locais=_get_locais(site_usuario),
+        setores=_get_setores(site_usuario),
+        user_nome=session.get("user_nome", ""),
+        user_cargo=session.get("user_cargo", ""),
     )
 
 
@@ -3210,8 +3305,16 @@ def meu_perfil():
             mime = foto.mimetype or "image/jpeg"
             b64str = f"data:{mime};base64,{_b64.b64encode(raw).decode()}"
             user.foto_perfil = b64str
+            user.tem_foto    = "S"       # flag leve — evita 2ª query no login
             session["user_tem_foto"] = True
             flash("Foto de perfil atualizada com sucesso.", "success")
+        # Atualização de cargo
+        novo_cargo = (request.form.get("cargo") or "").strip()
+        if "cargo" in request.form:
+            user.cargo = novo_cargo or None
+            session["user_cargo"] = novo_cargo
+            if not (foto and foto.filename) and not (request.form.get("nova_senha") or "").strip():
+                flash("Cargo atualizado com sucesso.", "success")
         # Alteração de senha
         nova_senha = (request.form.get("nova_senha") or "").strip()
         confirma   = (request.form.get("confirma_senha") or "").strip()
@@ -3429,7 +3532,8 @@ def login():
             return render_template("login.html", todos_sites=todos_sites)
 
         try:
-            # defer foto_perfil (CLOB pesado) — não é necessário para autenticar
+            # defer foto_perfil (CLOB pesado) — não necessário para autenticar
+            # tem_foto é uma coluna booleana leve — evita 2ª query ao Oracle
             usuario = (Usuario.query
                        .options(defer(Usuario.foto_perfil))
                        .filter_by(email=email, is_active=True)
@@ -3448,23 +3552,15 @@ def login():
             flash("E-mail ou senha inválidos.", "danger")
             return render_template("login.html", todos_sites=todos_sites)
 
-        # Verifica foto sem carregar o CLOB inteiro
-        try:
-            tem_foto = bool(
-                db.session.query(func.length(Usuario.foto_perfil))
-                .filter_by(id=usuario.id).scalar()
-            )
-        except Exception:
-            tem_foto = False
-
         session.permanent = True          # mantém sessão por 30 dias
         session["user_id"]        = usuario.id
         session["user_nome"]      = usuario.nome
         session["username"]       = usuario.email
         session["user_perfil"]    = usuario.perfil
         session["user_site"]      = usuario.site or ""
-        session["user_tem_foto"]  = tem_foto
+        session["user_tem_foto"]  = (usuario.tem_foto or "N") == "S"
         session["user_lgpd_aceito"] = usuario.lgpd_aceito or ""
+        session["user_cargo"]     = usuario.cargo or ""
 
         # Primeiro acesso: redireciona para aceite LGPD
         if (usuario.lgpd_aceito or "") != "sim":
@@ -3736,13 +3832,16 @@ def ocorrencias():
     total_hoje = len([r for r in registros if (r.data_hora or "").startswith(hoje_str)])
 
     resumo = {
-        "total":     len(registros),
-        "hoje":      total_hoje,
-        "com_foto":  len([r for r in registros if r.foto]),
-        "pendentes": len([r for r in registros if normalizar_status(r.status) == "PENDENTE"]),
+        "total":          len(registros),
+        "hoje":           total_hoje,
+        "prioridade_alta": len([r for r in registros if normalizar_prioridade(r.prioridade) == "ALTA"]),
+        "pendentes":      len([r for r in registros if normalizar_status(r.status) == "PENDENTE"]),
         "recuperado_count": len([r for r in registros if r.valor_recuperado]),
         "preventivo_count": len([r for r in registros if r.valor_preventivo]),
         "prejuizo_count":   len([r for r in registros if r.prejuizo]),
+        "recuperado_valor": _formatar_valor(sum(_parse_valor(r.valor_recuperado) for r in registros if r.valor_recuperado)),
+        "preventivo_valor": _formatar_valor(sum(_parse_valor(r.valor_preventivo) for r in registros if r.valor_preventivo)),
+        "prejuizo_valor":   _formatar_valor(sum(_parse_valor(r.prejuizo) for r in registros if r.prejuizo)),
     }
 
     # Lista de sites para filtro (admin)
@@ -3753,6 +3852,21 @@ def ocorrencias():
     _ops_q = db.session.query(Ocorrencia.operador).distinct().all()
     todos_operadores = sorted(o[0] for o in _ops_q if o[0])
 
+    # Lookup de vínculos: mapeia id → código legível
+    _anc_ids      = {r.anc_vinculada_id     for r in registros if r.anc_vinculada_id}
+    _analise_ids  = {r.analise_vinculada_id  for r in registros if r.analise_vinculada_id}
+    anc_lookup = {}
+    if _anc_ids:
+        for a in ANC.query.filter(ANC.id.in_(_anc_ids)).all():
+            anc_lookup[a.id] = a.numero_anc or f"ANC-{a.id}"
+    analise_lookup = {}
+    if _analise_ids:
+        for a in AnaliseInvestigativa.query.filter(AnaliseInvestigativa.id.in_(_analise_ids)).all():
+            analise_lookup[a.id] = a.codigo or f"AI-{a.id}"
+
+    # Naturezas para o filtro: todas as do site (admin vê globais)
+    todos_naturezas = _get_naturezas(site_usuario)
+
     return render_template(
         "ocorrencias.html",
         registros=registros,
@@ -3762,6 +3876,9 @@ def ocorrencias():
         is_admin=is_admin,
         todos_sites=todos_sites,
         todos_operadores=todos_operadores,
+        todos_naturezas=todos_naturezas,
+        anc_lookup=anc_lookup,
+        analise_lookup=analise_lookup,
     )
 
 
@@ -3785,7 +3902,8 @@ def nova_investigacao():
         modo_edicao=False, registro_edicao=None,
         site_usuario=site_usuario, agora=agora,
         hora_atual=hora_atual, usuarios_site=usuarios_site,
-        naturezas=_get_naturezas(),
+        naturezas=_get_naturezas(site_usuario),
+        locais=_get_locais(site_usuario),
     )
 
 
@@ -3818,7 +3936,8 @@ def editar_ocorrencia(ocorrencia_id):
         modo_edicao=True, registro_edicao=registro,
         site_usuario=site_usuario, agora=agora,
         hora_atual=hora_atual, usuarios_site=usuarios_site,
-        naturezas=_get_naturezas(),
+        naturezas=_get_naturezas(site_usuario),
+        locais=_get_locais(site_usuario),
     )
 
 
@@ -3848,8 +3967,10 @@ def post_ocorrencia(ocorrencia_id):
         # Status final: INCONCLUSIVA mantém, todos os outros tipos tornam CONCLUIDO
         status_post = "INCONCLUSIVA" if tipo_conclusao == "INCONCLUSIVA" else "CONCLUIDO"
         registro.status = status_post
-        registro.situacao_investigacao = tipo_conclusao   # guarda o tipo específico (ANC, ANALISE INVESTIGATIVA, etc.)
-        registro.responsavel_fechamento = responsavel
+        registro.situacao_investigacao   = tipo_conclusao
+        registro.responsavel_fechamento  = responsavel
+        registro.anc_vinculada_id        = request.form.get("anc_vinculada_id",     type=int) or None
+        registro.analise_vinculada_id    = request.form.get("analise_vinculada_id", type=int) or None
 
         for campo_file, campo_b64, campo_nome in [
             ("anexo_post",   "anexo_post",   "anexo_post_nome"),
@@ -3869,7 +3990,12 @@ def post_ocorrencia(ocorrencia_id):
         flash("Investigação encerrada com sucesso.", "success")
         return redirect(url_for("ocorrencias"))
 
-    return render_template("post_ocorrencia.html", registro=registro)
+    # Carrega documentos vinculados (se já existir vínculo)
+    anc_vinculada     = ANC.query.get(registro.anc_vinculada_id)     if registro.anc_vinculada_id     else None
+    analise_vinculada = AnaliseInvestigativa.query.get(registro.analise_vinculada_id) if registro.analise_vinculada_id else None
+    return render_template("post_ocorrencia.html", registro=registro,
+                           anc_vinculada=anc_vinculada,
+                           analise_vinculada=analise_vinculada)
 
 
 @app.route("/ocorrencias/<int:ocorrencia_id>/anexo/<int:slot>")
@@ -3893,6 +4019,47 @@ def download_anexo_ocorrencia(ocorrencia_id, slot):
         flash("Erro ao ler o anexo.", "danger")
         return redirect(url_for("ocorrencias"))
     return send_file(BytesIO(raw), mimetype=mime, as_attachment=True, download_name=nome)
+
+
+@app.route("/api/ancs-site")
+@login_required
+def api_ancs_site():
+    site     = session.get("user_site")
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    q = ANC.query
+    if not is_admin and site:
+        q = q.filter(ANC.site == site)
+    ancs = q.order_by(ANC.id.desc()).limit(200).all()
+    return jsonify([{
+        "id":             a.id,
+        "numero_anc":     a.numero_anc or f"ANC-{a.id}",
+        "data_nc":        a.data_nc or "",
+        "tipo_ocorrencia":a.tipo_ocorrencia or "",
+        "gravidade":      a.gravidade or "",
+        "status":         a.status or "",
+        "setor":          a.setor or "",
+        "responsavel":    a.responsavel or "",
+    } for a in ancs])
+
+
+@app.route("/api/analises-site")
+@login_required
+def api_analises_site():
+    site     = session.get("user_site")
+    is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    q = AnaliseInvestigativa.query
+    if not is_admin and site:
+        q = q.filter(AnaliseInvestigativa.site == site)
+    analises = q.order_by(AnaliseInvestigativa.id.desc()).limit(200).all()
+    return jsonify([{
+        "id":               a.id,
+        "codigo":           a.codigo or f"AI-{a.id}",
+        "data_levantamento":a.data_levantamento or "",
+        "responsavel":      a.responsavel or "",
+        "classificacao":    a.classificacao or "",
+        "status_analise":   a.status_analise or "EM ANDAMENTO",
+        "objetivo":         (a.objetivo or "")[:120],
+    } for a in analises])
 
 
 @app.route("/excluir/<int:ocorrencia_id>", methods=["POST"])
@@ -3967,7 +4134,13 @@ def overview():
         )
 
     # ── Ocorrências ─────────────────────────────────────────────────
-    oc_q = Ocorrencia.query.order_by(Ocorrencia.id.desc())
+    # Defere todos os campos Text/CLOB que não são necessários para os KPIs
+    _oc_sem = [
+        defer(Ocorrencia.descricao), defer(Ocorrencia.gc), defer(Ocorrencia.foto),
+        defer(Ocorrencia.conclusao_investigacao),
+        defer(Ocorrencia.anexo_post), defer(Ocorrencia.anexo_post_2), defer(Ocorrencia.anexo_post_3),
+    ]
+    oc_q = Ocorrencia.query.options(*_oc_sem).order_by(Ocorrencia.id.desc())
     if not is_admin:
         oc_q = _query_filtrar_sites(oc_q, Ocorrencia)
     if f_site:
@@ -3995,7 +4168,7 @@ def overview():
     # ── ANCs ────────────────────────────────────────────────────────
     _anc_sem = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3),
                 defer(ANC.imagem_4), defer(ANC.imagem_5), defer(ANC.imagem_6),
-                defer(ANC.anexo_fechamento)]
+                defer(ANC.anexo_fechamento), defer(ANC.descricao), defer(ANC.plano_acao_texto)]
     anc_q = ANC.query.options(*_anc_sem).order_by(ANC.id.desc())
     if not is_admin:
         anc_q = _query_filtrar_sites(anc_q, ANC)
@@ -4014,7 +4187,12 @@ def overview():
     anc_grav_c   = Counter((r.gravidade or "—").upper() for r in ancs)
 
     # ── Análises Investigativas ──────────────────────────────────────
-    _an_sem = [defer(AnaliseInvestigativa.docx_arquivo), defer(AnaliseInvestigativa.anexo_fechamento)]
+    _an_sem = [
+        defer(AnaliseInvestigativa.docx_arquivo), defer(AnaliseInvestigativa.anexo_fechamento),
+        defer(AnaliseInvestigativa.objetivo), defer(AnaliseInvestigativa.descricao_registro),
+        defer(AnaliseInvestigativa.conclusao), defer(AnaliseInvestigativa.sugestao),
+        defer(AnaliseInvestigativa.texto_fechamento),
+    ]
     an_q = AnaliseInvestigativa.query.options(*_an_sem).order_by(AnaliseInvestigativa.id.desc())
     if not is_admin:
         an_q = _query_filtrar_sites(an_q, AnaliseInvestigativa)
@@ -4943,7 +5121,7 @@ def sh_index():
         resumo=_sh_resumo(), ultima_ocorrencia=ultima_oc, ocorrencias=ocs,
         filtros=filtros, hoje=_date_cls.today().strftime("%Y-%m-%d"),
         proximo_id_previsto=ultimo_id+1, usuarios_mesmo_site=usuarios_site,
-        sites=sites_db)
+        sites=sites_db, setores=_get_setores(user_site))
 
 
 @app.route("/shift-handover/controle")
@@ -5572,7 +5750,8 @@ def admin_dashboard():
     total     = len(todos)
     ativos    = sum(1 for u in todos if u.is_active)
     admins    = sum(1 for u in todos if (u.perfil or "").upper() == "ADMIN")
-    supers    = sum(1 for u in todos if (u.perfil or "").upper() == "SUPERVISOR")
+    supers    = sum(1 for u in todos if (u.perfil or "").upper() == "GESTOR")
+    keyusers  = sum(1 for u in todos if (u.perfil or "").upper() == "KEYUSER")
     ops       = sum(1 for u in todos if (u.perfil or "").upper() == "OPERACIONAL")
     pendentes = _admin_pendentes()
 
@@ -5591,8 +5770,8 @@ def admin_dashboard():
         stats={"total": total, "ativos": ativos, "inativos": total - ativos,
                "admins": admins, "pendentes": pendentes},
         labels_site=labels_site, valores_site=valores_site,
-        labels_perfil=["ADMIN", "SUPERVISOR", "OPERACIONAL"],
-        valores_perfil=[admins, supers, ops],
+        labels_perfil=["ADMIN", "GESTOR", "KEYUSER", "OPERACIONAL"],
+        valores_perfil=[admins, supers, keyusers, ops],
         lgpd_sim=lgpd_sim, lgpd_nao=lgpd_nao, lgpd_pendente=lgpd_pendente,
         recentes=recentes, pendentes=pendentes,
     )
@@ -5718,6 +5897,214 @@ def enviar_comunicado():
         return jsonify(ok=False, erro=str(exc))
 
 
+# =========================
+# CONFIG. DE CAMPOS — ROTAS
+# =========================
+_CFG_CAMPOS_PERFIS = ("ADMIN", "GESTOR", "KEYUSER")
+
+
+def _cfg_check():
+    """Retorna True se o usuário pode acessar Config. de Campos."""
+    return (session.get("user_perfil") or "").upper() in _CFG_CAMPOS_PERFIS
+
+
+@app.route("/config-campos")
+@login_required
+def config_campos():
+    if not _cfg_check():
+        flash("Você não tem permissão para acessar esta área.", "danger")
+        return redirect(url_for("ocorrencias"))
+
+    perfil   = (session.get("user_perfil") or "").upper()
+    is_admin = perfil == "ADMIN"
+    site_ses = session.get("user_site") or ""
+    tab      = request.args.get("tab", "natureza")
+
+    # Admin pode filtrar por site; demais usuários ficam presos ao próprio site
+    if is_admin:
+        sites_disponiveis = [
+            s.nome_do_site for s in
+            SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()
+        ]
+        site_filtro = request.args.get("site") or ""
+    else:
+        sites_disponiveis = [site_ses] if site_ses else []
+        site_filtro = site_ses
+
+    # Queries por tipo
+    def _q_nat():
+        q = NaturezaConfig.query
+        if site_filtro:
+            q = q.filter_by(site=site_filtro)
+        return q.order_by(NaturezaConfig.site, NaturezaConfig.natureza).all()
+
+    def _q_loc():
+        q = LocalConfig.query
+        if site_filtro:
+            q = q.filter_by(site=site_filtro)
+        return q.order_by(LocalConfig.site, LocalConfig.local).all()
+
+    def _q_set():
+        q = SetorConfig.query
+        if site_filtro:
+            q = q.filter_by(site=site_filtro)
+        return q.order_by(SetorConfig.site, SetorConfig.setor).all()
+
+    try:
+        naturezas = _q_nat()
+        locais    = _q_loc()
+        setores   = _q_set()
+    except Exception:
+        naturezas = locais = setores = []
+
+    return render_template("config_campos.html",
+        naturezas=naturezas, locais=locais, setores=setores,
+        sites_disponiveis=sites_disponiveis,
+        site_filtro=site_filtro, site_ses=site_ses,
+        is_admin=is_admin, tab=tab,
+    )
+
+
+@app.route("/config-campos/<tipo>/novo", methods=["POST"])
+@login_required
+def config_campos_novo(tipo):
+    if not _cfg_check():
+        flash("Acesso não autorizado.", "danger")
+        return redirect(url_for("ocorrencias"))
+
+    perfil   = (session.get("user_perfil") or "").upper()
+    is_admin = perfil == "ADMIN"
+    site_ses = session.get("user_site") or ""
+    user_nome = session.get("user_nome") or ""
+
+    site = request.form.get("site", "").strip() if is_admin else site_ses
+    if not site:
+        flash("Site não identificado.", "danger")
+        return redirect(url_for("config_campos", tab=tipo))
+
+    if tipo == "natureza":
+        valor = (request.form.get("natureza") or "").strip()
+        if not valor:
+            flash("Informe a natureza.", "warning")
+            return redirect(url_for("config_campos", tab=tipo, site=site if is_admin else ""))
+        if NaturezaConfig.query.filter_by(site=site, natureza=valor).first():
+            flash(f'Natureza "{valor}" já existe para este site.', "warning")
+            return redirect(url_for("config_campos", tab=tipo, site=site if is_admin else ""))
+        db.session.add(NaturezaConfig(natureza=valor, site=site, usuario_criador=user_nome))
+
+    elif tipo == "local":
+        valor = (request.form.get("local") or "").strip()
+        if not valor:
+            flash("Informe o local.", "warning")
+            return redirect(url_for("config_campos", tab=tipo, site=site if is_admin else ""))
+        if LocalConfig.query.filter_by(site=site, local=valor).first():
+            flash(f'Local "{valor}" já existe para este site.', "warning")
+            return redirect(url_for("config_campos", tab=tipo, site=site if is_admin else ""))
+        db.session.add(LocalConfig(local=valor, site=site, usuario_criador=user_nome))
+
+    elif tipo == "setor":
+        valor = (request.form.get("setor") or "").strip()
+        if not valor:
+            flash("Informe o setor.", "warning")
+            return redirect(url_for("config_campos", tab=tipo, site=site if is_admin else ""))
+        if SetorConfig.query.filter_by(site=site, setor=valor).first():
+            flash(f'Setor "{valor}" já existe para este site.', "warning")
+            return redirect(url_for("config_campos", tab=tipo, site=site if is_admin else ""))
+        db.session.add(SetorConfig(setor=valor, site=site, usuario_criador=user_nome))
+
+    else:
+        flash("Tipo inválido.", "danger")
+        return redirect(url_for("config_campos"))
+
+    db.session.commit()
+    flash(f'Campo adicionado com sucesso!', "success")
+    return redirect(url_for("config_campos", tab=tipo, site=site if is_admin else ""))
+
+
+@app.route("/config-campos/<tipo>/<int:item_id>/editar", methods=["POST"])
+@login_required
+def config_campos_editar(tipo, item_id):
+    if not _cfg_check():
+        flash("Acesso não autorizado.", "danger")
+        return redirect(url_for("ocorrencias"))
+
+    perfil   = (session.get("user_perfil") or "").upper()
+    is_admin = perfil == "ADMIN"
+    site_ses = session.get("user_site") or ""
+
+    if tipo == "natureza":
+        item = NaturezaConfig.query.get_or_404(item_id)
+        if not is_admin and item.site != site_ses:
+            flash("Permissão negada.", "danger")
+            return redirect(url_for("config_campos", tab=tipo))
+        novo_valor = (request.form.get("natureza") or "").strip()
+        if novo_valor:
+            item.natureza = novo_valor
+
+    elif tipo == "local":
+        item = LocalConfig.query.get_or_404(item_id)
+        if not is_admin and item.site != site_ses:
+            flash("Permissão negada.", "danger")
+            return redirect(url_for("config_campos", tab=tipo))
+        novo_valor = (request.form.get("local") or "").strip()
+        if novo_valor:
+            item.local = novo_valor
+
+    elif tipo == "setor":
+        item = SetorConfig.query.get_or_404(item_id)
+        if not is_admin and item.site != site_ses:
+            flash("Permissão negada.", "danger")
+            return redirect(url_for("config_campos", tab=tipo))
+        novo_valor = (request.form.get("setor") or "").strip()
+        if novo_valor:
+            item.setor = novo_valor
+
+    else:
+        flash("Tipo inválido.", "danger")
+        return redirect(url_for("config_campos"))
+
+    db.session.commit()
+    flash("Campo atualizado com sucesso!", "success")
+    return redirect(url_for("config_campos", tab=tipo,
+                             site=item.site if is_admin else ""))
+
+
+@app.route("/config-campos/<tipo>/<int:item_id>/excluir", methods=["POST"])
+@login_required
+def config_campos_excluir(tipo, item_id):
+    if not _cfg_check():
+        flash("Acesso não autorizado.", "danger")
+        return redirect(url_for("ocorrencias"))
+
+    perfil   = (session.get("user_perfil") or "").upper()
+    is_admin = perfil == "ADMIN"
+    site_ses = session.get("user_site") or ""
+
+    if tipo == "natureza":
+        item = NaturezaConfig.query.get_or_404(item_id)
+    elif tipo == "local":
+        item = LocalConfig.query.get_or_404(item_id)
+    elif tipo == "setor":
+        item = SetorConfig.query.get_or_404(item_id)
+    else:
+        flash("Tipo inválido.", "danger")
+        return redirect(url_for("config_campos"))
+
+    if not is_admin and item.site != site_ses:
+        flash("Permissão negada.", "danger")
+        return redirect(url_for("config_campos", tab=tipo))
+
+    site_do_item = item.site
+    db.session.delete(item)
+    db.session.commit()
+    flash("Campo excluído com sucesso!", "success")
+    return redirect(url_for("config_campos", tab=tipo,
+                             site=site_do_item if is_admin else ""))
+
+
+# =========================
+# ADMINISTRAÇÃO
+# =========================
 @app.route("/admin/usuarios")
 @login_required
 @perfil_required("ADMIN")
@@ -5746,9 +6133,17 @@ def admin_usuarios():
     todos_sites = [s.nome_do_site for s in SiteCompleto.query.order_by(SiteCompleto.nome_do_site).all()]
     pendentes   = _admin_pendentes()
 
-    total   = len(usuarios)
-    ativos  = sum(1 for u in usuarios if u.is_active)
-    admins  = sum(1 for u in usuarios if (u.perfil or "").upper() == "ADMIN")
+    total     = len(usuarios)
+    ativos    = sum(1 for u in usuarios if u.is_active)
+    admins    = sum(1 for u in usuarios if (u.perfil or "").upper() == "ADMIN")
+    keyusers  = sum(1 for u in usuarios if (u.perfil or "").upper() == "KEYUSER")
+
+    # Sites com ao menos 1 usuário ativo (todos os usuários, não só os filtrados)
+    # Oracle trata string vazia como NULL — basta filtrar IS NOT NULL
+    sites_ativos = db.session.query(func.count(func.distinct(Usuario.site))).filter(
+        Usuario.is_active == True,
+        Usuario.site.isnot(None)
+    ).scalar() or 0
 
     # e-mails de todos os usuários ativos (para comunicado de atualização)
     todos_ativos = Usuario.query.filter_by(is_active=True).with_entities(Usuario.email).all()
@@ -5760,7 +6155,7 @@ def admin_usuarios():
         todos_sites=todos_sites,
         filtros={"busca": busca, "perfil": f_perfil, "site": f_site, "ativo": f_ativo},
         pendentes=pendentes,
-        stats={"total": total, "ativos": ativos, "inativos": total - ativos, "admins": admins},
+        stats={"total": total, "ativos": ativos, "inativos": total - ativos, "admins": admins, "keyusers": keyusers, "sites_ativos": sites_ativos},
         emails_ativos=emails_ativos,
         versao_app=APP_VERSION,
     )
@@ -5789,8 +6184,9 @@ def admin_usuario_novo():
             return render_template("admin_usuario_form.html", acao="novo",
                 todos_sites=todos_sites, dados=request.form, pendentes=pendentes)
 
+        cargo      = (request.form.get("cargo") or "").strip() or None
         senha_temp = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-        u = Usuario(nome=nome, email=email, perfil=perfil, site=site, is_active=True)
+        u = Usuario(nome=nome, email=email, perfil=perfil, site=site, cargo=cargo, is_active=True)
         u.set_password(senha_temp)
         try:
             db.session.add(u)
@@ -5828,6 +6224,7 @@ def admin_usuario_editar(uid):
             u.email = novo_email
         u.perfil    = (request.form.get("perfil") or u.perfil).strip().upper()
         u.site      = (request.form.get("site")   or "").strip() or None
+        u.cargo     = (request.form.get("cargo")  or "").strip() or None
         u.is_active = request.form.get("ativo") == "1"
         try:
             db.session.commit()
@@ -6034,11 +6431,13 @@ def admin_releases():
             flash(f"Versão {versao_rm} excluída.", "success")
             return redirect(url_for("admin_releases"))
 
-    releases = AppRelease.query.order_by(AppRelease.publicado_em.desc()).all()
+    releases  = AppRelease.query.order_by(AppRelease.publicado_em.desc()).all()
+    pendentes = _admin_pendentes()
     return render_template(
         "admin_releases.html",
         releases  = releases,
         fmt_size  = _fmt_size,
+        pendentes = pendentes,
     )
 
 
@@ -6076,6 +6475,27 @@ setup_armarios(db)
 app.register_blueprint(armarios_bp, url_prefix='/armarios')
 
 # =========================
+# ACHADOS E PERDIDOS — Blueprint
+# =========================
+from achados_blueprint import achados_bp, setup_achados
+setup_achados(db)
+app.register_blueprint(achados_bp, url_prefix='/achados')
+
+# =========================
+# PORTAS DE EMERGÊNCIA — Blueprint
+# =========================
+from portas_emergencia_blueprint import pe_bp, setup_pe
+setup_pe(db, get_setores=_get_setores, get_locais=_get_locais)
+app.register_blueprint(pe_bp, url_prefix='/portas-emergencia')
+
+# =========================
+# ABERTURA E FECHAMENTO — Blueprint
+# =========================
+from site_af_blueprint import af_bp, setup_af
+setup_af(db, Usuario=Usuario, UsuarioSite=UsuarioSite)
+app.register_blueprint(af_bp, url_prefix='/site-af')
+
+# =========================
 # INIT DB
 # =========================
 # Garante que todas as tabelas existem antes do Flask aceitar requests.
@@ -6104,6 +6524,22 @@ with app.app_context():
         "ALTER TABLE ARMARIO_CHAVE_RESERVA ADD (ASSINATURA CLOB)",
         "CREATE SEQUENCE armario_id_seq START WITH 1 INCREMENT BY 1",
         "CREATE SEQUENCE arm_chave_id_seq START WITH 1 INCREMENT BY 1",
+        "CREATE SEQUENCE arm_hist_id_seq START WITH 1 INCREMENT BY 1",
+        (
+            "CREATE TABLE ARMARIO_HISTORICO ("
+            "ID NUMBER PRIMARY KEY, "
+            "ARMARIO_ID NUMBER NOT NULL, "
+            "ARMARIO_NUMERO VARCHAR2(50), "
+            "BLOCO VARCHAR2(100), "
+            "SITE VARCHAR2(100) NOT NULL, "
+            "EVENTO VARCHAR2(50) NOT NULL, "
+            "COLABORADOR_NOME VARCHAR2(150), "
+            "COLABORADOR_CPF VARCHAR2(50), "
+            "OPERADOR VARCHAR2(150), "
+            "DATA_EVENTO TIMESTAMP DEFAULT SYSTIMESTAMP, "
+            "OBSERVACAO VARCHAR2(300)"
+            ")"
+        ),
     ]:
         try:
             db.session.execute(db.text(_sql))
@@ -6149,10 +6585,61 @@ def _init_db():
             "ALTER TABLE OCORRENCIAS ADD (BOLETIM_OCORRENCIA NUMBER(1) DEFAULT 0)",
             "ALTER TABLE OCORRENCIAS ADD (CUSTO VARCHAR2(50))",
             "ALTER TABLE ANCS ADD (VALOR VARCHAR2(50))",
+            # Colunas adicionadas progressivamente à tabela ANCS
+            "ALTER TABLE ANCS ADD (CARGO VARCHAR2(120))",
+            "ALTER TABLE USERS_LIVRO ADD (CARGO VARCHAR2(120))",
+            "ALTER TABLE ANCS ADD (NUMERO_ANC VARCHAR2(50))",
+            "ALTER TABLE ANCS ADD (NUMERO_SITE NUMBER)",
+            "ALTER TABLE ANCS ADD (IMAGEM_5 CLOB)",
+            "ALTER TABLE ANCS ADD (IMAGEM_6 CLOB)",
+            "ALTER TABLE ANCS ADD (INICIO_INVESTIGACAO VARCHAR2(16))",
+            "ALTER TABLE ANCS ADD (FIM_INVESTIGACAO VARCHAR2(16))",
+            "ALTER TABLE ANCS ADD (PLANO_ACAO_TEXTO CLOB)",
+            "ALTER TABLE ANCS ADD (FECHADO_POR VARCHAR2(120))",
+            "ALTER TABLE ANCS ADD (FECHADO_EM TIMESTAMP)",
+            "ALTER TABLE ANCS ADD (ANEXO_FECHAMENTO_NOME VARCHAR2(255))",
+            "ALTER TABLE ANCS ADD (ANEXO_FECHAMENTO BLOB)",
             "ALTER TABLE ANALISES_INVESTIGATIVAS ADD (VALOR VARCHAR2(50))",
             "CREATE TABLE SISTEMA_CONFIG (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, VERSAO_EXIGIDA VARCHAR2(20), DOWNLOAD_URL VARCHAR2(500), EXE_BLOB BLOB)",
             "INSERT INTO SISTEMA_CONFIG (VERSAO_EXIGIDA) SELECT '3.0' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM SISTEMA_CONFIG)",
-            "UPDATE SISTEMA_CONFIG SET VERSAO_EXIGIDA = '3.5'",
+            "UPDATE SISTEMA_CONFIG SET VERSAO_EXIGIDA = '3.5' WHERE VERSAO_EXIGIDA IS NULL OR VERSAO_EXIGIDA < '3.5'",
+            "UPDATE SISTEMA_CONFIG SET VERSAO_EXIGIDA = '4.0' WHERE VERSAO_EXIGIDA IS NULL OR VERSAO_EXIGIDA < '4.0'",
+            "UPDATE SISTEMA_CONFIG SET VERSAO_EXIGIDA = '4.1' WHERE VERSAO_EXIGIDA IS NULL OR VERSAO_EXIGIDA < '4.1'",
+            # ── Abertura e Fechamento de Site (SF-154234) ─────────────────
+            """CREATE TABLE SITE_AF (
+                ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                SITE VARCHAR2(100) NOT NULL,
+                STATUS VARCHAR2(30) DEFAULT 'AGUARDANDO_ABERTURA',
+                FECH_DATA VARCHAR2(10), FECH_HORA VARCHAR2(5),
+                FECH_REALIZADO_POR VARCHAR2(120), FECH_AVALIADO_POR VARCHAR2(120),
+                FECH_ENCAMINHADO VARCHAR2(120), FECH_ASSINATURA CLOB,
+                FECH_CHECKLIST CLOB, FECH_CRIADO_EM TIMESTAMP,
+                FECH_STATUS VARCHAR2(20), FECH_APROV_POR VARCHAR2(120),
+                FECH_APROV_EM TIMESTAMP, FECH_APROV_OBS VARCHAR2(500),
+                ABER_DATA VARCHAR2(10), ABER_HORA VARCHAR2(5),
+                ABER_REALIZADO_POR VARCHAR2(120), ABER_CLIENTE VARCHAR2(120),
+                ABER_UNIDADE VARCHAR2(120), ABER_ALARME_HORA VARCHAR2(5),
+                ABER_ALARME_ACIONADO VARCHAR2(120), ABER_ALARME_FUNCAO VARCHAR2(120),
+                ABER_ALARME_PROBLEMAS CLOB, ABER_CHECKLIST CLOB,
+                ABER_CRIADO_EM TIMESTAMP, ABER_STATUS VARCHAR2(20),
+                ABER_APROV_POR VARCHAR2(120), ABER_APROV_EM TIMESTAMP,
+                ABER_APROV_OBS VARCHAR2(500),
+                CRIADO_EM TIMESTAMP DEFAULT SYSTIMESTAMP,
+                CRIADO_POR VARCHAR2(120)
+            )""",
+            "ALTER TABLE SITE_AF ADD (ABER_ASSINATURA CLOB)",
+            "ALTER TABLE SITE_AF ADD (FECH_APROV_SIG CLOB)",
+            "ALTER TABLE SITE_AF ADD (ABER_APROV_SIG CLOB)",
+            """CREATE TABLE SITE_AF_ITENS (
+                ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                SITE VARCHAR2(100) NOT NULL,
+                TIPO VARCHAR2(20) NOT NULL,
+                NUMERO NUMBER NOT NULL,
+                DESCRICAO VARCHAR2(500) NOT NULL,
+                ATIVO VARCHAR2(1) DEFAULT 'S',
+                CRIADO_POR VARCHAR2(120),
+                CRIADO_EM TIMESTAMP DEFAULT SYSTIMESTAMP
+            )""",
             # Ampliar GC para CLOB (Oracle não permite MODIFY direto — renomeia + recria)
             "ALTER TABLE OCORRENCIAS ADD (GC_TMP CLOB)",
             "UPDATE OCORRENCIAS SET GC_TMP = GC",
@@ -6168,8 +6655,46 @@ def _init_db():
             "ALTER TABLE CLAVICULARIO_RETIRADA ADD (NOME_RETIRADOR VARCHAR2(150))",
             "ALTER TABLE CLAVICULARIO_RETIRADA ADD (RESPONSAVEL_ENTREGA VARCHAR2(150))",
             "ALTER TABLE CLAVICULARIO_RETIRADA ADD (ASSINATURA CLOB)",
+            # Vínculos da investigação com ANC e Análise Investigativa
+            "ALTER TABLE OCORRENCIAS ADD (ANC_VINCULADA_ID NUMBER)",
+            "ALTER TABLE OCORRENCIAS ADD (ANALISE_VINCULADA_ID NUMBER)",
             # Tabela de releases para o sistema de auto-atualização
             "CREATE TABLE APP_RELEASES (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, VERSAO VARCHAR2(20) NOT NULL, NOME_ARQUIVO VARCHAR2(255), TAMANHO_BYTES NUMBER, EXE_BLOB BLOB, PUBLICADO_EM TIMESTAMP DEFAULT SYSTIMESTAMP, PUBLICADO_POR VARCHAR2(120), ATIVO VARCHAR2(1) DEFAULT 'N')",
+            # Tabela de achados e perdidos
+            "CREATE TABLE ACHADOS_PERDIDOS (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, ID_REGISTRO NUMBER NOT NULL, ID_ANTERIOR VARCHAR2(50), OBJETO VARCHAR2(200) NOT NULL, RESPONSAVEL VARCHAR2(150) NOT NULL, DATA VARCHAR2(20) NOT NULL, TURNO VARCHAR2(30) NOT NULL, DESCRICAO CLOB, FOTO_PATH VARCHAR2(500), STATUS VARCHAR2(30) DEFAULT 'Pendente', RETIRADO_POR VARCHAR2(150), SITE VARCHAR2(128), CRIADO_POR VARCHAR2(120), CREATED_AT TIMESTAMP DEFAULT SYSTIMESTAMP)",
+            # Migração: converte TURNO de NUMBER para VARCHAR2 (caso tabela já existia com NUMBER)
+            "ALTER TABLE ACHADOS_PERDIDOS ADD (TURNO_STR VARCHAR2(30))",
+            "UPDATE ACHADOS_PERDIDOS SET TURNO_STR = TO_CHAR(TURNO) WHERE TURNO_STR IS NULL",
+            "ALTER TABLE ACHADOS_PERDIDOS DROP COLUMN TURNO",
+            "ALTER TABLE ACHADOS_PERDIDOS RENAME COLUMN TURNO_STR TO TURNO",
+            # Migração: converte ID_REGISTRO de NUMBER para VARCHAR2 e adiciona NUMERO_SITE
+            "ALTER TABLE ACHADOS_PERDIDOS ADD (NUMERO_SITE NUMBER)",
+            "UPDATE ACHADOS_PERDIDOS SET NUMERO_SITE = ID_REGISTRO WHERE NUMERO_SITE IS NULL",
+            "ALTER TABLE ACHADOS_PERDIDOS ADD (ID_REGISTRO_STR VARCHAR2(50))",
+            "UPDATE ACHADOS_PERDIDOS SET ID_REGISTRO_STR = TO_CHAR(ID_REGISTRO) WHERE ID_REGISTRO_STR IS NULL",
+            "ALTER TABLE ACHADOS_PERDIDOS DROP COLUMN ID_REGISTRO",
+            "ALTER TABLE ACHADOS_PERDIDOS RENAME COLUMN ID_REGISTRO_STR TO ID_REGISTRO",
+            # Coluna flag de foto (evita 2ª query Oracle no login)
+            "ALTER TABLE USERS_LIVRO ADD (TEM_FOTO VARCHAR2(1) DEFAULT 'N')",
+            # Backfill: marca S para quem já tem foto
+            "UPDATE USERS_LIVRO SET TEM_FOTO = 'S' WHERE FOTO_PERFIL IS NOT NULL AND TEM_FOTO != 'S'",
+            # Tabelas de configuração de campos dinâmicos por site
+            "CREATE TABLE NATUREZA_CONFIG (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, NATUREZA VARCHAR2(200) NOT NULL, SITE VARCHAR2(128) NOT NULL, DATA_CRIACAO TIMESTAMP DEFAULT SYSTIMESTAMP, USUARIO_CRIADOR VARCHAR2(120))",
+            "CREATE TABLE LOCAL_CONFIG (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, LOCAL VARCHAR2(200) NOT NULL, SITE VARCHAR2(128) NOT NULL, DATA_CRIACAO TIMESTAMP DEFAULT SYSTIMESTAMP, USUARIO_CRIADOR VARCHAR2(120))",
+            "CREATE TABLE SETOR_CONFIG (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, SETOR VARCHAR2(200) NOT NULL, SITE VARCHAR2(128) NOT NULL, DATA_CRIACAO TIMESTAMP DEFAULT SYSTIMESTAMP, USUARIO_CRIADOR VARCHAR2(120))",
+            # Portas de Emergência
+            "CREATE TABLE PORTAS_EMERGENCIA (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, CODIGO VARCHAR2(50) NOT NULL, LOCALIZACAO VARCHAR2(160) NOT NULL, SETOR VARCHAR2(120), ROTA_FUGA VARCHAR2(120), RESPONSAVEL VARCHAR2(120), OBSERVACAO CLOB, ATIVO NUMBER(1) DEFAULT 1, SITE VARCHAR2(128), CRIADO_POR VARCHAR2(120), CRIADO_EM TIMESTAMP DEFAULT SYSTIMESTAMP)",
+            "CREATE TABLE CHECKLISTS_PORTAS_EMERGENCIA (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, PORTA_ID NUMBER NOT NULL, DATA_CHECKLIST TIMESTAMP DEFAULT SYSTIMESTAMP, INSPETOR VARCHAR2(120) NOT NULL, TURNO VARCHAR2(30), PORTA_DESOBSTRUIDA NUMBER(1) DEFAULT 0, ABRE_NORMALMENTE NUMBER(1) DEFAULT 0, SINALIZACAO_OK NUMBER(1) DEFAULT 0, ILUMINACAO_OK NUMBER(1) DEFAULT 0, ALARME_OK NUMBER(1) DEFAULT 0, STATUS VARCHAR2(30) DEFAULT 'PENDENTE', OBSERVACAO CLOB, CRIADO_EM TIMESTAMP DEFAULT SYSTIMESTAMP)",
+            "CREATE TABLE DISPAROS_ALARME (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, DATA_REGISTRO TIMESTAMP DEFAULT SYSTIMESTAMP, DATA_DISPARO VARCHAR2(20) NOT NULL, HORA_DISPARO VARCHAR2(10) NOT NULL, HORA_DESATIVADO VARCHAR2(10), HORA_ATIVADO VARCHAR2(10), CONTATO_MONITORAMENTO VARCHAR2(150), LOCALIZACAO VARCHAR2(150) NOT NULL, SETOR VARCHAR2(100), TIPO_ALARME VARCHAR2(100) NOT NULL, MOTIVO VARCHAR2(150), RESPONSAVEL VARCHAR2(120), TURNO VARCHAR2(50), HOUVE_EVACUACAO NUMBER(1) DEFAULT 0, ACIONADO_BOMBEIRO NUMBER(1) DEFAULT 0, ACIONADO_SEGURANCA NUMBER(1) DEFAULT 0, STATUS VARCHAR2(50) DEFAULT 'EM ANALISE', OBSERVACAO CLOB, SITE VARCHAR2(128), CRIADO_POR VARCHAR2(120))",
+            "CREATE TABLE BOTOES_PANICO (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, DATA_REGISTRO TIMESTAMP DEFAULT SYSTIMESTAMP, CODIGO VARCHAR2(50) NOT NULL, LOCALIZACAO VARCHAR2(150) NOT NULL, SETOR VARCHAR2(100), TIPO VARCHAR2(80), RESPONSAVEL VARCHAR2(120), TURNO VARCHAR2(50), TESTADO NUMBER(1) DEFAULT 0, SINAL_RECEBIDO NUMBER(1) DEFAULT 0, COMUNICACAO_CFTV NUMBER(1) DEFAULT 0, NECESSITA_MANUTENCAO NUMBER(1) DEFAULT 0, STATUS VARCHAR2(50) DEFAULT 'EM ANALISE', OBSERVACAO CLOB, SITE VARCHAR2(128), CRIADO_POR VARCHAR2(120))",
+            # Colunas de tratativa de NC em checklists
+            "ALTER TABLE CHECKLISTS_PORTAS_EMERGENCIA ADD (CONCLUSAO CLOB)",
+            "ALTER TABLE CHECKLISTS_PORTAS_EMERGENCIA ADD (DATA_CONCLUSAO TIMESTAMP)",
+            "ALTER TABLE CHECKLISTS_PORTAS_EMERGENCIA ADD (CONCLUIDO_POR VARCHAR2(120))",
+            # Novos campos de botão de pânico
+            "ALTER TABLE BOTOES_PANICO ADD (HORA_TESTE VARCHAR2(10))",
+            "ALTER TABLE BOTOES_PANICO ADD (HORA_RETORNO VARCHAR2(10))",
+            "ALTER TABLE BOTOES_PANICO ADD (AGENTE_CFTV VARCHAR2(120))",
         ]:
             try:
                 db.session.execute(db.text(_col_sql))
