@@ -157,6 +157,27 @@ def _is_admin():
     return (session.get("user_perfil") or "").upper() == "ADMIN"
 
 
+def _sites_autorizados():
+    """Retorna lista de sites que o usuário logado pode visualizar.
+    ADMIN → [] (sem filtro — vê tudo); demais → sites vinculados ou site principal."""
+    if _is_admin():
+        return []
+    uid = session.get("user_id")
+    if uid:
+        try:
+            from sqlalchemy import text as _text
+            rows = _db.session.execute(
+                _text("SELECT SITE_NOME FROM USUARIO_SITES WHERE USUARIO_ID = :uid"),
+                {"uid": uid}
+            ).fetchall()
+            if rows:
+                return [r[0] for r in rows]
+        except Exception:
+            pass
+    site = _site_usuario()
+    return [site] if site else []
+
+
 def _is_gestor_keyuser():
     return (session.get("user_perfil") or "").upper() in ("ADMIN", "GESTOR", "KEYUSER")
 
@@ -201,12 +222,16 @@ def _logo_path():
 @pe_bp.route("/")
 @_login_required
 def painel():
-    site = _site_usuario()
+    site    = _site_usuario()
     is_admin = _is_admin()
+    _sites  = _sites_autorizados()
 
     q = PortaEmergencia.query
-    if not is_admin and site:
-        q = q.filter_by(site=site)
+    if _sites:
+        if len(_sites) == 1:
+            q = q.filter(PortaEmergencia.site == _sites[0])
+        else:
+            q = q.filter(PortaEmergencia.site.in_(_sites))
 
     portas = q.order_by(PortaEmergencia.id.desc()).all()
 
@@ -549,11 +574,15 @@ def concluir_checklist(checklist_id):
 @pe_bp.route("/alarmes")
 @_login_required
 def alarmes():
-    site = _site_usuario()
+    site     = _site_usuario()
     is_admin = _is_admin()
+    _sites   = _sites_autorizados()
     q = DisparoAlarme.query
-    if not is_admin and site:
-        q = q.filter_by(site=site)
+    if _sites:
+        if len(_sites) == 1:
+            q = q.filter(DisparoAlarme.site == _sites[0])
+        else:
+            q = q.filter(DisparoAlarme.site.in_(_sites))
     registros = q.order_by(DisparoAlarme.id.desc()).all()
     return render_template("pe_alarmes.html", alarmes=registros,
                            is_admin=is_admin, is_gestor=_is_gestor_keyuser())

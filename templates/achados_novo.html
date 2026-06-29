@@ -39,6 +39,13 @@
   .foto-display .ft.chosen{ color:var(--text); font-weight:700; }
   .foto-preview{ margin-top:10px; display:none; }
   .foto-preview img{ max-height:180px; border-radius:10px; border:1px solid var(--line); }
+  .foto-row{ display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; }
+  .foto-row .foto-wrapper{ flex:1; min-width:220px; }
+  .btn-camera{ flex-shrink:0; white-space:nowrap; }
+
+  /* Modal câmera */
+  #camera-video{ width:100%; max-height:380px; border-radius:10px; background:#000; object-fit:contain; }
+  #camera-erro{ display:none; color:#dc2626; font-size:12px; font-weight:700; margin-top:10px; text-align:center; }
 
   /* ID badge */
   .id-badge{ display:inline-flex; align-items:center; gap:8px; background:#fff4e0; border:1.5px solid #ffcc00; border-radius:12px; padding:8px 16px; margin-bottom:20px; }
@@ -107,12 +114,19 @@
     <div class="section-title">Foto do Objeto <span style="font-weight:500;text-transform:none;font-size:11px">(opcional)</span></div>
     <div class="field">
       <label>Imagem</label>
-      <div class="foto-wrapper">
-        <div class="foto-display" id="foto-display">
-          <span class="fi">📷</span>
-          <span class="ft" id="foto-txt">Clique para anexar uma foto (PNG, JPG, WEBP, GIF)</span>
+      <div class="foto-row">
+        <div class="foto-wrapper">
+          <div class="foto-display" id="foto-display">
+            <span class="fi">📷</span>
+            <span class="ft" id="foto-txt">Clique para anexar uma foto (PNG, JPG, WEBP, GIF)</span>
+          </div>
+          <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp,.gif" onchange="previewFoto(this)">
         </div>
-        <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp,.gif" onchange="previewFoto(this)">
+        <button type="button" class="btn btn-soft btn-camera" onclick="abrirCamera()">📸 Usar câmera</button>
+        <!-- Fallback p/ tablet/celular em HTTP: câmera nativa via atributo capture
+             (não exige getUserMedia nem HTTPS). Disparado por abrirCamera(). -->
+        <input type="file" id="foto-capture" accept="image/*" capture="environment"
+               style="display:none" onchange="capturaNativaFallback(this)">
       </div>
       <div class="foto-preview" id="foto-preview">
         <img id="foto-img" src="" alt="preview">
@@ -124,6 +138,26 @@
       <button type="submit" class="btn btn-red">💾 Salvar Registro {{ next_id }}</button>
     </div>
   </form>
+</div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal-overlay" id="modal-camera" onclick="if(event.target===this) fecharCamera()">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
+    <div class="modal-head">
+      <h3>📷 Tirar Foto</h3>
+      <button class="modal-close" onclick="fecharCamera()">✕</button>
+    </div>
+    <div class="modal-body">
+      <video id="camera-video" autoplay playsinline></video>
+      <canvas id="camera-canvas" style="display:none"></canvas>
+      <p id="camera-erro"></p>
+    </div>
+    <div class="modal-foot" style="justify-content:center">
+      <button type="button" class="btn btn-soft" onclick="fecharCamera()">Cancelar</button>
+      <button type="button" class="btn btn-red" onclick="capturarFoto()">📸 Capturar</button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -168,6 +202,72 @@ document.addEventListener('DOMContentLoaded', function() {
     var t = new Date();
     d.value = t.toISOString().substring(0,10);
   }
+});
+
+/* ── Câmera ── */
+var _cameraStream = null;
+
+async function abrirCamera() {
+  // getUserMedia só existe em contexto seguro (HTTPS ou localhost). Quando o app
+  // é acessado por IP em HTTP (tablet na rede), ele não existe — aí caímos no
+  // input "capture", que abre a câmera nativa do tablet sem exigir HTTPS.
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById('foto-capture').click();
+    return;
+  }
+  var erro = document.getElementById('camera-erro');
+  erro.style.display = 'none';
+  document.getElementById('modal-camera').classList.add('open');
+  try {
+    _cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }, audio: false
+    });
+    document.getElementById('camera-video').srcObject = _cameraStream;
+  } catch (e) {
+    erro.textContent = 'Não foi possível acessar a câmera: ' + (e.message || e.name || e);
+    erro.style.display = 'block';
+  }
+}
+
+/* Recebe a foto do input nativo (capture) e injeta no input de upload real,
+   reaproveitando 100% o preview/envio já existentes. */
+function capturaNativaFallback(input) {
+  if (!input.files || !input.files[0]) return;
+  var dt = new DataTransfer();
+  dt.items.add(input.files[0]);
+  var main = document.querySelector('input[name=foto]');
+  main.files = dt.files;
+  main.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function fecharCamera() {
+  document.getElementById('modal-camera').classList.remove('open');
+  if (_cameraStream) {
+    _cameraStream.getTracks().forEach(function(t){ t.stop(); });
+    _cameraStream = null;
+  }
+}
+
+function capturarFoto() {
+  var video  = document.getElementById('camera-video');
+  var canvas = document.getElementById('camera-canvas');
+  if (!video.videoWidth) return;
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(function(blob) {
+    var file  = new File([blob], 'foto_camera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+    var dt    = new DataTransfer();
+    dt.items.add(file);
+    var input = document.querySelector('input[name=foto]');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    fecharCamera();
+  }, 'image/jpeg', 0.92);
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') fecharCamera();
 });
 </script>
 {% endblock %}

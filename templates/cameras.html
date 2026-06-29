@@ -140,7 +140,7 @@
             data-ativo="{{ '1' if cam.ativo else '0' }}">
           {% if can_manage %}<td><input type="checkbox" class="chk-sel chk-row" name="ids" value="{{ cam.id }}" onchange="atualizarBulk('tb-cams','chk-all-cams','bulk-cams')"></td>{% endif %}
           <td><strong>{{ cam.numero }}</strong></td>
-          <td>{{ cam.nome or '<span style="color:var(--muted)">—</span>' }}</td>
+          <td>{% if cam.nome %}{{ cam.nome }}{% else %}<span style="color:var(--muted)">—</span>{% endif %}</td>
           {% if is_admin %}<td style="color:var(--muted);font-size:12px;">{{ cam.site or '—' }}</td>{% endif %}
           <td>
             {% if cam.ativo %}
@@ -153,7 +153,7 @@
           {% if can_manage %}
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <button class="btn btn-soft btn-sm"
+              <button type="button" class="btn btn-soft btn-sm"
                 onclick="abrirEditar({{ cam.id }},'{{ cam.numero|e }}','{{ (cam.nome or '')|e }}')">✏️</button>
               <form method="POST" action="{{ url_for('cameras_toggle', cam_id=cam.id) }}" style="margin:0">
                 <button type="submit" class="btn btn-sm {{ 'btn-soft' if cam.ativo else 'btn-green' }}"

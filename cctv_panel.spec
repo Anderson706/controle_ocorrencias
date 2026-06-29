@@ -10,6 +10,7 @@ datas = [
 ]
 datas += collect_data_files('reportlab')
 datas += collect_data_files('docx')
+datas += collect_data_files('pptx')          # template .pptx interno do python-pptx
 datas += collect_data_files('oracledb')
 datas += collect_data_files('clr_loader')
 datas += collect_data_files('pythonnet')
@@ -36,6 +37,7 @@ hiddenimports = (
     + collect_submodules('reportlab')
     + collect_submodules('docx')
     + collect_submodules('openpyxl')
+    + collect_submodules('pptx')
     + collect_submodules('webview')
     + collect_submodules('clr_loader')
     + collect_submodules('pythonnet')
@@ -59,11 +61,29 @@ hiddenimports = (
         'chaves_blueprint',
         # Achados e Perdidos
         'achados_blueprint',
+        # Controle de Ativos (redundância via Supabase)
+        'ativos_blueprint',
     ]
 )
 
 # ── Binários do pythonnet (CLR) ───────────────────────────────────────────────
 binaries = []
+
+# ── Stack do Supabase (Controle de Ativos / Usuários Ativos via REST) ─────────
+# supabase 2.31 usa sub-pacotes próprios (postgrest, supabase_auth, etc.) com
+# imports dinâmicos — collect_all garante módulos + dados + binários de cada um.
+hiddenimports = list(hiddenimports)
+for _pkg in ('supabase', 'postgrest', 'supabase_auth', 'supabase_functions',
+             'realtime', 'storage3', 'httpx', 'httpcore', 'h2', 'hpack',
+             'websockets', 'gotrue', 'supafunc',
+             'truststore', 'certifi'):   # truststore = confia na CA do proxy DHL
+    try:
+        _d, _b, _h = collect_all(_pkg)
+        datas += _d
+        binaries += _b
+        hiddenimports += _h
+    except Exception:
+        pass
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 a = Analysis(
@@ -94,23 +114,32 @@ splash = Splash(
     always_on_top=True,
 )
 
-# ── EXE --onefile ─────────────────────────────────────────────────────────────
+# ── EXE --onedir (one-folder) ─────────────────────────────────────────────────
+# Modo pasta: o EXE NÃO re-extrai ~63 MB no temp a cada abertura (inicialização
+# muito mais rápida). 'splash' fica no EXE; binários/dados vão para o COLLECT.
 exe = EXE(
     pyz,
     a.scripts,
     splash,
-    splash.binaries,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='CCTV_ControlPanel',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=False,
     icon='static/icone.ico',
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    splash.binaries,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='CCTV_ControlPanel',
 )

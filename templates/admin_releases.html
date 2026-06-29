@@ -10,7 +10,12 @@
     </a>
     <a href="{{ url_for('admin_multisites') }}" class="adm-tab">🌐 Multisites</a>
     <a href="{{ url_for('admin_releases') }}" class="adm-tab active">📦 Releases</a>
+    <a href="{{ url_for('admin_usuarios_ativos') }}" class="adm-tab">🏷️ Usuários Ativos</a>
   </div>
+  <div style="width:1px;background:var(--line);margin:0 4px;align-self:stretch;flex-shrink:0;"></div>
+  <button class="btn btn-soft btn-sm" onclick="pnAbrirModal()" title="Enviar patch notes por e-mail para todos os usuários ativos">
+    📧 Comunicar Patch Notes
+  </button>
 {% endblock %}
 
 {% block page_content %}
@@ -211,6 +216,106 @@
   </div>
   {% endif %}
 </div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MODAL — PATCH NOTES E-MAIL
+══════════════════════════════════════════════════════════════════ -->
+<div id="pn-modal" style="display:none;position:fixed;inset:0;z-index:9200;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;">
+  <div style="background:#fff;border-radius:20px;width:100%;max-width:820px;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 32px 90px rgba(0,0,0,.3);overflow:hidden;">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#d40511,#9b0309);padding:20px 26px;display:flex;align-items:center;gap:14px;flex-shrink:0;">
+      <div style="width:42px;height:42px;background:rgba(255,255,255,.15);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">📧</div>
+      <div>
+        <div style="color:#fff;font-size:16px;font-weight:900;margin-bottom:2px;">Comunicar Patch Notes</div>
+        <div style="color:rgba(255,255,255,.6);font-size:12px;">Compose e envie as novidades da versão para todos os usuários ativos</div>
+      </div>
+      <button onclick="pnFecharModal()" style="margin-left:auto;background:rgba(255,255,255,.12);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;transition:.15s;" onmouseover="this.style.background='rgba(255,255,255,.25)'" onmouseout="this.style.background='rgba(255,255,255,.12)'">✕</button>
+    </div>
+
+    <!-- Body — 2 colunas -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;flex:1;overflow:hidden;min-height:0;">
+
+      <!-- Coluna esquerda: composer -->
+      <div style="padding:22px 24px;overflow-y:auto;border-right:1px solid #e5e7eb;display:flex;flex-direction:column;gap:18px;">
+
+        <!-- Versão -->
+        <div>
+          <label style="display:block;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;margin-bottom:6px;">Versão</label>
+          <input id="pn-versao" type="text" value="{{ versao_app }}" placeholder="ex.: 4.1"
+            style="width:100%;padding:9px 13px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;"
+            onfocus="this.style.borderColor='#d40511'" onblur="this.style.borderColor='#e5e7eb'"
+            oninput="pnAtualizarPreview()">
+        </div>
+
+        <!-- Adicionar nota -->
+        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:16px;">
+          <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:12px;">➕ Nova nota</div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div>
+              <label style="display:block;font-size:10px;font-weight:800;color:#9ca3af;margin-bottom:4px;">TÍTULO *</label>
+              <input id="pn-titulo" type="text" placeholder="ex.: Achados e Perdidos — novo módulo"
+                style="width:100%;padding:9px 13px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;"
+                onfocus="this.style.borderColor='#d40511'" onblur="this.style.borderColor='#e5e7eb'"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('pn-descricao').focus();}">
+            </div>
+            <div>
+              <label style="display:block;font-size:10px;font-weight:800;color:#9ca3af;margin-bottom:4px;">DESCRIÇÃO</label>
+              <textarea id="pn-descricao" placeholder="Descreva a funcionalidade ou correção..." rows="3"
+                style="width:100%;padding:9px 13px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-family:inherit;outline:none;resize:vertical;box-sizing:border-box;"
+                onfocus="this.style.borderColor='#d40511'" onblur="this.style.borderColor='#e5e7eb'"></textarea>
+            </div>
+            <button onclick="pnAdicionarNota()"
+              style="align-self:flex-end;padding:9px 18px;background:#d40511;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;transition:.15s;"
+              onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+              ➕ Adicionar
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista de notas adicionadas -->
+        <div>
+          <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:8px;">Notas adicionadas</div>
+          <div id="pn-lista" style="display:flex;flex-direction:column;gap:6px;">
+            <div id="pn-lista-vazia" style="text-align:center;padding:18px;color:#9ca3af;font-size:12px;font-weight:700;border:2px dashed #e5e7eb;border-radius:10px;">
+              Nenhuma nota adicionada ainda
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Coluna direita: preview do e-mail -->
+      <div style="padding:22px 24px;overflow-y:auto;background:#f0f2f5;display:flex;flex-direction:column;">
+        <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+          Pré-visualização
+          <span style="flex:1;height:1px;background:#d1d5db;display:block;"></span>
+        </div>
+        <div id="pn-preview" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);font-size:12px;flex:1;">
+          <!-- preenchido via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:16px 24px;border-top:1px solid #e5e7eb;background:#fff;display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <div id="pn-destinatarios" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:8px;font-size:12px;color:#1e40af;font-weight:700;">
+        📬 <span>Carregando destinatários...</span>
+      </div>
+      <div style="flex:1;"></div>
+      <button onclick="pnFecharModal()" style="padding:11px 20px;background:#f3f4f6;color:#374151;border:none;border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">Cancelar</button>
+      <button id="pn-btn-enviar" onclick="pnEnviar()"
+        style="padding:11px 26px;background:#d40511;color:#fff;border:none;border-radius:11px;font-size:14px;font-weight:900;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:8px;transition:.15s;"
+        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+        <span>📨</span> Enviar para todos
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="pn-toast" style="display:none;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:9999;background:#1f2937;color:#fff;padding:12px 22px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.3);white-space:nowrap;"></div>
+
 {% endblock %}
 
 {% block page_scripts %}
@@ -236,5 +341,159 @@ function atualizarArquivo(input) {
     display.querySelector('.file-icon').textContent = '📂';
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   PATCH NOTES — modal logic
+══════════════════════════════════════════════════════════════════ */
+var _pnNotas = [];   // [{titulo, descricao}, ...]
+
+function pnAbrirModal() {
+  document.getElementById('pn-modal').style.display = 'flex';
+  pnAtualizarLista();
+  pnAtualizarPreview();
+  // Conta destinatários
+  fetch('/admin/enviar-comunicado', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({versao: '0', itens: [], _count_only: true})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    var el = document.querySelector('#pn-destinatarios span');
+    if (d.enviados !== undefined) el.textContent = d.enviados + ' usuários ativos receberão';
+    else el.textContent = 'Todos os usuários ativos';
+  }).catch(function(){ });
+}
+
+function pnFecharModal() {
+  document.getElementById('pn-modal').style.display = 'none';
+}
+
+function pnAdicionarNota() {
+  var titulo = (document.getElementById('pn-titulo').value || '').trim();
+  var descr  = (document.getElementById('pn-descricao').value || '').trim();
+  if (!titulo) {
+    document.getElementById('pn-titulo').focus();
+    document.getElementById('pn-titulo').style.borderColor = '#d40511';
+    return;
+  }
+  _pnNotas.push({titulo: titulo, descricao: descr});
+  document.getElementById('pn-titulo').value    = '';
+  document.getElementById('pn-descricao').value = '';
+  document.getElementById('pn-titulo').focus();
+  pnAtualizarLista();
+  pnAtualizarPreview();
+}
+
+function pnRemoverNota(i) {
+  _pnNotas.splice(i, 1);
+  pnAtualizarLista();
+  pnAtualizarPreview();
+}
+
+function pnAtualizarLista() {
+  var lista  = document.getElementById('pn-lista');
+  var vazia  = document.getElementById('pn-lista-vazia');
+  // Remove itens antigos (exceto a div vazia)
+  Array.from(lista.children).forEach(function(el) {
+    if (el.id !== 'pn-lista-vazia') lista.removeChild(el);
+  });
+  if (_pnNotas.length === 0) {
+    vazia.style.display = '';
+    return;
+  }
+  vazia.style.display = 'none';
+  _pnNotas.forEach(function(nota, i) {
+    var div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:flex-start;gap:10px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;';
+    div.innerHTML =
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-size:13px;font-weight:800;color:#1f2937;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _esc(nota.titulo) + '</div>' +
+        (nota.descricao ? '<div style="font-size:12px;color:#6b7280;margin-top:3px;line-height:1.5;">' + _esc(nota.descricao) + '</div>' : '') +
+      '</div>' +
+      '<button onclick="pnRemoverNota(' + i + ')" style="background:none;border:none;cursor:pointer;color:#d1d5db;font-size:18px;padding:0;flex-shrink:0;line-height:1;" onmouseover="this.style.color=\'#d40511\'" onmouseout="this.style.color=\'#d1d5db\'">×</button>';
+    lista.appendChild(div);
+  });
+}
+
+function pnAtualizarPreview() {
+  var versao = (document.getElementById('pn-versao').value || '—').trim();
+  var cards  = '';
+  _pnNotas.forEach(function(nota, i) {
+    var sep = i > 0 ? 'border-top:1px solid #e5e7eb;' : '';
+    cards +=
+      '<tr><td style="' + sep + 'padding:12px 0;">' +
+        '<div style="font-size:12px;font-weight:900;color:#1f2937;margin-bottom:4px;">&#8226; ' + _esc(nota.titulo) + '</div>' +
+        (nota.descricao ? '<div style="font-size:11px;color:#6b7280;line-height:1.55;padding-left:12px;">' + _esc(nota.descricao) + '</div>' : '') +
+      '</td></tr>';
+  });
+  if (!cards) cards = '<tr><td style="font-size:11px;color:#9ca3af;padding:10px 0;">Adicione notas para ver o preview...</td></tr>';
+
+  document.getElementById('pn-preview').innerHTML =
+    '<div style="background:linear-gradient(135deg,#d40511,#9b0309);padding:18px 20px;">' +
+      '<div style="font-size:15px;font-weight:900;color:#fff;">CCTV Control Panel</div>' +
+      '<div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;">DHL Security Operations</div>' +
+      '<div style="display:inline-block;background:#ffcc00;color:#111;font-size:10px;font-weight:900;padding:3px 10px;border-radius:999px;margin-top:8px;">v' + _esc(versao) + '</div>' +
+    '</div>' +
+    '<div style="padding:18px 20px;background:#fff;">' +
+      '<p style="font-size:12px;color:#1f2937;margin:0 0 6px;">Olá,</p>' +
+      '<p style="font-size:11px;color:#6b7280;line-height:1.6;margin:0 0 16px;">Uma nova versão do <strong>CCTV Control Panel</strong> foi disponibilizada.</p>' +
+      '<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:14px;">' +
+        '<div style="font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#9ca3af;margin-bottom:4px;">Novidades da versão</div>' +
+        '<div style="font-size:14px;font-weight:900;color:#1f2937;margin-bottom:10px;">Versão ' + _esc(versao) + '</div>' +
+        '<table width="100%" cellpadding="0" cellspacing="0">' + cards + '</table>' +
+      '</div>' +
+      '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:11px;color:#3b82f6;">' +
+        '🔄 <strong style="color:#1e40af;">Como atualizar:</strong> Abra o aplicativo normalmente.' +
+      '</div>' +
+    '</div>' +
+    '<div style="background:#1a1a1a;padding:12px 20px;">' +
+      '<span style="font-size:10px;color:rgba(255,255,255,.45);">DHL Security · CCTV Control Panel · Sistema interno · v' + _esc(versao) + '</span>' +
+    '</div>';
+}
+
+function pnEnviar() {
+  if (_pnNotas.length === 0) {
+    pnToast('Adicione pelo menos uma nota antes de enviar.', '#d40511');
+    return;
+  }
+  var btn = document.getElementById('pn-btn-enviar');
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> Enviando...';
+  var versao = (document.getElementById('pn-versao').value || '').trim();
+  fetch('/admin/enviar-comunicado', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({versao: versao, itens: _pnNotas})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      pnToast('✓ Comunicado enviado para ' + d.enviados + ' usuário(s)!', '#16a34a');
+      setTimeout(function(){ pnFecharModal(); _pnNotas = []; pnAtualizarLista(); pnAtualizarPreview(); }, 2000);
+    } else {
+      pnToast('Erro: ' + (d.erro || 'Falha no envio'), '#d40511');
+    }
+  })
+  .catch(function(e){ pnToast('Erro de conexão: ' + e, '#d40511'); })
+  .finally(function(){
+    btn.disabled = false;
+    btn.innerHTML = '<span>📨</span> Enviar para todos';
+  });
+}
+
+function pnToast(msg, bg) {
+  var t = document.getElementById('pn-toast');
+  t.textContent  = msg;
+  t.style.background = bg || '#1f2937';
+  t.style.display = 'block';
+  setTimeout(function(){ t.style.display = 'none'; }, 3500);
+}
+
+function _esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('pn-modal').addEventListener('click', function(e) {
+  if (e.target === this) pnFecharModal();
+});
 </script>
 {% endblock %}

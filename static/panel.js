@@ -242,11 +242,13 @@
    Selects: submit imediato ao mudar
    Inputs texto/data: submit com debounce de 400ms
    Ativa em qualquer <form data-autofilter> ou <form class="auto-filter">
+   Re-inicializa após cada swap HTMX para pegar novos elementos.
 ═══════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
 
-  var _timers = new WeakMap();
+  var _timers    = new WeakMap();
+  var _processed = new WeakSet(); // evita duplo binding no mesmo elemento
 
   function _doSubmit(form) {
     if (form._afSubmitting) return;
@@ -278,6 +280,8 @@
   function _setup() {
     document.querySelectorAll('form').forEach(function (form) {
       if (!_isFilterForm(form)) return;
+      if (_processed.has(form)) return; // já inicializado — pula
+      _processed.add(form);
 
       // Selects → submit imediato
       form.querySelectorAll('select').forEach(function (el) {
@@ -299,10 +303,180 @@
     });
   }
 
-  // panel.js é carregado no fim do <body> — DOM já pronto na maioria dos casos
+  // Inicializa no carregamento inicial
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _setup);
   } else {
     _setup();
   }
+
+  // Re-inicializa após cada swap HTMX (navegação via sidebar / partial update)
+  // htmx:afterSettle garante que o novo DOM já está estável antes de procurar forms
+  document.addEventListener('htmx:afterSettle', _setup);
+})();
+
+
+/* ═══════════════════════════════════════════════════════════
+   SCROLL MEMORY — preserva a posição de scroll entre reloads
+   Funciona para:
+     • Form POST → redirect (beforeunload + DOMContentLoaded)
+     • Navegação HTMX via sidebar (htmx:beforeRequest + htmx:afterSettle)
+   Chave = pathname + search (ex: /anc?status=ABERTO)
+═══════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  function _key() {
+    return 'scroll|' + location.pathname + location.search;
+  }
+
+  function _save() {
+    try { sessionStorage.setItem(_key(), window.scrollY); } catch (e) {}
+  }
+
+  function _restore() {
+    try {
+      var y = sessionStorage.getItem(_key());
+      if (y !== null) {
+        window.scrollTo(0, parseInt(y, 10));
+      }
+    } catch (e) {}
+  }
+
+  // ── Reload completo (form POST → redirect) ──────────────
+  window.addEventListener('beforeunload', _save);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _restore);
+  } else {
+    _restore();
+  }
+
+  // ── Navegação HTMX (troca de conteúdo via sidebar) ──────
+  document.addEventListener('htmx:beforeRequest', _save);
+  document.addEventListener('htmx:afterSettle',   _restore);
+})();
+
+
+/* ═══════════════════════════════════════════════════════════
+   TABLE SORT — ordenação por clique no cabeçalho
+   ─────────────────────────────────────────────────────────
+   Uso nos templates: adicionar data-sort="text|date|num"
+   em cada <th> que deve ser ordenável.
+   Sem data-sort → coluna não ordenável (ex: Ações).
+
+   Tipos:
+     text — comparação lexicográfica pt-BR (padrão)
+     date — suporta ISO (YYYY-MM-DD) e BR (DD/MM/YYYY)
+     num  — comparação numérica (ignora #, R$, etc.)
+
+   Clique alterna ▲ asc ↔ ▼ desc.
+   Re-inicializa automaticamente após trocas HTMX.
+═══════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  /* CSS injetado uma única vez */
+  var _CSS = [
+    'th[data-sort]{cursor:pointer;user-select:none;}',
+    'th[data-sort]:hover{background:rgba(212,5,17,.07);}',
+    'th[data-sort]::after{content:" \\25B8";opacity:.3;font-size:10px;margin-left:3px;display:inline-block;}',
+    'th[data-sort].sort-asc::after{content:" \\25B4";opacity:1;color:#d40511;}',
+    'th[data-sort].sort-desc::after{content:" \\25BE";opacity:1;color:#d40511;}',
+  ].join('');
+
+  function _injectCss() {
+    if (document.getElementById('_tbl_sort_css')) return;
+    var s = document.createElement('style');
+    s.id = '_tbl_sort_css';
+    s.textContent = _CSS;
+    document.head.appendChild(s);
+  }
+
+  /* Valor de ordenação: data-val tem prioridade sobre textContent */
+  function _val(td) {
+    return (td.dataset.val || td.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  /* Converte string de data em número YYYYMMDD comparável */
+  function _dateNum(s) {
+    if (!s) return 0;
+    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);   // ISO: 2026-06-10[T...]
+    if (m) return +(m[1] + m[2] + m[3]);
+    m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);      // BR: 10/06/2026[ hh:mm]
+    if (m) return +(m[3] + m[2] + m[1]);
+    return 0;
+  }
+
+  /* Comparador entre dois <td> */
+  function _cmp(tdA, tdB, type, asc) {
+    var va = _val(tdA), vb = _val(tdB), r = 0;
+    if (type === 'num') {
+      r = (+va.replace(/[^\d.\-]/g, '') || 0) - (+vb.replace(/[^\d.\-]/g, '') || 0);
+    } else if (type === 'date') {
+      r = _dateNum(va) - _dateNum(vb);
+    } else {
+      r = va.toLowerCase().localeCompare(vb.toLowerCase(), 'pt-BR');
+    }
+    return asc ? r : -r;
+  }
+
+  /* Ordena a tabela pelo <th> clicado */
+  function _sort(th) {
+    var type = th.dataset.sort;
+    if (!type) return;
+
+    var table = th.closest('table');
+    if (!table) return;
+    var tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    /* Índice absoluto da coluna (conta todos os <th>, inclusive os sem data-sort) */
+    var allThs = Array.from(th.closest('tr').querySelectorAll('th'));
+    var colIdx = allThs.indexOf(th);
+
+    /* Alterna direção: sem classe → asc; asc → desc; desc → asc */
+    var nowAsc = !th.classList.contains('sort-asc');
+
+    /* Limpa indicadores de todas as colunas desta tabela */
+    table.querySelectorAll('thead th').forEach(function (t) {
+      t.classList.remove('sort-asc', 'sort-desc');
+    });
+    th.classList.add(nowAsc ? 'sort-asc' : 'sort-desc');
+
+    /* Ordena e reinsere as linhas */
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort(function (ra, rb) {
+      var ca = ra.querySelectorAll('td')[colIdx];
+      var cb = rb.querySelectorAll('td')[colIdx];
+      if (!ca || !cb) return 0;
+      return _cmp(ca, cb, type, nowAsc);
+    });
+    rows.forEach(function (row) { tbody.appendChild(row); });
+
+    /* Torna todas as linhas visíveis antes de resetar a paginação.
+       Sem isso, o snapshot do pager capturaria apenas a página atual
+       em vez de todos os registros na nova ordem. */
+    rows.forEach(function (row) { row.style.display = ''; });
+    if (typeof window.pagerReset === 'function') { window.pagerReset(); }
+  }
+
+  /* Evita duplo binding no mesmo <th> após re-inicializações */
+  var _bound = new WeakSet();
+
+  function _setup() {
+    _injectCss();
+    document.querySelectorAll('th[data-sort]').forEach(function (th) {
+      if (_bound.has(th)) return;
+      _bound.add(th);
+      th.addEventListener('click', function () { _sort(th); });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _setup);
+  } else {
+    _setup();
+  }
+  document.addEventListener('htmx:afterSettle', _setup);
 })();

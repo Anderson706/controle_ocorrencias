@@ -173,8 +173,10 @@
                   placeholder="Descreva as ações tomadas, plano de correção, prazo de resolução..."></textarea>
       </div>
       <div class="field">
-        <label>Anexo (imagem, PDF, relatório...)</label>
-        <input type="file" name="anexo" accept="image/*,.pdf,.docx,.xlsx">
+        <label>Anexo (imagem, PDF, relatório...) <span style="font-weight:500;text-transform:none;color:var(--muted)">(imagens são otimizadas automaticamente · máx. 200 MB)</span></label>
+        <input type="file" name="anexo" accept="image/*,.pdf,.docx,.xlsx"
+               data-no-compress onchange="validarAnexo(this)">
+        <div id="anexo-aviso" style="display:none;margin-top:6px;font-size:12px;font-weight:700;color:#dc2626"></div>
       </div>
     </div>
 
@@ -240,5 +242,75 @@ function filtrarCams(q){
     el.style.display = !q || el.dataset.search.includes(q) ? '' : 'none';
   });
 }
+
+var _LIMITE_MB = 200;
+var _anexoOk   = true;
+
+// Comprime/redimensiona uma imagem no navegador (foto de celular de dezenas de MB
+// vira poucos MB) antes do upload — evita estourar o limite e reduz a carga no banco.
+function _comprimirImagem(file, maxDim, quality){
+  return new Promise(function(resolve){
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){
+      URL.revokeObjectURL(url);
+      var w = img.width, h = img.height;
+      var scale = Math.min(1, maxDim / Math.max(w, h));
+      var cw = Math.max(1, Math.round(w*scale)), ch = Math.max(1, Math.round(h*scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = cw; canvas.height = ch;
+      canvas.getContext('2d').drawImage(img, 0, 0, cw, ch);
+      canvas.toBlob(function(blob){
+        if(!blob || blob.size >= file.size){ resolve(file); return; }  // só usa se ficou menor
+        var nome = file.name.replace(/\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i, '') + '.jpg';
+        resolve(new File([blob], nome, {type:'image/jpeg'}));
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
+async function validarAnexo(input){
+  var aviso = document.getElementById('anexo-aviso');
+  if(!input.files || !input.files[0]){ aviso.style.display='none'; _anexoOk=true; return; }
+  var f = input.files[0];
+
+  // Se for imagem, otimiza antes de validar o tamanho
+  if(f.type && f.type.indexOf('image/') === 0){
+    _anexoOk = false;
+    aviso.style.display='block'; aviso.style.color='#6b7280';
+    aviso.textContent = '⏳ Otimizando imagem...';
+    try{
+      var comp = await _comprimirImagem(f, 2000, 0.82);
+      if(comp !== f){
+        var dt = new DataTransfer(); dt.items.add(comp);
+        input.files = dt.files;
+        f = comp;
+      }
+    }catch(e){ /* mantém original */ }
+  }
+
+  var mb = f.size / (1024*1024);
+  if(mb > _LIMITE_MB){
+    aviso.textContent = '⚠ Arquivo muito grande: ' + mb.toFixed(1) + ' MB (limite ' + _LIMITE_MB + ' MB). Selecione um arquivo menor.';
+    aviso.style.color = '#dc2626';
+    aviso.style.display = 'block';
+    input.value = '';
+    _anexoOk = false;
+  } else {
+    aviso.textContent = '✔ ' + f.name + '  (' + mb.toFixed(1) + ' MB)';
+    aviso.style.color = '#16a34a';
+    aviso.style.display = 'block';
+    _anexoOk = true;
+  }
+}
+
+document.getElementById('form-chk').addEventListener('submit', function(e){
+  if(!_anexoOk){
+    e.preventDefault();
+    alert('Remova ou troque o arquivo antes de salvar.');
+  }
+});
 </script>
 {% endblock %}

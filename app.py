@@ -1,9 +1,23 @@
 import os
 import sys
+
+# ── Confiança na CA corporativa (proxy de inspeção TLS da rede DHL) ──────────
+# No venv isso vem do pip_system_certs via arquivo .pth, mas o PyInstaller NÃO
+# executa .pth — então no EXE o httpx (usado pelo Supabase) não confia no cert
+# do proxy e as chamadas HTTPS travam. Ativamos o truststore explicitamente aqui
+# (usa o cofre de certificados do Windows) — vale no dev e no EXE. Precisa rodar
+# ANTES de criar o cliente Supabase, pois o httpx monta o contexto SSL na criação.
+try:
+    import truststore as _truststore
+    _truststore.inject_into_ssl()
+except Exception:
+    pass
+
 import re
 import base64
 import textwrap
 import smtplib
+import threading
 from collections import Counter
 import random
 import string
@@ -13,6 +27,8 @@ from io import BytesIO
 from datetime import datetime
 from functools import wraps
 import oracledb
+import httpx
+from supabase import create_client, ClientOptions
 from flask import (
     Flask, render_template, request, redirect, url_for,
     flash, session, send_file, current_app, jsonify
@@ -20,7 +36,8 @@ from flask import (
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import defer
-from sqlalchemy import func, case, text
+from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy import func, case, text, or_
 from datetime import date
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -69,8 +86,10 @@ def _import_reportlab():
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
+    UPLOADS_ROOT = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+    UPLOADS_ROOT = os.path.join(BASE_DIR, 'static')
 
 app = Flask(
     __name__,
@@ -84,14 +103,21 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
     "/?service_name=SECPANEL"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB
+app.config["MAX_CONTENT_LENGTH"]   = 200 * 1024 * 1024  # 200 MB — limite de upload
+app.config["MAX_FORM_MEMORY_SIZE"] = 16  * 1024 * 1024  # 16 MB  — formulários com muitos campos
 app.config["SESSION_COOKIE_HTTPONLY"] = False
 # Sessão permanente — usuário não precisa re-logar a cada abertura do app
 from datetime import timedelta
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+# Pool configurável por ambiente: o app desktop (1 usuário) usa o padrão enxuto;
+# o modo servidor (serve.py, multi-cliente) eleva CCTV_POOL_SIZE para manter
+# conexões "quentes" iguais ao nº de threads — evita abrir conexão nova no Oracle
+# a cada pico (caro via VPN).
+_POOL_SIZE    = int(os.environ.get("CCTV_POOL_SIZE", "5"))
+_MAX_OVERFLOW = int(os.environ.get("CCTV_MAX_OVERFLOW", "5"))
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size":    5,       # conexões permanentes no pool
-    "max_overflow": 5,       # conexões extras permitidas em pico
+    "pool_size":    _POOL_SIZE,   # conexões permanentes no pool
+    "max_overflow": _MAX_OVERFLOW,# conexões extras permitidas em pico
     "pool_recycle": 1800,    # recicla conexão a cada 30 min
     "pool_pre_ping": True,   # detecta conexões mortas antes de usar
     "pool_timeout": 60,      # aguarda até 60s por uma conexão (VPN tem latência maior)
@@ -125,6 +151,14 @@ def _erro_banco(exc):
     )
     destino = url_for("login") if not session.get("user_id") else url_for("ocorrencias")
     return redirect(destino)
+
+@app.errorhandler(413)
+def _arquivo_muito_grande(exc):
+    """Exibe mensagem amigável quando o upload ultrapassa MAX_CONTENT_LENGTH (200 MB)."""
+    from flask import flash, redirect, request as _req
+    flash("O arquivo enviado é muito grande. O limite máximo é 200 MB.", "danger")
+    ref = _req.referrer
+    return redirect(ref) if ref else redirect(url_for("ocorrencias"))
 
 # =========================
 # PERFORMANCE — cache de estáticos + gzip
@@ -160,7 +194,19 @@ def _performance_headers(response):
 # =========================
 import logging, traceback as _tb
 
-_log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else BASE_DIR
+# No empacotamento one-folder o exe fica em <install>\app\ e a pasta 'app' é
+# substituída a cada atualização. Grava o log no install root (pai de 'app') para
+# que ele persista entre updates. Fallback para a pasta do exe se algo falhar.
+if getattr(sys, 'frozen', False):
+    _exe_dir = os.path.dirname(sys.executable)
+    _parent  = os.path.dirname(_exe_dir)
+    _log_dir = _parent if os.path.basename(_exe_dir).lower() == "app" else _exe_dir
+else:
+    _log_dir = BASE_DIR
+try:
+    os.makedirs(_log_dir, exist_ok=True)
+except Exception:
+    _log_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else BASE_DIR
 logging.basicConfig(
     filename=os.path.join(_log_dir, 'cctv_error.log'),
     level=logging.ERROR,
@@ -180,7 +226,7 @@ def _erro_500(e):
 # =========================
 # CONTROLE DE VERSÃO
 # =========================
-APP_VERSION = "4.1"
+APP_VERSION = "4.2"
 
 SMTP_HOST     = "smtp.dhl.com"
 SMTP_PORT     = 25
@@ -192,6 +238,43 @@ EMAIL_DEVS    = [
     "anderson.rodriguesd@dhl.com",
 ]
 EMAIL_BCC = "deivid.martinsl@dhl.com"   # cópia oculta em todos os e-mails automáticos
+
+# =========================
+# CONTROLE DE ATIVOS — usuários do app Ativos vivem no Supabase, não no Oracle
+# =========================
+def _proxy_corporativo():
+    """Detecta o proxy local do Zscaler (DHL) lendo o AutoConfigURL (PAC) que o
+    Windows usa para o navegador — só ISSO é configurado na rede DHL (não há
+    proxy nem em variável de ambiente, nem no WinHTTP do sistema). httpx/supabase
+    não sabem avaliar PAC, então extraímos host:porta direto da URL do PAC (ele
+    sempre é servido pelo próprio proxy local, no mesmo host:porta). Sem isso, o
+    httpx tenta conectar direto à internet e trava (ConnectTimeout) — funciona
+    em dev porque o ambiente tinha HTTPS_PROXY exportado manualmente, mas o EXE
+    real (aberto por atalho/Explorer) nunca tem essa variável.
+    Retorna None em qualquer outro ambiente (sem Zscaler) — comportamento padrão
+    do httpx (conexão direta) é preservado."""
+    try:
+        import winreg, re as _re
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+        url, _ = winreg.QueryValueEx(key, "AutoConfigURL")
+        winreg.CloseKey(key)
+        m = _re.match(r"https?://([\d.]+):(\d+)/", url or "")
+        if m:
+            return f"http://{m.group(1)}:{m.group(2)}"
+    except Exception:
+        pass
+    return None
+
+
+SUPABASE_URL = "https://zmjzptwwxixitqiiqspy.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptanpwdHd3eGl4aXRxaWlxc3B5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDM3MTU0MSwiZXhwIjoyMDc1OTQ3NTQxfQ.sOENYPMqOk4fEth6heMw3-SM2QluqIdd-YCFPuoU73Y"
+_sb_proxy = _proxy_corporativo()
+if _sb_proxy:
+    sb = create_client(SUPABASE_URL, SUPABASE_KEY,
+        options=ClientOptions(httpx_client=httpx.Client(proxy=_sb_proxy, timeout=15)))
+else:
+    sb = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # =========================
 # CONTROLE DE VERSÃO — verifica SISTEMA_CONFIG.VERSAO_EXIGIDA no banco
@@ -345,6 +428,19 @@ class Usuario(db.Model):
 
     def check_password(self, senha: str) -> bool:
         return check_password_hash(self.password_hash, senha)
+
+
+class SyncUsuariosLedger(db.Model):
+    """Estado da última sincronização de logins entre o Oracle (USERS_LIVRO) e o
+    Supabase (usuarios). Guarda, por e-mail, o hash de senha já "acordado" entre os
+    dois lados — é o que permite o sync BIDIRECIONAL saber qual lado mudou desde a
+    última vez (last-write-wins) e detectar exclusões com segurança."""
+    __tablename__ = "SYNC_USUARIOS_LEDGER"
+
+    email         = db.Column("EMAIL",         db.String(120), primary_key=True)
+    password_hash = db.Column("PASSWORD_HASH", db.String(255), nullable=True)
+    synced_at     = db.Column("SYNCED_AT",     db.DateTime,    nullable=True, default=datetime.utcnow)
+
 
 class ResetToken(db.Model):
     __tablename__ = "RESET_TOKENS"
@@ -870,7 +966,7 @@ class ANC(db.Model):
     tipo = db.Column(db.String(80), nullable=True)
     cargo = db.Column(db.String(120), nullable=True)
     turno = db.Column(db.String(20), nullable=True)
-    status = db.Column(db.String(30), nullable=False, default="EM ANDAMENTO")
+    status = db.Column(db.String(30), nullable=False, default="ABERTO")
     descricao = db.Column(db.Text, nullable=True)
     inicio_investigacao = db.Column(db.String(16), nullable=True)
     fim_investigacao = db.Column(db.String(16), nullable=True)
@@ -893,6 +989,17 @@ class ANC(db.Model):
     fechado_em            = db.Column(db.DateTime, nullable=True)
     anexo_fechamento_nome = db.Column(db.String(255), nullable=True)
     anexo_fechamento      = db.Column(db.LargeBinary, nullable=True)
+
+    # ── Soft-delete / Solicitação de Exclusão ─────────────────────
+    excluido              = db.Column(db.String(1),   nullable=True, default="N")
+    excl_status           = db.Column(db.String(20),  nullable=True)          # PENDENTE | APROVADO | REJEITADO
+    excl_solicitado_por   = db.Column(db.String(120), nullable=True)
+    excl_solicitado_em    = db.Column(db.DateTime,    nullable=True)
+    excl_solicitante_email= db.Column(db.String(120), nullable=True)
+    excl_motivo           = db.Column(db.String(500), nullable=True)
+    excl_admin_por        = db.Column(db.String(120), nullable=True)
+    excl_admin_em         = db.Column(db.DateTime,    nullable=True)
+    excl_admin_motivo     = db.Column(db.String(500), nullable=True)
 
 
 class Ocorrencia(db.Model):
@@ -993,7 +1100,7 @@ def fmt_data_br(data_str):
     return data_str or "—"
 
 
-def aplicar_filtros_anc(query):
+def aplicar_filtros_anc(query, mostrar_excluidas=False):
     data_inicial = (request.args.get("data_inicial") or "").strip()
     data_final   = (request.args.get("data_final")   or "").strip()
     status       = (request.args.get("status")        or "").strip().upper()
@@ -1001,6 +1108,10 @@ def aplicar_filtros_anc(query):
     setor        = (request.args.get("setor")         or "").strip()
     natureza     = (request.args.get("natureza")      or "").strip()
     site_filtro  = (request.args.get("site_filtro")   or "").strip()
+
+    # Oculta ANCs com soft-delete (excluido='S') — a menos que explicitamente pedido
+    if not mostrar_excluidas:
+        query = query.filter(ANC.excluido != 'S')
 
     # Empurra todos os filtros para o SQL — sem Python-level filtering
     if data_inicial:
@@ -1668,6 +1779,16 @@ def arquivo_para_base64(arquivo, extensoes):
     return f"data:{mime};base64,{dados}", arquivo.filename
 
 
+@app.route('/data-upload/<path:filename>')
+def serve_upload(filename):
+    """Serve arquivos enviados pelo usuário a partir do diretório persistente.
+    foto_path no banco é 'uploads/achados_perdidos/fname', então filename aqui
+    já inclui 'uploads/', basta servir diretamente de UPLOADS_ROOT.
+    Ex: UPLOADS_ROOT/uploads/achados_perdidos/fname"""
+    from flask import send_from_directory as _sfd
+    return _sfd(UPLOADS_ROOT, filename)
+
+
 def login_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -1714,9 +1835,8 @@ def cameras_index():
                       .order_by(ChecklistCamera.criado_em.desc())
                       .limit(50).all())
     else:
-        cameras    = Camera.query.filter_by(site=site).order_by(Camera.ativo.desc(), Camera.numero).all()
-        checklists = (ChecklistCamera.query
-                      .filter_by(site=site)
+        cameras    = _query_filtrar_sites(Camera.query, Camera).order_by(Camera.ativo.desc(), Camera.numero).all()
+        checklists = (_query_filtrar_sites(ChecklistCamera.query, ChecklistCamera)
                       .order_by(ChecklistCamera.criado_em.desc())
                       .limit(50).all())
 
@@ -1796,8 +1916,11 @@ def cameras_toggle(cam_id):
     if not _is_can_manage():
         flash("Acesso restrito a administradores, gestores e key users.", "danger")
         return redirect(url_for("cameras_index"))
-    site = session.get("user_site") or ""
-    cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
+    if _is_privileged():
+        cam = Camera.query.filter_by(id=cam_id).first_or_404()
+    else:
+        site = session.get("user_site") or ""
+        cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
     cam.ativo = 0 if cam.ativo else 1
     db.session.commit()
     flash(f"Câmera {cam.numero} {'ativada' if cam.ativo else 'desativada'}.", "success")
@@ -1810,8 +1933,11 @@ def cameras_editar(cam_id):
     if not _is_can_manage():
         flash("Acesso restrito a administradores, gestores e key users.", "danger")
         return redirect(url_for("cameras_index"))
-    site = session.get("user_site") or ""
-    cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
+    if _is_privileged():
+        cam = Camera.query.filter_by(id=cam_id).first_or_404()
+    else:
+        site = session.get("user_site") or ""
+        cam = Camera.query.filter_by(id=cam_id, site=site).first_or_404()
     cam.numero = (request.form.get("numero") or cam.numero).strip()
     cam.nome   = (request.form.get("nome") or "").strip() or None
     db.session.commit()
@@ -1948,9 +2074,9 @@ def cameras_checklist_anexo(chk_id):
 
 
 def _is_privileged():
-    """Retorna True se o usuário logado for ADMIN ou MULTISITES (acesso cross-site total).
-    GESTOR agora usa UsuarioSite (como MULTISITES) — não tem cross-site irrestrito."""
-    return (session.get("user_perfil") or "").upper() in ("ADMIN", "MULTISITES")
+    """Retorna True se o usuário logado for ADMIN (único perfil com acesso cross-site irrestrito).
+    MULTISITES, GESTOR, KEYUSER e OPERACIONAL são filtrados pelos sites vinculados (UsuarioSite)."""
+    return (session.get("user_perfil") or "").upper() == "ADMIN"
 
 
 def _is_can_manage():
@@ -1990,23 +2116,24 @@ def aplicar_filtros(query):
     operador     = (request.args.get("operador")      or "").strip()
     site_f       = (request.args.get("site_filtro")   or "").strip()
 
+    # Empurra todos os filtros para o SQL — sem carregar todos os registros em Python.
+    # data_hora armazenada como "YYYY-MM-DDTHH:MM" — SUBSTR(1,10) extrai só a data.
+    if data_inicial:
+        query = query.filter(func.substr(Ocorrencia.data_hora, 1, 10) >= data_inicial)
+    if data_final:
+        query = query.filter(func.substr(Ocorrencia.data_hora, 1, 10) <= data_final)
+    if local:
+        query = query.filter(func.lower(Ocorrencia.local).contains(local.lower()))
+    if natureza:
+        query = query.filter(func.lower(Ocorrencia.natureza) == natureza.lower())
+    if status:
+        query = query.filter(func.upper(Ocorrencia.status) == status)
+    if operador:
+        query = query.filter(func.lower(Ocorrencia.operador).contains(operador.lower()))
+    if site_f:
+        query = query.filter(Ocorrencia.site == site_f)
+
     registros = query.all()
-    filtrados = []
-
-    for r in registros:
-        ok = True
-        data_base = (r.data_hora or "")[:10]
-
-        if data_inicial: ok = ok and (data_base >= data_inicial)
-        if data_final:   ok = ok and (data_base <= data_final)
-        if local:        ok = ok and (local.lower()    in (r.local    or "").lower())
-        if natureza:     ok = ok and (natureza.lower() == (r.natureza or "").lower())
-        if status:       ok = ok and (normalizar_status(r.status) == status)
-        if operador:     ok = ok and (operador.lower() in (r.operador or "").lower())
-        if site_f:       ok = ok and ((r.site or "") == site_f)
-
-        if ok:
-            filtrados.append(r)
 
     filtros = {
         "data_inicial": data_inicial,
@@ -2017,7 +2144,7 @@ def aplicar_filtros(query):
         "operador":     operador,
         "site_filtro":  site_f,
     }
-    return filtrados, filtros
+    return registros, filtros
 
 
 # =========================
@@ -2058,9 +2185,16 @@ def dashboard_analise():
     site_usuario = session.get("user_site") or None
     _hoje = _dt.now()
 
+    # Dashboard só conta/agrega e mostra recentes[:10] (template não acessa os
+    # CLOBs de texto), então defere todos os campos pesados — blobs e textos.
     _sem_blob = [
         defer(AnaliseInvestigativa.docx_arquivo),
         defer(AnaliseInvestigativa.anexo_fechamento),
+        defer(AnaliseInvestigativa.objetivo),
+        defer(AnaliseInvestigativa.descricao_registro),
+        defer(AnaliseInvestigativa.conclusao),
+        defer(AnaliseInvestigativa.sugestao),
+        defer(AnaliseInvestigativa.texto_fechamento),
     ]
     if is_admin:
         registros = AnaliseInvestigativa.query.options(*_sem_blob).order_by(AnaliseInvestigativa.id.desc()).all()
@@ -2096,8 +2230,7 @@ def dashboard_analise():
 
     # Sites disponíveis para o filtro
     if is_admin:
-        _sites_q = db.session.query(AnaliseInvestigativa.site).distinct().all()
-        todos_sites_dash = sorted(s[0] for s in _sites_q if s[0])
+        todos_sites_dash = _get_distinct_cached(AnaliseInvestigativa.site, "ai_sites")
     else:
         todos_sites_dash = sorted(s for s in _sites_do_usuario() if s)
 
@@ -2173,9 +2306,14 @@ def analises():
     is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
     site_usuario = session.get("user_site") or None
 
+    # Defere blobs + CLOBs não exibidos na lista. objetivo/conclusao/texto_fechamento
+    # são lidos por linha no template (data-attrs do modal), então permanecem carregados;
+    # descricao_registro e sugestao não são usados → deferidos.
     _sem_blob = [
         defer(AnaliseInvestigativa.docx_arquivo),
         defer(AnaliseInvestigativa.anexo_fechamento),
+        defer(AnaliseInvestigativa.descricao_registro),
+        defer(AnaliseInvestigativa.sugestao),
     ]
     if is_admin:
         query = AnaliseInvestigativa.query.options(*_sem_blob).order_by(AnaliseInvestigativa.id.desc())
@@ -2192,26 +2330,41 @@ def analises():
     responsavel_f = (request.args.get("responsavel")   or "").strip().lower()
     site_filtro   = (request.args.get("site_filtro")   or "").strip()
 
-    todos = query.all()
-    registros = []
-    for r in todos:
-        data_r = r.criado_em.strftime("%Y-%m-%d") if r.criado_em else ""
-        ok = True
-        if data_inicial:  ok = ok and data_r >= data_inicial
-        if data_final:    ok = ok and data_r <= data_final
-        if status_f:      ok = ok and (r.status_analise or "").upper() == status_f
-        if empresa_f:     ok = ok and empresa_f in (r.empresa or "").lower()
-        if responsavel_f: ok = ok and responsavel_f in (r.responsavel or "").lower()
-        if site_filtro:   ok = ok and (r.site or "") == site_filtro
-        if ok:
-            registros.append(r)
+    # Empurra filtros para o SQL — evita carregar todos os registros em memória
+    if data_inicial:
+        try:
+            query = query.filter(
+                AnaliseInvestigativa.criado_em >= datetime.strptime(data_inicial, "%Y-%m-%d")
+            )
+        except ValueError:
+            pass
+    if data_final:
+        try:
+            query = query.filter(
+                AnaliseInvestigativa.criado_em < datetime.strptime(data_final, "%Y-%m-%d") + timedelta(days=1)
+            )
+        except ValueError:
+            pass
+    if status_f:
+        query = query.filter(func.upper(AnaliseInvestigativa.status_analise) == status_f)
+    if empresa_f:
+        query = query.filter(func.lower(AnaliseInvestigativa.empresa).contains(empresa_f))
+    if responsavel_f:
+        query = query.filter(func.lower(AnaliseInvestigativa.responsavel).contains(responsavel_f))
+    if site_filtro:
+        query = query.filter(AnaliseInvestigativa.site == site_filtro)
+
+    registros = query.all()
 
     filtros = {
         "data_inicial": data_inicial, "data_final": data_final,
         "status": status_f, "empresa": empresa_f,
         "responsavel": responsavel_f, "site_filtro": site_filtro,
     }
-    todos_sites_analise = sorted(set(r.site for r in todos if r.site)) if is_admin else []
+    # Sites distintos via query leve — sem carregar todos os registros
+    todos_sites_analise = sorted(
+        s[0] for s in db.session.query(AnaliseInvestigativa.site).distinct().all() if s[0]
+    ) if is_admin else []
 
     resumo = {
         "total":       len(registros),
@@ -2861,9 +3014,12 @@ def anc():
         flash("ANC registrado com sucesso.", "success")
         return redirect(url_for("anc"))
 
+    # descricao e plano_acao_texto NÃO são deferidas: o template as acessa para cada
+    # registro (data-descricao / data-plano-acao-texto), então deixá-las deferred geraria
+    # N lazy-loads individuais na Oracle, travando a página com muitos ANCs.
     _sem_imgs = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3),
                  defer(ANC.imagem_4), defer(ANC.imagem_5), defer(ANC.imagem_6),
-                 defer(ANC.anexo_fechamento), defer(ANC.descricao), defer(ANC.plano_acao_texto)]
+                 defer(ANC.anexo_fechamento)]
     if is_admin:
         query = ANC.query.options(*_sem_imgs).order_by(ANC.id.desc())
     else:
@@ -2886,6 +3042,19 @@ def anc():
         r[0] for r in db.session.query(ANC.site).distinct().all() if r[0]
     ) if is_admin else []
     naturezas_lista = _get_naturezas(site_usuario)
+
+    # Solicitações de exclusão pendentes (visíveis apenas para admins)
+    pendentes_exclusao = []
+    ancs_excluidas     = []
+    if is_admin:
+        # Reutiliza _sem_imgs — evita carregar imagens para listas de exclusão
+        pendentes_exclusao = ANC.query.options(*_sem_imgs).filter(
+            ANC.excl_status == 'PENDENTE'
+        ).order_by(ANC.excl_solicitado_em.desc()).all()
+        ancs_excluidas = ANC.query.options(*_sem_imgs).filter(
+            ANC.excluido == 'S'
+        ).order_by(ANC.excl_admin_em.desc()).limit(50).all()
+
     return render_template(
         "anc.html",
         registros=registros, resumo=resumo, filtros=filtros,
@@ -2896,6 +3065,8 @@ def anc():
         naturezas=naturezas_lista,
         todos_naturezas=naturezas_lista,
         todos_sites=todos_sites_anc,
+        pendentes_exclusao=pendentes_exclusao,
+        ancs_excluidas=ancs_excluidas,
     )
 
 
@@ -2958,10 +3129,103 @@ def download_anexo_anc(anc_id):
 @login_required
 @perfil_required("ADMIN")
 def excluir_anc(anc_id):
+    """Soft-delete direto pelo admin (sem passar pelo fluxo de solicitação)."""
     reg = ANC.query.get_or_404(anc_id)
-    db.session.delete(reg)
+    reg.excluido           = 'S'
+    reg.excl_status        = 'APROVADO'
+    reg.excl_admin_por     = session.get("user_nome")
+    reg.excl_admin_em      = datetime.utcnow()
+    reg.excl_admin_motivo  = "Exclusão direta pelo administrador."
     db.session.commit()
-    flash("ANC excluído com sucesso.", "success")
+    flash("ANC ocultada do sistema com sucesso.", "success")
+    return redirect(url_for("anc"))
+
+
+@app.route("/anc/<int:anc_id>/solicitar-exclusao", methods=["POST"])
+@login_required
+def solicitar_exclusao_anc(anc_id):
+    """Usuário não-admin solicita exclusão de uma ANC. Admin recebe e-mail para aprovar."""
+    reg = ANC.query.get_or_404(anc_id)
+
+    # Bloqueia se já tem solicitação pendente ou já foi excluída
+    if reg.excluido == 'S':
+        flash("Esta ANC já foi excluída.", "warning")
+        return redirect(url_for("anc"))
+    if reg.excl_status == 'PENDENTE':
+        flash("Já existe uma solicitação de exclusão pendente para esta ANC.", "warning")
+        return redirect(url_for("anc"))
+
+    motivo = (request.form.get("motivo_exclusao") or "").strip()
+    if not motivo:
+        flash("Informe o motivo da solicitação de exclusão.", "warning")
+        return redirect(url_for("anc"))
+
+    solicitante       = session.get("user_nome", "")
+    email_solicitante = session.get("user_email", "")
+
+    reg.excl_status            = 'PENDENTE'
+    reg.excl_solicitado_por    = solicitante
+    reg.excl_solicitado_em     = datetime.utcnow()
+    reg.excl_solicitante_email = email_solicitante
+    reg.excl_motivo            = motivo
+    db.session.commit()
+
+    # E-mail em background para não bloquear o redirect
+    threading.Thread(
+        target=_enviar_email_solicitacao_exclusao_anc,
+        args=(reg, motivo, solicitante, email_solicitante),
+        daemon=True
+    ).start()
+    flash("Solicitação enviada. Os administradores serão notificados por e-mail.", "success")
+
+    return redirect(url_for("anc"))
+
+
+@app.route("/anc/<int:anc_id>/avaliar-exclusao", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def avaliar_exclusao_anc(anc_id):
+    """Admin aprova ou rejeita uma solicitação de exclusão de ANC."""
+    reg = ANC.query.get_or_404(anc_id)
+
+    if reg.excl_status != 'PENDENTE':
+        flash("Esta solicitação já foi avaliada ou não existe.", "warning")
+        return redirect(url_for("anc"))
+
+    acao         = (request.form.get("acao") or "").strip().lower()   # "aprovar" | "rejeitar"
+    motivo_admin = (request.form.get("motivo_admin") or "").strip()
+
+    if acao not in ("aprovar", "rejeitar"):
+        flash("Ação inválida.", "danger")
+        return redirect(url_for("anc"))
+
+    if acao == "rejeitar" and not motivo_admin:
+        flash("Informe o motivo da rejeição.", "warning")
+        return redirect(url_for("anc"))
+
+    reg.excl_admin_por    = session.get("user_nome")
+    reg.excl_admin_em     = datetime.utcnow()
+    reg.excl_admin_motivo = motivo_admin
+
+    if acao == "aprovar":
+        reg.excluido    = 'S'
+        reg.excl_status = 'APROVADO'
+        flash("ANC aprovada e ocultada do sistema.", "success")
+    else:
+        reg.excl_status = 'REJEITADO'
+        flash("Solicitação de exclusão rejeitada. ANC permanece visível.", "info")
+
+    db.session.commit()
+
+    # E-mail em background para não bloquear o redirect
+    threading.Thread(
+        target=_enviar_email_decisao_exclusao_anc,
+        args=(reg, acao, motivo_admin,
+              reg.excl_solicitante_email,
+              reg.excl_solicitado_por or "Usuário"),
+        daemon=True
+    ).start()
+
     return redirect(url_for("anc"))
 
 
@@ -3012,7 +3276,7 @@ def exportar_anc_excel():
     wb = Workbook()
     ws = wb.active
     ws.title = "ANCs"
-    headers = ["Nº ANC","Data","Hora","Site","Setor","Tipo Ocorrência","Gravidade",
+    headers = ["ID","Nº ANC","Data","Hora","Site","Setor","Tipo Ocorrência","Gravidade",
                "Natureza","Gestor Responsável","Responsável pelo Levantamento","Cargo","Local","Envolvido","Turno",
                "Plano de Ação","Descrição","Plano de Ação Texto","Fechado Por","Fechado Em","Criado por"]
     ws.append(headers)
@@ -3023,7 +3287,7 @@ def exportar_anc_excel():
         ws.cell(row=1, column=col).font = font_bold
     for r in registros:
         fechado_em_str = r.fechado_em.strftime("%d/%m/%Y %H:%M") if r.fechado_em else ""
-        ws.append([r.numero_anc, r.data_nc, r.hora_nc, r.site, r.setor,
+        ws.append([r.id, r.numero_anc or f"ANC-{r.id}", r.data_nc, r.hora_nc, r.site, r.setor,
                    r.tipo_ocorrencia, r.gravidade, r.natureza, r.responsavel,
                    r.gestor_responsavel, r.cargo or "", r.local, r.envolvido, r.turno,
                    r.status, r.descricao, r.plano_acao_texto or "",
@@ -3516,6 +3780,29 @@ def _get_todos_sites() -> list:
     return _sites_cache
 
 
+_distinct_cache: dict = {}   # {chave: (timestamp, [valores])}
+
+def _get_distinct_cached(coluna, chave: str, ttl: int = 300) -> list:
+    """Cacheia SELECT DISTINCT <coluna> com TTL (default 5 min).
+
+    Os dropdowns de filtro (sites, operadores) faziam um full-scan no Oracle a
+    cada carregamento de página. Em VPN de alta latência cada query é um
+    round-trip; cachear elimina-os. Tolera-se até 5 min de defasagem para um
+    valor recém-criado aparecer no filtro.
+    """
+    import time
+    agora = time.time()
+    cached = _distinct_cache.get(chave)
+    if cached and (agora - cached[0]) < ttl:
+        return cached[1]
+    try:
+        valores = sorted(v[0] for v in db.session.query(coluna).distinct().all() if v[0])
+        _distinct_cache[chave] = (agora, valores)
+        return valores
+    except Exception:
+        return cached[1] if cached else []
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("user_id"):
@@ -3561,6 +3848,7 @@ def login():
         session["user_tem_foto"]  = (usuario.tem_foto or "N") == "S"
         session["user_lgpd_aceito"] = usuario.lgpd_aceito or ""
         session["user_cargo"]     = usuario.cargo or ""
+        session["user_email"]     = usuario.email or ""
 
         # Primeiro acesso: redireciona para aceite LGPD
         if (usuario.lgpd_aceito or "") != "sim":
@@ -3570,6 +3858,181 @@ def login():
         return redirect(url_for("ocorrencias"))
 
     return render_template("login.html", todos_sites=todos_sites)
+
+
+def _get_emails_admins_e_site(site_anc):
+    """Retorna (admins_emails, site_emails) para envio de e-mail de exclusão de ANC.
+    - admins  → campo Para (To)
+    - site_cc → campo Cópia (Cc) — TODOS os usuários cadastrados no site, sem filtro de perfil
+    """
+    # Para (To): apenas a lista fixa de devs
+    admins = list(EMAIL_DEVS)
+
+    # Todos os usuários cadastrados no site — sem filtrar por perfil
+    site_users = []
+    if site_anc:
+        # Usuários com site principal == site_anc
+        site_users = [
+            u.email for u in Usuario.query.filter(
+                Usuario.site == site_anc,
+                Usuario.email.isnot(None),
+                Usuario.email != ""
+            ).all() if u.email
+        ]
+        # Usuários vinculados via tabela USUARIO_SITES (MULTISITES, gestor de vários sites)
+        linked = [
+            u.email for u in db.session.query(Usuario).join(
+                UsuarioSite, UsuarioSite.usuario_id == Usuario.id
+            ).filter(
+                UsuarioSite.site_nome == site_anc,
+                Usuario.email.isnot(None),
+                Usuario.email != ""
+            ).all() if u.email
+        ]
+        site_users = list(set(site_users + linked))
+
+    return admins, site_users
+
+
+def _enviar_email_solicitacao_exclusao_anc(anc, motivo, solicitante, email_solicitante):
+    """Notifica admins (To) e equipe do site (CC) sobre pedido de exclusão de ANC."""
+    admins, site_cc = _get_emails_admins_e_site(anc.site)
+    if not admins:
+        return False, "Nenhum admin com e-mail encontrado"
+
+    data_hora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+    num_anc = anc.numero_anc or f"ANC-{anc.id}"
+
+    # Cc = todos do site (visível para todos os destinatários)
+    # Deduplica para não enviar duas vezes a quem é admin E está no site
+    site_cc_visible = [e for e in site_cc if e not in admins]
+
+    msg = MIMEMultipart()
+    msg["Subject"] = f"[Solicitação de Exclusão] {num_anc} — {anc.site or '—'}"
+    msg["From"]    = EMAIL_FROM
+    msg["To"]      = ", ".join(admins)
+    if site_cc_visible:
+        msg["Cc"]  = ", ".join(site_cc_visible)
+    msg["Bcc"]     = EMAIL_BCC
+
+    corpo_html = f"""
+<div style="background:#f3f4f6;padding:32px 16px;min-height:100vh;">
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+  <div style="background:#d40511;padding:18px 24px;border-radius:8px 8px 0 0">
+    <h2 style="margin:0;color:#ffcc00;font-size:18px;font-weight:900;">🗑 Solicitação de Exclusão de ANC</h2>
+    <p style="margin:6px 0 0;color:rgba(255,255,255,.8);font-size:13px;">CCTV Control Panel &middot; {data_hora}</p>
+  </div>
+  <div style="background:#fff;padding:28px 24px;">
+    <p style="color:#374151;font-size:14px;margin:0 0 20px;">
+      O usuário abaixo solicitou a <strong>exclusão</strong> da ANC indicada. Acesse o sistema para aprovar ou rejeitar.
+    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
+      <tr style="background:#fef2f2;">
+        <td style="padding:10px 14px;font-weight:700;color:#6b7280;width:140px;border:1px solid #fecaca;">ANC</td>
+        <td style="padding:10px 14px;color:#d40511;font-weight:900;border:1px solid #fecaca;">{num_anc}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;font-weight:700;color:#6b7280;border:1px solid #e5e7eb;">Site</td>
+        <td style="padding:10px 14px;color:#1f2937;border:1px solid #e5e7eb;">{anc.site or '—'}</td>
+      </tr>
+      <tr style="background:#f9fafb;">
+        <td style="padding:10px 14px;font-weight:700;color:#6b7280;border:1px solid #e5e7eb;">Data / Natureza</td>
+        <td style="padding:10px 14px;color:#1f2937;border:1px solid #e5e7eb;">{anc.data_nc or '—'} &mdash; {anc.natureza or '—'}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;font-weight:700;color:#6b7280;border:1px solid #e5e7eb;">Solicitante</td>
+        <td style="padding:10px 14px;color:#1f2937;border:1px solid #e5e7eb;">{solicitante}</td>
+      </tr>
+      <tr style="background:#f9fafb;">
+        <td style="padding:10px 14px;font-weight:700;color:#6b7280;border:1px solid #e5e7eb;">E-mail</td>
+        <td style="padding:10px 14px;color:#1f2937;border:1px solid #e5e7eb;">{email_solicitante or '—'}</td>
+      </tr>
+    </table>
+    <div style="background:#fef9c3;border-left:4px solid #eab308;padding:14px 16px;border-radius:6px;margin-bottom:20px;">
+      <p style="margin:0;font-size:13px;font-weight:700;color:#854d0e;">Motivo informado pelo solicitante:</p>
+      <p style="margin:8px 0 0;font-size:14px;color:#1f2937;">{motivo or '—'}</p>
+    </div>
+    <p style="color:#6b7280;font-size:13px;">Acesse <strong>ANC &gt; Controle</strong> e expanda a seção <em>Solicitações de Exclusão Pendentes</em> para tomar uma decisão.</p>
+  </div>
+  <div style="background:#1f2937;color:#9ca3af;padding:14px 24px;text-align:center;font-size:12px;border-radius:0 0 8px 8px;">
+    DHL Supply Chain &middot; CCTV Control Panel &middot; Uso interno
+  </div>
+</div>
+</div>"""
+
+    msg.attach(MIMEText(corpo_html, "html"))
+    try:
+        # Entrega para admins (To) + site visível (Cc) + cópia oculta fixa (Bcc)
+        all_to = list(set(admins + site_cc_visible + [EMAIL_BCC]))
+        sv = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        sv.login(EMAIL_FROM, EMAIL_PASSWORD)
+        sv.send_message(msg, to_addrs=all_to)
+        sv.quit()
+        return True, None
+    except Exception as exc:
+        logging.error(f"Erro ao enviar e-mail de solicitação de exclusão ANC: {exc}")
+        return False, str(exc)
+
+
+def _enviar_email_decisao_exclusao_anc(anc, decisao, motivo_admin, email_solicitante, nome_solicitante):
+    """Notifica o solicitante sobre a decisão de aprovação/rejeição."""
+    if not email_solicitante:
+        return
+    data_hora = datetime.now().strftime("%d/%m/%Y às %H:%M")
+    num_anc   = anc.numero_anc or f"ANC-{anc.id}"
+    aprovado  = decisao.upper() == "APROVAR"
+
+    cor_decisao = "#16a34a" if aprovado else "#d40511"
+    icone       = "✅" if aprovado else "❌"
+    texto_dec   = "APROVADA" if aprovado else "REJEITADA"
+
+    msg = MIMEMultipart()
+    msg["Subject"] = f"[ANC Exclusão {texto_dec}] {num_anc}"
+    msg["From"]    = EMAIL_FROM
+    msg["To"]      = email_solicitante
+    msg["Bcc"]     = EMAIL_BCC
+
+    corpo_html = f"""
+<div style="background:#f3f4f6;padding:32px 16px;min-height:100vh;">
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+  <div style="background:{cor_decisao};padding:18px 24px;border-radius:8px 8px 0 0">
+    <h2 style="margin:0;color:#fff;font-size:18px;font-weight:900;">{icone} Solicitação de Exclusão — {texto_dec}</h2>
+    <p style="margin:6px 0 0;color:rgba(255,255,255,.8);font-size:13px;">CCTV Control Panel &middot; {data_hora}</p>
+  </div>
+  <div style="background:#fff;padding:28px 24px;">
+    <p style="color:#374151;font-size:14px;margin:0 0 20px;">
+      Olá <strong>{nome_solicitante}</strong>, sua solicitação de exclusão da ANC abaixo foi <strong style="color:{cor_decisao};">{texto_dec}</strong>.
+    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
+      <tr style="background:#f9fafb;">
+        <td style="padding:10px 14px;font-weight:700;color:#6b7280;width:140px;border:1px solid #e5e7eb;">ANC</td>
+        <td style="padding:10px 14px;color:#1f2937;font-weight:900;border:1px solid #e5e7eb;">{num_anc}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;font-weight:700;color:#6b7280;border:1px solid #e5e7eb;">Site</td>
+        <td style="padding:10px 14px;color:#1f2937;border:1px solid #e5e7eb;">{anc.site or '—'}</td>
+      </tr>
+      <tr style="background:#f9fafb;">
+        <td style="padding:10px 14px;font-weight:700;color:#6b7280;border:1px solid #e5e7eb;">Decisão</td>
+        <td style="padding:10px 14px;color:{cor_decisao};font-weight:900;border:1px solid #e5e7eb;">{texto_dec}</td>
+      </tr>
+    </table>
+    {'<div style="background:#dcfce7;border-left:4px solid #16a34a;padding:14px 16px;border-radius:6px;"><p style="margin:0;font-size:13px;color:#166534;">A ANC foi ocultada do sistema. O registro permanece no banco de dados para fins de auditoria.</p></div>' if aprovado else f'<div style="background:#fee2e2;border-left:4px solid #d40511;padding:14px 16px;border-radius:6px;"><p style="margin:0;font-size:13px;font-weight:700;color:#991b1b;">Motivo da rejeição:</p><p style="margin:8px 0 0;font-size:14px;color:#1f2937;">{motivo_admin or "—"}</p></div>'}
+  </div>
+  <div style="background:#1f2937;color:#9ca3af;padding:14px 24px;text-align:center;font-size:12px;border-radius:0 0 8px 8px;">
+    DHL Supply Chain &middot; CCTV Control Panel &middot; Uso interno
+  </div>
+</div>
+</div>"""
+
+    msg.attach(MIMEText(corpo_html, "html"))
+    try:
+        sv = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        sv.login(EMAIL_FROM, EMAIL_PASSWORD)
+        sv.send_message(msg, to_addrs=[email_solicitante, EMAIL_BCC])
+        sv.quit()
+    except Exception as exc:
+        logging.error(f"Erro ao enviar e-mail de decisão de exclusão ANC: {exc}")
 
 
 def _enviar_email_solicitacao_cadastro(nome, email, site):
@@ -3822,11 +4285,45 @@ def ocorrencias():
         return redirect(url_for("ocorrencias"))
 
     is_admin = (session.get("user_perfil") or "").upper() == "ADMIN"
+    # Defere CLOBs grandes que não são usados na listagem.
+    # Os anexos (base64) só são consultados por existência no template
+    # ('1' if r.anexo_post else '0'), então deferi-los evita transferir
+    # megabytes de base64 por linha via VPN. A presença é resolvida com um
+    # backfill leve baseado em LENGTH() logo abaixo.
+    _oc_sem_lista = [
+        defer(Ocorrencia.foto),
+        defer(Ocorrencia.conclusao_investigacao),
+        defer(Ocorrencia.anexo_post),
+        defer(Ocorrencia.anexo_post_2),
+        defer(Ocorrencia.anexo_post_3),
+    ]
     if is_admin:
-        query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
+        query = Ocorrencia.query.options(*_oc_sem_lista).order_by(Ocorrencia.id.desc())
     else:
-        query = _query_filtrar_sites(Ocorrencia.query, Ocorrencia).order_by(Ocorrencia.id.desc())
+        query = _query_filtrar_sites(
+            Ocorrencia.query.options(*_oc_sem_lista), Ocorrencia
+        ).order_by(Ocorrencia.id.desc())
     registros, filtros = aplicar_filtros(query)
+
+    # Backfill de presença de anexos sem carregar o CLOB: uma única query com
+    # LENGTH() por registro. Marca um sentinel truthy ("1") quando há anexo,
+    # impedindo o lazy-load (N+1) que ocorreria ao acessar r.anexo_post no template.
+    _ids = [r.id for r in registros]
+    if _ids:
+        _len_por_id = {}
+        for _chunk in (_ids[i:i+900] for i in range(0, len(_ids), 900)):
+            for _row in db.session.query(
+                Ocorrencia.id,
+                func.length(Ocorrencia.anexo_post),
+                func.length(Ocorrencia.anexo_post_2),
+                func.length(Ocorrencia.anexo_post_3),
+            ).filter(Ocorrencia.id.in_(_chunk)).all():
+                _len_por_id[_row[0]] = (_row[1], _row[2], _row[3])
+        for r in registros:
+            l1, l2, l3 = _len_por_id.get(r.id, (None, None, None))
+            set_committed_value(r, "anexo_post",   "1" if l1 else None)
+            set_committed_value(r, "anexo_post_2", "1" if l2 else None)
+            set_committed_value(r, "anexo_post_3", "1" if l3 else None)
 
     hoje_str = datetime.now().strftime("%Y-%m-%d")
     total_hoje = len([r for r in registros if (r.data_hora or "").startswith(hoje_str)])
@@ -3844,13 +4341,9 @@ def ocorrencias():
         "prejuizo_valor":   _formatar_valor(sum(_parse_valor(r.prejuizo) for r in registros if r.prejuizo)),
     }
 
-    # Lista de sites para filtro (admin)
-    _sites_q = db.session.query(Ocorrencia.site).distinct().all()
-    todos_sites = sorted(s[0] for s in _sites_q if s[0])
-
-    # Lista de operadores para filtro (baseada nos valores já registrados)
-    _ops_q = db.session.query(Ocorrencia.operador).distinct().all()
-    todos_operadores = sorted(o[0] for o in _ops_q if o[0])
+    # Listas para filtro (cacheadas com TTL — evitam full-scan por load na VPN)
+    todos_sites      = _get_distinct_cached(Ocorrencia.site,     "oc_sites")
+    todos_operadores = _get_distinct_cached(Ocorrencia.operador, "oc_operadores")
 
     # Lookup de vínculos: mapeia id → código legível
     _anc_ids      = {r.anc_vinculada_id     for r in registros if r.anc_vinculada_id}
@@ -4126,12 +4619,10 @@ def overview():
             out.append(r)
         return out
 
-    # Lista de sites para o dropdown — uma só query
+    # Lista de sites para o dropdown — cacheada (TTL)
     todos_sites = []
     if is_admin:
-        todos_sites = sorted(
-            s[0] for s in db.session.query(Ocorrencia.site).distinct().all() if s[0]
-        )
+        todos_sites = _get_distinct_cached(Ocorrencia.site, "oc_sites")
 
     # ── Ocorrências ─────────────────────────────────────────────────
     # Defere todos os campos Text/CLOB que não são necessários para os KPIs
@@ -4198,7 +4689,7 @@ def overview():
         an_q = _query_filtrar_sites(an_q, AnaliseInvestigativa)
     if f_site:
         an_q = an_q.filter(AnaliseInvestigativa.site == f_site)
-    analises = _filtrar_data(an_q.all(), "data_ocorrencia")
+    analises = _filtrar_data(an_q.all(), "criado_em")
 
     an_total    = len(analises)
     an_andamento= len([r for r in analises if (r.status_analise or "").upper() == "EM ANDAMENTO"])
@@ -4290,6 +4781,548 @@ def overview():
 
 
 # =========================
+# GERADOR DE APRESENTAÇÃO (export consolidado dos dashboards)
+# =========================
+
+# Catálogo de elementos exportáveis. tipo: 'kpis' (tabela de indicadores) ou
+# 'chart' (gráfico renderizado e capturado no cliente como imagem).
+_EXPORT_CATALOGO = [
+    {"modulo": "ocorrencias", "titulo": "Ocorrências / Investigações", "icone": "📋", "elementos": [
+        {"chave": "oc_kpis",       "rotulo": "Indicadores (KPIs)",   "tipo": "kpis"},
+        {"chave": "oc_status",     "rotulo": "Gráfico — Status",     "tipo": "chart", "grafico": "doughnut"},
+        {"chave": "oc_natureza",   "rotulo": "Gráfico — Natureza",   "tipo": "chart", "grafico": "bar"},
+        {"chave": "oc_prioridade", "rotulo": "Gráfico — Prioridade", "tipo": "chart", "grafico": "doughnut"},
+    ]},
+    {"modulo": "anc", "titulo": "ANC — Avisos de Não Conformidade", "icone": "⚠️", "elementos": [
+        {"chave": "anc_kpis",      "rotulo": "Indicadores (KPIs)",   "tipo": "kpis"},
+        {"chave": "anc_status",    "rotulo": "Gráfico — Status",     "tipo": "chart", "grafico": "doughnut"},
+        {"chave": "anc_gravidade", "rotulo": "Gráfico — Gravidade",  "tipo": "chart", "grafico": "doughnut"},
+    ]},
+    {"modulo": "analises", "titulo": "Análises Investigativas", "icone": "🔍", "elementos": [
+        {"chave": "an_kpis",          "rotulo": "Indicadores (KPIs)",      "tipo": "kpis"},
+        {"chave": "an_status",        "rotulo": "Gráfico — Status",        "tipo": "chart", "grafico": "doughnut"},
+        {"chave": "an_classificacao", "rotulo": "Gráfico — Classificação", "tipo": "chart", "grafico": "bar"},
+    ]},
+]
+
+
+def _sites_export_disponiveis():
+    """Sites que o usuário pode escolher para exportar (ADMIN = todos)."""
+    if _is_privileged():
+        sites = _get_todos_sites()
+        return sites if sites else _get_distinct_cached(Ocorrencia.site, "oc_sites")
+    return sorted(s for s in _sites_do_usuario() if s)
+
+
+def _montar_dados_export(sites_sel, data_ini=None, data_fim=None):
+    """Agrega KPIs e datasets de gráficos dos 3 módulos para os sites informados.
+
+    sites_sel: lista de nomes de site (já validada contra os autorizados). Vazia = todos.
+    data_ini/data_fim: strings "YYYY-MM-DD" (opcionais). Filtram pelo campo de data
+    de cada módulo (data_hora / data_nc / data_ocorrencia) em Python, pois são CLOB/str.
+    """
+    from collections import Counter
+    from datetime import datetime as _dt
+
+    _di = None
+    _df = None
+    try:
+        if data_ini: _di = _dt.strptime(data_ini, "%Y-%m-%d")
+    except Exception: _di = None
+    try:
+        if data_fim: _df = _dt.strptime(data_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+    except Exception: _df = None
+
+    def _flt(q, model):
+        return q.filter(model.site.in_(sites_sel)) if sites_sel else q
+
+    def _por_data(lista, campo):
+        """Filtra registros pelo intervalo, lendo str(campo)[:10] como data."""
+        if not _di and not _df:
+            return lista
+        out = []
+        for r in lista:
+            v = getattr(r, campo, None)
+            if not v:
+                continue
+            try:
+                d = v if isinstance(v, _dt) else _dt.strptime(str(v)[:10], "%Y-%m-%d")
+            except Exception:
+                continue
+            if _di and d < _di:
+                continue
+            if _df and d > _df:
+                continue
+            out.append(r)
+        return out
+
+    def _top(counter, limit=8):
+        items = counter.most_common(limit)
+        return [str(x[0]) for x in items], [x[1] for x in items]
+
+    # ── Ocorrências ──────────────────────────────────────────────────
+    _oc_sem = [defer(Ocorrencia.descricao), defer(Ocorrencia.gc), defer(Ocorrencia.foto),
+               defer(Ocorrencia.conclusao_investigacao),
+               defer(Ocorrencia.anexo_post), defer(Ocorrencia.anexo_post_2), defer(Ocorrencia.anexo_post_3)]
+    ocs = _por_data(_flt(Ocorrencia.query.options(*_oc_sem), Ocorrencia).all(), "data_hora")
+    oc_status = Counter(normalizar_status(r.status) or "—" for r in ocs)
+    oc_nat    = Counter(r.natureza or "—" for r in ocs)
+    oc_prio   = Counter(normalizar_prioridade(r.prioridade) or "—" for r in ocs)
+    oc_st_l, oc_st_v = _top(oc_status); oc_nt_l, oc_nt_v = _top(oc_nat); oc_pr_l, oc_pr_v = _top(oc_prio)
+
+    # ── ANC ──────────────────────────────────────────────────────────
+    _anc_sem = [defer(ANC.imagem_1), defer(ANC.imagem_2), defer(ANC.imagem_3),
+                defer(ANC.imagem_4), defer(ANC.imagem_5), defer(ANC.imagem_6),
+                defer(ANC.anexo_fechamento), defer(ANC.descricao), defer(ANC.plano_acao_texto)]
+    ancs = _por_data(_flt(ANC.query.options(*_anc_sem), ANC).all(), "data_nc")
+    anc_status = Counter((r.status or "—").upper() for r in ancs)
+    anc_grav   = Counter((r.gravidade or "—").upper() for r in ancs)
+    anc_st_l, anc_st_v = _top(anc_status); anc_gv_l, anc_gv_v = _top(anc_grav)
+
+    # ── Análises ─────────────────────────────────────────────────────
+    _an_sem = [defer(AnaliseInvestigativa.docx_arquivo), defer(AnaliseInvestigativa.anexo_fechamento),
+               defer(AnaliseInvestigativa.objetivo), defer(AnaliseInvestigativa.descricao_registro),
+               defer(AnaliseInvestigativa.conclusao), defer(AnaliseInvestigativa.sugestao),
+               defer(AnaliseInvestigativa.texto_fechamento)]
+    # AnaliseInvestigativa não tem data_ocorrencia; o filtro de data usa criado_em (DateTime),
+    # igual ao dashboard_analise (evita o bug do overview que zera análises ao filtrar por data).
+    ans = _por_data(_flt(AnaliseInvestigativa.query.options(*_an_sem), AnaliseInvestigativa).all(), "criado_em")
+    an_status  = Counter((r.status_analise or "—").upper() for r in ans)
+    an_classif = Counter(r.classificacao or "—" for r in ans)
+    an_st_l, an_st_v = _top(an_status); an_cl_l, an_cl_v = _top(an_classif)
+
+    return {
+        "ocorrencias": {
+            "titulo": "Ocorrências / Investigações",
+            "kpis": [
+                ("Total",            len(ocs)),
+                ("Pendentes",        sum(1 for r in ocs if normalizar_status(r.status) == "PENDENTE")),
+                ("Em andamento",     sum(1 for r in ocs if normalizar_status(r.status) == "EM ANDAMENTO")),
+                ("Concluídas",       sum(1 for r in ocs if normalizar_status(r.status) == "CONCLUIDO")),
+                ("Prioridade alta",  sum(1 for r in ocs if normalizar_prioridade(r.prioridade) == "ALTA")),
+                ("Com B.O.",         sum(1 for r in ocs if r.boletim_ocorrencia)),
+                ("Valor recuperado", _formatar_valor(sum(_parse_valor(r.valor_recuperado) for r in ocs if r.valor_recuperado))),
+                ("Prejuízo",         _formatar_valor(sum(_parse_valor(r.prejuizo) for r in ocs if r.prejuizo))),
+            ],
+            "charts": {
+                "oc_status":     {"labels": oc_st_l, "valores": oc_st_v},
+                "oc_natureza":   {"labels": oc_nt_l, "valores": oc_nt_v},
+                "oc_prioridade": {"labels": oc_pr_l, "valores": oc_pr_v},
+            },
+        },
+        "anc": {
+            "titulo": "ANC — Avisos de Não Conformidade",
+            "kpis": [
+                ("Total",        len(ancs)),
+                ("Abertos",      sum(1 for r in ancs if (r.status or "").upper() == "ABERTO")),
+                ("Em andamento", sum(1 for r in ancs if (r.status or "").upper() == "EM ANDAMENTO")),
+                ("Concluídos",   sum(1 for r in ancs if (r.status or "").upper() == "CONCLUÍDO")),
+                ("Críticos",     sum(1 for r in ancs if (r.gravidade or "").upper() == "CRÍTICA")),
+                ("Valor",        _formatar_valor(sum(_parse_valor(r.valor) for r in ancs if r.valor))),
+            ],
+            "charts": {
+                "anc_status":    {"labels": anc_st_l, "valores": anc_st_v},
+                "anc_gravidade": {"labels": anc_gv_l, "valores": anc_gv_v},
+            },
+        },
+        "analises": {
+            "titulo": "Análises Investigativas",
+            "kpis": [
+                ("Total",        len(ans)),
+                ("Em andamento", sum(1 for r in ans if (r.status_analise or "").upper() == "EM ANDAMENTO")),
+                ("Fechadas",     sum(1 for r in ans if (r.status_analise or "").upper() == "FECHADA")),
+                ("Valor",        _formatar_valor(sum(_parse_valor(r.valor) for r in ans if r.valor))),
+            ],
+            "charts": {
+                "an_status":        {"labels": an_st_l, "valores": an_st_v},
+                "an_classificacao": {"labels": an_cl_l, "valores": an_cl_v},
+            },
+        },
+    }
+
+
+def _export_validar_sites(sites_req):
+    """Interseção entre os sites pedidos e os autorizados (segurança)."""
+    autorizados = set(_sites_export_disponiveis())
+    if not sites_req:
+        return sorted(autorizados)
+    return sorted(s for s in sites_req if s in autorizados)
+
+
+# Rota SEM as palavras "export"/"exportar"/"download"/"pdf": o interceptador de
+# downloads do launcher (_DOWNLOAD_JS) sequestra cliques em <a> cujo href contenha
+# esses termos. Como esta é uma PÁGINA (não um arquivo), a URL precisa ser neutra.
+@app.route("/apresentacao")
+@login_required
+def exportar_apresentacao():
+    return render_template(
+        "exportar_apresentacao.html",
+        catalogo=_EXPORT_CATALOGO,
+        sites=_sites_export_disponiveis(),
+        is_admin=_is_privileged(),
+    )
+
+
+@app.route("/apresentacao/dados", methods=["POST"])
+@login_required
+def exportar_apresentacao_dados():
+    """Retorna os datasets agregados (JSON) para o cliente renderizar os gráficos."""
+    body  = request.get_json(force=True) or {}
+    sites = _export_validar_sites(body.get("sites") or [])
+    d_ini = (body.get("data_ini") or "").strip() or None
+    d_fim = (body.get("data_fim") or "").strip() or None
+    return jsonify(ok=True, sites=sites, dados=_montar_dados_export(sites, d_ini, d_fim))
+
+
+@app.route("/apresentacao/gerar", methods=["POST"])
+@login_required
+def exportar_apresentacao_gerar():
+    """Recebe config + imagens dos gráficos capturadas no cliente e devolve PDF ou PPTX."""
+    body      = request.get_json(force=True) or {}
+    sites     = _export_validar_sites(body.get("sites") or [])
+    elementos = body.get("elementos") or []
+    formato   = (body.get("formato") or "pdf").lower()
+    titulo    = (body.get("titulo") or "Apresentação de Indicadores").strip()
+    imagens   = body.get("imagens") or {}   # {chave_chart: dataURL}
+    d_ini     = (body.get("data_ini") or "").strip() or None
+    d_fim     = (body.get("data_fim") or "").strip() or None
+
+    if not elementos:
+        return jsonify(ok=False, erro="Selecione ao menos um elemento."), 400
+
+    dados   = _montar_dados_export(sites, d_ini, d_fim)
+    sub     = "Todos os sites" if (not sites or len(sites) == len(_sites_export_disponiveis())) else ", ".join(sites)
+    periodo = ""
+    if d_ini or d_fim:
+        periodo = f"  ·  Período: {d_ini or '...'} a {d_fim or '...'}"
+    meta    = {"titulo": titulo, "subtitulo": sub + periodo, "data": datetime.now().strftime("%d/%m/%Y %H:%M")}
+    stamp   = datetime.now().strftime("%Y%m%d_%H%M")
+
+    try:
+        if formato == "pptx":
+            buf   = _gerar_pptx_apresentacao(meta, dados, elementos, imagens)
+            mime  = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            fname = f"apresentacao_{stamp}.pptx"
+        else:
+            buf   = _gerar_pdf_apresentacao(meta, dados, elementos, imagens)
+            mime  = "application/pdf"
+            fname = f"apresentacao_{stamp}.pdf"
+        # Guarda o arquivo gerado sob um token: o bridge de download do launcher
+        # (window.pywebview.api.download) só faz GET, então o cliente busca o arquivo
+        # via /apresentacao/arquivo/<token> e abre o diálogo "Salvar como".
+        import uuid
+        token = uuid.uuid4().hex
+        _apres_cache_put(token, buf.getvalue(), mime, fname)
+        return jsonify(ok=True, token=token, filename=fname)
+    except Exception as exc:
+        logging.error(f"Erro ao gerar apresentação ({formato}): {exc}", exc_info=True)
+        return jsonify(ok=False, erro=str(exc)), 500
+
+
+# Cache em memória dos arquivos gerados (app desktop mono-usuário). token -> (ts, bytes, mime, nome)
+_APRES_CACHE = {}
+
+def _apres_cache_put(token, data, mime, fname):
+    import time
+    agora = time.time()
+    # Remove arquivos com mais de 5 min para não acumular memória se o usuário não baixar.
+    for _k in [k for k, v in _APRES_CACHE.items() if agora - v[0] > 300]:
+        _APRES_CACHE.pop(_k, None)
+    _APRES_CACHE[token] = (agora, data, mime, fname)
+
+
+@app.route("/apresentacao/arquivo/<token>")
+@login_required
+def exportar_apresentacao_arquivo(token):
+    """Entrega o arquivo gerado (consumido pelo bridge de download do launcher)."""
+    item = _APRES_CACHE.pop(token, None)
+    if not item:
+        return "Arquivo expirado ou não encontrado. Gere novamente.", 404
+    _ts, data, mime, fname = item
+    return send_file(BytesIO(data), as_attachment=True, download_name=fname, mimetype=mime)
+
+
+def _gerar_pdf_apresentacao(meta, dados, elementos, imagens):
+    """Monta o PDF (reportlab) com cabeçalho DHL, KPIs e gráficos selecionados."""
+    _import_reportlab()
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm as _cm
+    from reportlab.lib import colors as _col
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.styles import ParagraphStyle as _PS
+    from reportlab.lib.utils import ImageReader as _IR
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                    Image as _RLImage, Table as _T, TableStyle as _TS)
+
+    YELLOW = _col.HexColor("#FFCC00"); RED = _col.HexColor("#D40511"); BLACK = _col.black
+    GREEN_PDF = _col.HexColor("#16a34a")
+
+    def _eh_concluido_pdf(rotulo):
+        r = (rotulo or "").lower()
+        return r.startswith(("conclu", "fecha", "encerr"))
+    buf = BytesIO()
+    pw  = A4[0] - 2.6 * _cm
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.3*_cm, rightMargin=1.3*_cm,
+                            topMargin=0.9*_cm, bottomMargin=1.4*_cm)
+    s_t   = _PS("t",  fontName="Helvetica-Bold", fontSize=15, textColor=BLACK, alignment=TA_CENTER)
+    s_sub = _PS("su", fontName="Helvetica",      fontSize=9,  textColor=BLACK, alignment=TA_CENTER, leading=12)
+    s_sec = _PS("se", fontName="Helvetica-Bold", fontSize=11, textColor=BLACK)
+    s_k    = _PS("k",   fontName="Helvetica",      fontSize=9,  textColor=_col.HexColor("#374151"))
+    s_kv   = _PS("kv",  fontName="Helvetica-Bold", fontSize=13, textColor=BLACK)
+    s_kv_g = _PS("kvg", fontName="Helvetica-Bold", fontSize=13, textColor=GREEN_PDF)
+    story = []
+
+    # Cabeçalho DHL
+    logo_path = os.path.join(app.root_path, "static", "logo.png")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as _lf:
+            _b = BytesIO(_lf.read()); _b.seek(0)
+            iw, ih = _IR(_b).getSize(); sc = min((pw*0.20)/iw, (1.1*_cm)/ih, 1.0); _b.seek(0)
+            logo_cell = _RLImage(_b, width=iw*sc, height=ih*sc)
+    else:
+        logo_cell = Paragraph("<b>DHL</b>", s_sec)
+
+    logo2x30_path = os.path.join(app.root_path, "static", "Design sem nome (35).png")
+    if os.path.exists(logo2x30_path):
+        with open(logo2x30_path, "rb") as _lf2:
+            _b2 = BytesIO(_lf2.read()); _b2.seek(0)
+            iw2, ih2 = _IR(_b2).getSize(); sc2 = min((pw*0.18)/iw2, (1.1*_cm)/ih2, 1.0); _b2.seek(0)
+            logo2x30_cell = _RLImage(_b2, width=iw2*sc2, height=ih2*sc2)
+        hdr = _T([[logo_cell, Paragraph("APRESENTAÇÃO DE INDICADORES — DHL SECURITY", s_t), logo2x30_cell]],
+                 colWidths=[pw*0.20, pw*0.60, pw*0.20])
+    else:
+        hdr = _T([[logo_cell, Paragraph("APRESENTAÇÃO DE INDICADORES — DHL SECURITY", s_t)]],
+                 colWidths=[pw*0.24, pw*0.76])
+    hdr.setStyle(_TS([("BACKGROUND",(0,0),(-1,-1),YELLOW),("BOX",(0,0),(-1,-1),0.5,BLACK),
+                      ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),5),
+                      ("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),8),
+                      ("ALIGN",(2,0),(2,0),"RIGHT"),("RIGHTPADDING",(2,0),(2,0),8)]))
+    story += [hdr, Spacer(1, 0.15*_cm)]
+    story += [Paragraph(meta["titulo"], s_sub),
+              Paragraph(f"Sites: {meta['subtitulo']} &nbsp;·&nbsp; Gerado em {meta['data']}", s_sub),
+              Spacer(1, 0.35*_cm)]
+
+    catalogo = {m["modulo"]: m for m in _EXPORT_CATALOGO}
+    for mod_key in ("ocorrencias", "anc", "analises"):
+        mod = catalogo[mod_key]
+        sel = [e for e in mod["elementos"] if e["chave"] in elementos]
+        if not sel:
+            continue
+        bar = _T([[Paragraph(f"{mod['icone']}  {mod['titulo']}", s_sec)]], colWidths=[pw])
+        bar.setStyle(_TS([("BACKGROUND",(0,0),(-1,-1),_col.HexColor("#f3f4f6")),
+                          ("LINEBELOW",(0,0),(-1,-1),1.2,RED),("TOPPADDING",(0,0),(-1,-1),5),
+                          ("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),6)]))
+        story += [bar, Spacer(1, 0.2*_cm)]
+
+        # KPIs em grade de 4 colunas
+        if any(e["chave"].endswith("_kpis") for e in sel):
+            kpis = dados[mod_key]["kpis"]
+            cells, row = [], []
+            for rotulo, valor in kpis:
+                _st = s_kv_g if _eh_concluido_pdf(rotulo) else s_kv
+                row.append(_T([[Paragraph(str(valor), _st)], [Paragraph(rotulo, s_k)]],
+                              colWidths=[(pw-0.9*_cm)/4]))
+                if len(row) == 4:
+                    cells.append(row); row = []
+            if row:
+                while len(row) < 4: row.append("")
+                cells.append(row)
+            grid = _T(cells, colWidths=[(pw)/4]*4)
+            grid.setStyle(_TS([("BOX",(0,0),(-1,-1),0.5,_col.HexColor("#e5e7eb")),
+                               ("INNERGRID",(0,0),(-1,-1),0.5,_col.HexColor("#e5e7eb")),
+                               ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),8),
+                               ("BOTTOMPADDING",(0,0),(-1,-1),8),("LEFTPADDING",(0,0),(-1,-1),10)]))
+            story += [grid, Spacer(1, 0.3*_cm)]
+
+        # Gráficos (imagens capturadas no cliente) — 2 por linha
+        chart_imgs = []
+        for e in sel:
+            if e["tipo"] != "chart":
+                continue
+            data_url = imagens.get(e["chave"])
+            if not data_url:
+                continue
+            try:
+                bio = BytesIO(_b64_decode(data_url)); bio.seek(0)
+                iw, ih = _IR(bio).getSize(); cw = (pw - 0.6*_cm)/2; sc = min(cw/iw, 1.0); bio.seek(0)
+                chart_imgs.append(_RLImage(bio, width=iw*sc, height=ih*sc))
+            except Exception:
+                continue
+        for i in range(0, len(chart_imgs), 2):
+            par = chart_imgs[i:i+2]
+            if len(par) == 1: par.append("")
+            t = _T([par], colWidths=[pw/2, pw/2])
+            t.setStyle(_TS([("VALIGN",(0,0),(-1,-1),"TOP"),("ALIGN",(0,0),(-1,-1),"CENTER")]))
+            story += [t, Spacer(1, 0.2*_cm)]
+        story += [Spacer(1, 0.2*_cm)]
+
+    story += [Spacer(1, 0.3*_cm),
+              Paragraph("Documento gerado automaticamente pelo CCTV Control Panel · Uso interno · "
+                        "Dados protegidos pela LGPD.", s_sub)]
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+def _gerar_pptx_apresentacao(meta, dados, elementos, imagens):
+    """Monta o PPTX usando o template corporativo DHL (static/template_apresentacao.pptx).
+
+    Herda branding, gradiente, fontes e rodapé dos layouts do template. Caso o
+    arquivo não exista, cai num fallback simples 16:9 desenhado do zero.
+    """
+    from pptx import Presentation
+    from pptx.util import Inches, Pt, Emu
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN
+    from pptx.enum.shapes import MSO_SHAPE
+
+    RED   = RGBColor(0xD4, 0x05, 0x11)   # accent4
+    YELLOW= RGBColor(0xFF, 0xCC, 0x00)   # accent3
+    GRAY  = RGBColor(0x69, 0x69, 0x69)   # accent2
+    LIGHT = RGBColor(0xF8, 0xF8, 0xF8)   # accent6
+    LINE  = RGBColor(0xDA, 0xDA, 0xDA)   # lt2
+    GREEN = RGBColor(0x16, 0xA3, 0x4A)   # concluído / fechado
+
+    def _cor_valor_kpi(rotulo):
+        r = (rotulo or "").lower()
+        if r.startswith(("conclu", "fecha", "encerr")):
+            return GREEN
+        return RED
+
+    tpl = os.path.join(app.root_path, "static", "template_apresentacao.pptx")
+    usa_tpl = os.path.exists(tpl)
+    prs = Presentation(tpl) if usa_tpl else Presentation()
+
+    # Remove quaisquer slides de exemplo que sobrem no template
+    _ids = prs.slides._sldIdLst
+    for _sl in list(_ids):
+        _ids.remove(_sl)
+
+    if not usa_tpl:
+        prs.slide_width  = Inches(10); prs.slide_height = Inches(5.625)
+    SW, SH = prs.slide_width, prs.slide_height
+
+    def _lay(nome, idx):
+        for l in prs.slide_layouts:
+            if l.name == nome:
+                return l
+        return prs.slide_layouts[idx] if idx < len(prs.slide_layouts) else prs.slide_layouts[0]
+
+    LAY_TITLE = _lay("Title: full page gradient_1", 0)
+    LAY_CONT  = _lay("Content: title only", 6)
+
+    def _set_ph(slide, idx, texto):
+        try:
+            slide.placeholders[idx].text = texto
+        except (KeyError, IndexError):
+            pass
+
+    _logo_2x30 = os.path.join(app.root_path, "static", "Design sem nome (35).png")
+    _tem_2x30  = os.path.exists(_logo_2x30)
+
+    def _add_cont_slide(titulo):
+        """Adiciona slide de conteúdo, define o título e insere o logo 2x30 no canto superior direito."""
+        sl = prs.slides.add_slide(LAY_CONT)
+        if usa_tpl:
+            _set_ph(sl, 0, titulo)
+        else:
+            tb = sl.shapes.add_textbox(Inches(0.35), Inches(0.3), Inches(7.8), Inches(0.6))
+            r = tb.text_frame.paragraphs[0].add_run(); r.text = titulo
+            r.font.size = Pt(20); r.font.bold = True; r.font.color.rgb = RED; r.font.name = "Arial"
+        if _tem_2x30:
+            lw = Inches(1.45)
+            sl.shapes.add_picture(_logo_2x30, SW - lw - Inches(0.15), Inches(0.04), width=lw)
+        return sl
+
+    def _titulo_slide(slide, texto):
+        """Define o título do slide de conteúdo (placeholder 0) ou cria um textbox no fallback."""
+        if usa_tpl:
+            _set_ph(slide, 0, texto)
+        else:
+            tb = slide.shapes.add_textbox(Inches(0.35), Inches(0.3), Inches(9.3), Inches(0.6))
+            r = tb.text_frame.paragraphs[0].add_run(); r.text = texto
+            r.font.size = Pt(20); r.font.bold = True; r.font.color.rgb = RED; r.font.name = "Arial"
+
+    # ── Slide título ──────────────────────────────────────────────────
+    s = prs.slides.add_slide(LAY_TITLE)
+    if usa_tpl:
+        _set_ph(s, 0, meta["titulo"])                       # TITLE
+        _set_ph(s, 1, meta["subtitulo"])                    # SUBTITLE (meta-subline)
+        _set_ph(s, 20, "DHL Security · " + meta["data"])    # BODY
+    else:
+        tb = s.shapes.add_textbox(Inches(0.6), Inches(2.2), Inches(8.8), Inches(1.2))
+        r = tb.text_frame.paragraphs[0].add_run(); r.text = meta["titulo"]
+        r.font.size = Pt(30); r.font.bold = True; r.font.name = "Arial"
+
+    # ── Conteúdo por módulo ───────────────────────────────────────────
+    catalogo = {m["modulo"]: m for m in _EXPORT_CATALOGO}
+    for mod_key in ("ocorrencias", "anc", "analises"):
+        mod = catalogo[mod_key]
+        sel = [e for e in mod["elementos"] if e["chave"] in elementos]
+        if not sel:
+            continue
+
+        # Slide de KPIs (cards em grade 4 colunas)
+        if any(e["chave"].endswith("_kpis") for e in sel):
+            s = _add_cont_slide(f"{mod['titulo']} — Indicadores")
+            kpis = dados[mod_key]["kpis"]
+            cols = 4; cw = Inches(2.2); ch = Inches(1.2); gx = Inches(0.15); gy = Inches(0.18)
+            x0 = Inches(0.35); y0 = Inches(1.25)
+            for i, (rotulo, valor) in enumerate(kpis):
+                cx = x0 + (cw + gx) * (i % cols)
+                cy = y0 + (ch + gy) * (i // cols)
+                card = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, cx, cy, cw, ch)
+                card.fill.solid(); card.fill.fore_color.rgb = LIGHT
+                card.line.color.rgb = LINE; card.line.width = Pt(0.75)
+                card.shadow.inherit = False
+                tf = card.text_frame; tf.word_wrap = True
+                p1 = tf.paragraphs[0]; p1.alignment = PP_ALIGN.CENTER
+                r1 = p1.add_run(); r1.text = str(valor)
+                r1.font.size = Pt(22); r1.font.bold = True; r1.font.color.rgb = _cor_valor_kpi(rotulo); r1.font.name = "Arial"
+                p2 = tf.add_paragraph(); p2.alignment = PP_ALIGN.CENTER
+                r2 = p2.add_run(); r2.text = rotulo
+                r2.font.size = Pt(10); r2.font.color.rgb = GRAY; r2.font.name = "Arial"
+
+        # Todos os gráficos do módulo em UM único slide (grid lado a lado)
+        chart_pairs = []
+        for e in sel:
+            if e["tipo"] != "chart":
+                continue
+            data_url = imagens.get(e["chave"])
+            if not data_url:
+                continue
+            try:
+                bio = BytesIO(_b64_decode(data_url)); bio.seek(0)
+                chart_pairs.append((e["rotulo"].replace("Gráfico — ", ""), bio))
+            except Exception:
+                continue
+
+        if chart_pairs:
+            s = _add_cont_slide(f"{mod['titulo']} — Gráficos")
+            n       = len(chart_pairs)
+            mx      = Inches(0.30)          # margem esquerda/direita
+            my      = Inches(1.25)          # topo (abaixo do título)
+            gap     = Inches(0.15)          # espaço entre gráficos
+            avail_w = SW - 2 * mx
+            avail_h = SH - my - Inches(0.1)
+            col_w   = (avail_w - gap * (n - 1)) / n
+            for idx, (_, bio) in enumerate(chart_pairs):
+                bio.seek(0)
+                x = mx + (col_w + gap) * idx
+                pic = s.shapes.add_picture(bio, x, my, width=col_w)
+                # centraliza verticalmente se a altura calculada for menor que o espaço
+                if pic.height > avail_h:
+                    scale  = avail_h / pic.height
+                    pic.width  = int(pic.width  * scale)
+                    pic.height = int(avail_h)
+                    pic.left   = int(mx + (col_w + gap) * idx + (col_w - pic.width) / 2)
+                pic.top = int(my + (avail_h - pic.height) / 2)
+
+    out = BytesIO(); prs.save(out); out.seek(0)
+    return out
+
+
+# =========================
 # DASHBOARD
 # =========================
 @app.route("/dashboard")
@@ -4298,7 +5331,15 @@ def dashboard():
     is_admin     = (session.get("user_perfil") or "").upper() == "ADMIN"
     site_usuario = session.get("user_site") or None
 
-    query = Ocorrencia.query.order_by(Ocorrencia.id.desc())
+    # Defere todos os CLOBs pesados: o dashboard só conta/agrega e mostra
+    # registros[:10] na tabela (que não acessa nenhum desses campos), então
+    # não há motivo para transferir base64 de foto/anexos/descrição via VPN.
+    _oc_sem = [
+        defer(Ocorrencia.descricao), defer(Ocorrencia.gc), defer(Ocorrencia.foto),
+        defer(Ocorrencia.conclusao_investigacao),
+        defer(Ocorrencia.anexo_post), defer(Ocorrencia.anexo_post_2), defer(Ocorrencia.anexo_post_3),
+    ]
+    query = Ocorrencia.query.options(*_oc_sem).order_by(Ocorrencia.id.desc())
     if not is_admin:
         query = _query_filtrar_sites(query, Ocorrencia)
 
@@ -4306,8 +5347,7 @@ def dashboard():
 
     # Sites disponíveis para o filtro (admin vê todos; não-admin só os seus)
     if is_admin:
-        _sites_q = db.session.query(Ocorrencia.site).distinct().all()
-        todos_sites_dash = sorted(s[0] for s in _sites_q if s[0])
+        todos_sites_dash = _get_distinct_cached(Ocorrencia.site, "oc_sites")
     else:
         todos_sites_dash = sorted(s for s in _sites_do_usuario() if s)
 
@@ -4381,9 +5421,10 @@ def dashboard():
 
     # Ordenar todos em ordem crescente (menor → maior)
     natureza_sorted  = sorted(natureza_count.items(),  key=lambda x: x[1])
-    local_sorted     = sorted(local_count.items(),     key=lambda x: x[1])
+    local_sorted     = sorted(local_count.items(),     key=lambda x: x[1])[-10:]   # top 10
     criador_sorted   = sorted(criador_count.items(),   key=lambda x: x[1])
-    operador_sorted  = sorted(operador_count.items(),  key=lambda x: x[1])
+    operador_sorted  = sorted(((k, v) for k, v in operador_count.items() if v > 0),
+                               key=lambda x: x[1])  # exclui quem tem 0 ocorrências
 
     # Status em ordem fixa: PENDENTE → EM ANDAMENTO → CONCLUIDO
     _STATUS_ORDER = ["PENDENTE", "EM ANDAMENTO", "CONCLUIDO"]
@@ -4902,11 +5943,16 @@ def admin_multisites():
 
         return redirect(url_for("admin_multisites"))
 
-    # GET — carrega vínculos de todos os usuários MULTISITES
-    vinculos_por_usuario = {}
-    for u in todos_usuarios:
-        vinculos = UsuarioSite.query.filter_by(usuario_id=u.id).order_by(UsuarioSite.site_nome).all()
-        vinculos_por_usuario[u.id] = [v.site_nome for v in vinculos]
+    # GET — carrega vínculos de todos os usuários MULTISITES em UMA query
+    # (elimina N+1 — antes era 1 query por usuário)
+    vinculos_por_usuario = {u.id: [] for u in todos_usuarios}
+    _ids = [u.id for u in todos_usuarios]
+    if _ids:
+        _todos_vinculos = (UsuarioSite.query
+                            .filter(UsuarioSite.usuario_id.in_(_ids))
+                            .order_by(UsuarioSite.site_nome).all())
+        for v in _todos_vinculos:
+            vinculos_por_usuario[v.usuario_id].append(v.site_nome)
 
     return render_template(
         "admin_multisites.html",
@@ -5046,6 +6092,7 @@ def _sh_get_filtros():
     df      = (request.args.get("data_final")   or "").strip()
     turno   = _sh_norm(request.args.get("turno"))
     status  = _sh_norm(request.args.get("status"))
+    assinatura = _sh_norm(request.args.get("assinatura"))
     perfil  = session.get("user_perfil", "")
     is_adm  = perfil in ("ADMIN", "Admin", "admin")
     site_f  = _sh_norm(request.args.get("site")) if is_adm else _sh_norm(session.get("user_site", ""))
@@ -5060,9 +6107,15 @@ def _sh_get_filtros():
         if d: q = q.filter(OcorrenciaTurno.data_ocorrencia <= d)
     if turno:  q = q.filter(OcorrenciaTurno.turno  == turno)
     if status: q = q.filter(OcorrenciaTurno.status == status)
+    if assinatura == "NAO_ASSINADA":
+        q = q.filter(or_(OcorrenciaTurno.assinatura_entrada.is_(None),
+                          func.length(OcorrenciaTurno.assinatura_entrada) == 0))
+    elif assinatura == "ASSINADA":
+        q = q.filter(OcorrenciaTurno.assinatura_entrada.isnot(None),
+                      func.length(OcorrenciaTurno.assinatura_entrada) > 0)
     q = q.order_by(OcorrenciaTurno.data_hora_registro.desc(), OcorrenciaTurno.id.desc())
     return q, {"data_inicial": di, "data_final": df, "turno": turno,
-               "status": status, "site": site_f if is_adm else ""}
+               "status": status, "assinatura": assinatura, "site": site_f if is_adm else ""}
 
 def _sh_resumo():
     hoje   = _date_cls.today()
@@ -5214,13 +6267,13 @@ def sh_assinar(oc_id):
     oc = OcorrenciaTurno.query.get_or_404(oc_id)
     if not _sh_verificar_acesso(oc):
         flash("Acesso negado.", "danger")
-        return redirect(url_for("sh_index"))
+        return redirect(url_for("sh_controle"))
     if oc.responsavel_entrada != session.get("user_nome"):
         flash("Você não é o responsável designado para receber este turno.", "danger")
-        return redirect(url_for("sh_index"))
+        return redirect(url_for("sh_controle"))
     if oc.assinatura_entrada:
         flash("Este turno já foi assinado.", "warning")
-        return redirect(url_for("sh_index"))
+        return redirect(url_for("sh_controle"))
     if request.method == "POST":
         ass = request.form.get("assinatura_entrada")
         if not ass:
@@ -5249,7 +6302,7 @@ def sh_assinar(oc_id):
             flash("Turno recebido com ressalva registrada!", "warning")
         else:
             flash("Turno recebido e assinado com sucesso!", "success")
-        return redirect(url_for("sh_index"))
+        return redirect(url_for("sh_controle"))
     return render_template("sh_assinar.html", ocorrencia=oc)
 
 
@@ -5782,9 +6835,9 @@ def admin_dashboard():
 @perfil_required("ADMIN")
 def enviar_comunicado():
     """Envia e-mail HTML de patch notes para todos os usuários ativos."""
-    dados   = request.get_json(force=True) or {}
-    versao  = (dados.get("versao") or APP_VERSION).strip()
-    itens   = dados.get("itens") or []   # [{cat, texto}, ...]
+    dados  = request.get_json(force=True) or {}
+    versao = (dados.get("versao") or APP_VERSION).strip()
+    itens  = dados.get("itens") or []   # [{titulo, descricao}, ...]
 
     # Busca e-mails de todos os usuários ativos
     ativos = Usuario.query.filter_by(is_active=True).with_entities(Usuario.email).all()
@@ -5792,37 +6845,25 @@ def enviar_comunicado():
     if not emails:
         return jsonify(ok=False, erro="Nenhum usuário ativo encontrado.")
 
-    # ── Gera seções de patch notes ──────────────────────────────────────
-    CAT_META = {
-        "novo":     {"label": "🆕 Novidades",  "bg": "#e0f2fe", "color": "#0369a1", "borda": "#7dd3fc"},
-        "melhoria": {"label": "✅ Melhorias",  "bg": "#e8f7ee", "color": "#15803d", "borda": "#86efac"},
-        "correcao": {"label": "🐛 Correções",  "bg": "#fde8ea", "color": "#b42318", "borda": "#fca5a5"},
-        "atencao":  {"label": "⚠️ Atenção",    "bg": "#fff4db", "color": "#9a6700", "borda": "#fde68a"},
-    }
-    grupos: dict = {}
-    for item in itens:
-        cat = item.get("cat", "novo")
-        grupos.setdefault(cat, []).append(item.get("texto", "").strip())
-
-    secoes_html = ""
-    for cat in ["novo", "melhoria", "correcao", "atencao"]:
-        if cat not in grupos:
+    # ── Gera cards de patch notes ─────────────────────────────────────
+    cards_html = ""
+    for i, item in enumerate(itens):
+        titulo  = str(item.get("titulo",  "")).strip()
+        descr   = str(item.get("descricao", "")).strip()
+        if not titulo:
             continue
-        m = CAT_META[cat]
-        badge = (f'<span style="display:inline-block;background:{m["bg"]};color:{m["color"]};'
-                 f'font-size:11px;font-weight:900;padding:4px 12px;border-radius:999px;'
-                 f'text-transform:uppercase;letter-spacing:.5px;">{m["label"]}</span>')
-        linhas = "".join(
-            f'<tr><td style="padding:6px 0 6px 16px;font-size:14px;color:#374151;'
-            f'border-left:3px solid {m["borda"]};">&#8226; {t}</td></tr>'
-            for t in grupos[cat]
+        sep = "border-top:1px solid #e5e7eb;" if i > 0 else ""
+        cards_html += (
+            f'<tr><td style="{sep}padding:16px 0;">'
+            f'<div style="font-size:14px;font-weight:900;color:#1f2937;margin-bottom:6px;">&#8226; {titulo}</div>'
+            + (f'<div style="font-size:13px;color:#6b7280;line-height:1.65;padding-left:14px;">{descr}</div>' if descr else "")
+            + '</td></tr>'
         )
-        secoes_html += f"<tr><td style='padding:16px 0 6px;'>{badge}</td></tr>{linhas}"
 
-    if not secoes_html:
-        secoes_html = '<tr><td style="font-size:13px;color:#9ca3af;">(sem itens registrados)</td></tr>'
+    if not cards_html:
+        cards_html = '<tr><td style="font-size:13px;color:#9ca3af;padding:12px 0;">(sem notas registradas)</td></tr>'
 
-    # ── HTML do e-mail ──────────────────────────────────────────────────
+    # ── HTML do e-mail ─────────────────────────────────────────────────
     html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f5f7;font-family:Arial,Helvetica,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f5f7;padding:32px 0;">
 <tr><td align="center">
@@ -5842,14 +6883,14 @@ def enviar_comunicado():
   <p style="font-size:15px;color:#1f2937;margin:0 0 8px;">Olá,</p>
   <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 24px;">
     Uma nova versão do <strong style="color:#1f2937;">CCTV Control Panel</strong> foi disponibilizada.
-    Confira abaixo as novidades desta versão.
+    Confira abaixo as novidades desta atualização.
   </p>
 
   <!-- Caixa de patch notes -->
   <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
     <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:#9ca3af;margin-bottom:4px;">Novidades da versão</div>
     <div style="font-size:18px;font-weight:900;color:#1f2937;margin-bottom:16px;">Versão {versao}</div>
-    <table width="100%" cellpadding="0" cellspacing="0">{secoes_html}</table>
+    <table width="100%" cellpadding="0" cellspacing="0">{cards_html}</table>
   </div>
 
   <!-- Instrução -->
@@ -5876,13 +6917,13 @@ def enviar_comunicado():
 
 </table></td></tr></table></body></html>"""
 
-    # ── Envia via SMTP ──────────────────────────────────────────────────
+    # ── Envia via SMTP ─────────────────────────────────────────────────
     assunto = f"CCTV Control Panel v{versao} — Atualização disponível"
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = assunto
         msg["From"]    = EMAIL_FROM
-        msg["To"]      = EMAIL_FROM      # remetente no To
+        msg["To"]      = EMAIL_FROM
         msg["Bcc"]     = ", ".join(emails)
         msg.attach(MIMEText(html, "html", "utf-8"))
 
@@ -6296,6 +7337,319 @@ def admin_excluir_usuario(uid):
     return redirect(url_for("admin_usuarios"))
 
 
+@app.route("/admin/usuarios-ativos")
+@login_required
+@perfil_required("ADMIN")
+def admin_usuarios_ativos():
+    busca  = (request.args.get("busca") or "").strip().lower()
+    f_role = (request.args.get("role")  or "").strip().upper()
+    f_site = (request.args.get("site")  or "").strip()
+
+    usuarios = sb.table("usuarios").select("*").order("nome_usuario").execute().data or []
+    if busca:
+        usuarios = [u for u in usuarios if busca in (u.get("nome_usuario") or "").lower()
+                    or busca in (u.get("email") or "").lower()]
+    if f_role:
+        usuarios = [u for u in usuarios if (u.get("role") or "").upper() == f_role]
+    if f_site:
+        usuarios = [u for u in usuarios if u.get("site") == f_site]
+
+    todos_sites = [s["nome_do_site"] for s in
+                    (sb.table("sites").select("nome_do_site").order("nome_do_site").execute().data or [])]
+    pendentes = _admin_pendentes()
+
+    return render_template(
+        "admin_usuarios_ativos.html",
+        usuarios=usuarios,
+        todos_sites=todos_sites,
+        filtros={"busca": busca, "role": f_role, "site": f_site},
+        pendentes=pendentes,
+    )
+
+
+@app.route("/admin/usuarios-ativos/<int:uid>/editar", methods=["GET", "POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_usuario_ativo_editar(uid):
+    todos_sites = [s["nome_do_site"] for s in
+                    (sb.table("sites").select("nome_do_site").order("nome_do_site").execute().data or [])]
+    pendentes = _admin_pendentes()
+
+    rows = sb.table("usuarios").select("*").eq("id", uid).limit(1).execute().data or []
+    if not rows:
+        flash("Usuário não encontrado no Ativos.", "danger")
+        return redirect(url_for("admin_usuarios_ativos"))
+    u = rows[0]
+
+    if request.method == "POST":
+        role = (request.form.get("role") or u.get("role") or "PORTARIA").strip().upper()
+        site = (request.form.get("site") or "").strip() or None
+        try:
+            sb.table("usuarios").update({"role": role, "site": site}).eq("id", uid).execute()
+            flash(f"Usuário {u.get('nome_usuario')} atualizado com sucesso.", "success")
+        except Exception:
+            flash("Erro ao salvar alterações no Supabase.", "danger")
+        return redirect(url_for("admin_usuarios_ativos"))
+
+    return render_template("admin_usuario_ativo_form.html",
+        usuario=u, todos_sites=todos_sites, pendentes=pendentes)
+
+
+@app.route("/admin/usuarios-ativos/<int:uid>/excluir", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_usuario_ativo_excluir(uid):
+    rows = sb.table("usuarios").select("nome_usuario").eq("id", uid).limit(1).execute().data or []
+    nome = rows[0]["nome_usuario"] if rows else uid
+    try:
+        sb.table("usuarios").delete().eq("id", uid).execute()
+        flash(f"Usuário {nome} excluído do Ativos.", "success")
+    except Exception:
+        flash("Erro ao excluir usuário no Supabase.", "danger")
+    return redirect(url_for("admin_usuarios_ativos"))
+
+
+@app.route("/admin/usuarios-ativos/<int:uid>/redefinir-senha", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_usuario_ativo_redefinir_senha(uid):
+    rows = sb.table("usuarios").select("nome_usuario").eq("id", uid).limit(1).execute().data or []
+    if not rows:
+        flash("Usuário não encontrado no Ativos.", "danger")
+        return redirect(url_for("admin_usuarios_ativos"))
+    nome = rows[0]["nome_usuario"]
+    senha_nova = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    try:
+        sb.table("usuarios").update({
+            "senha_hash": generate_password_hash(senha_nova, method="pbkdf2:sha256")
+        }).eq("id", uid).execute()
+        flash(f"Nova senha de {nome}: {senha_nova}", "success")
+    except Exception:
+        flash("Erro ao redefinir senha no Supabase.", "danger")
+    return redirect(url_for("admin_usuarios_ativos"))
+
+
+# ======================================================================
+# SINCRONIZAÇÃO DE LOGINS  Oracle (USERS_LIVRO)  <->  Supabase (usuarios)
+# ----------------------------------------------------------------------
+# Objetivo: manter as duas listas de usuários iguais (mesmas contas + mesma
+# senha = login único nos dois apps). BIDIRECIONAL, casando por e-mail.
+#
+# O QUE sincroniza:  existência da conta (criar) + senha (login).
+# O QUE NÃO toca:    role e site — os modelos de permissão dos dois apps são
+#                    diferentes (Oracle: ADMIN/GESTOR/KEYUSER/USER/...; Supabase:
+#                    ADMIN/OPERADOR/PORTARIA), então cada lado mantém o seu.
+#
+# Conflito de senha (mudou nos dois lados desde o último sync): Oracle vence.
+# Exclusões: detectadas via ledger, mas só aplicadas se o admin confirmar.
+# O motor roda no servidor do CCTV — o único ponto que alcança Oracle (VPN) e
+# Supabase (443) ao mesmo tempo.
+# ======================================================================
+
+# Roles padrão (menor privilégio) ao CRIAR uma conta no outro lado:
+_SYNC_ROLE_ORACLE_PADRAO = "OPERACIONAL"   # nova conta vinda do Supabase
+_SYNC_ROLE_SUPA_PADRAO   = "PORTARIA"      # nova conta vinda do Oracle
+
+
+def _sync_coletar():
+    """Lê os dois lados + o ledger. Retorna (oracle, supa, ledger) indexados por
+    e-mail minúsculo. Ignora linhas sem e-mail (não há como casar)."""
+    oracle = {}
+    for u in Usuario.query.all():
+        em = (u.email or "").strip().lower()
+        if not em:
+            continue
+        oracle[em] = {"id": u.id, "nome": u.nome, "ph": u.password_hash or "",
+                      "site": u.site, "role": u.perfil}
+    supa = {}
+    for r in (sb.table("usuarios").select("*").execute().data or []):
+        em = (r.get("email") or "").strip().lower()
+        if not em:
+            continue
+        supa[em] = {"id": r.get("id"), "nome_usuario": r.get("nome_usuario"),
+                    "ph": r.get("senha_hash") or "", "site": r.get("site"),
+                    "role": r.get("role")}
+    ledger = {(row.email or "").strip().lower(): (row.password_hash or "")
+              for row in SyncUsuariosLedger.query.all()}
+    return oracle, supa, ledger
+
+
+def _sync_decidir(em, O, S, L, tinha_ledger):
+    """Decide a ação para um e-mail. Retorna dict {tipo, email, detalhe} ou None
+    (em sincronia). 'tinha_ledger' = e-mail já existia no ledger (já foi sincronizado
+    antes) — usado para distinguir 'conta nova' de 'conta excluída'."""
+    if O and not S:
+        if tinha_ledger:
+            return {"tipo": "DELETE_SUPA", "email": em,
+                    "detalhe": "Excluída no Ativos (Supabase) — remover também do Oracle? (precisa confirmar)"}
+        return {"tipo": "CREATE_SUPA", "email": em,
+                "detalhe": f"Conta nova no Oracle → criar no Ativos como {_SYNC_ROLE_SUPA_PADRAO}"}
+    if S and not O:
+        if tinha_ledger:
+            return {"tipo": "DELETE_ORACLE", "email": em,
+                    "detalhe": "Excluída no CCTV (Oracle) — remover também do Ativos? (precisa confirmar)"}
+        return {"tipo": "CREATE_ORACLE", "email": em,
+                "detalhe": f"Conta nova no Ativos → criar no CCTV como {_SYNC_ROLE_ORACLE_PADRAO}"}
+    if O and S:
+        if O["ph"] == S["ph"]:
+            return None  # senhas iguais → nada a fazer
+        if tinha_ledger and O["ph"] == L and S["ph"] != L:
+            return {"tipo": "UPDATE_ORACLE_PW", "email": em,
+                    "detalhe": "Senha mudou no Ativos → atualizar no CCTV"}
+        if tinha_ledger and S["ph"] == L and O["ph"] != L:
+            return {"tipo": "UPDATE_SUPA_PW", "email": em,
+                    "detalhe": "Senha mudou no CCTV → atualizar no Ativos"}
+        return {"tipo": "CONFLITO", "email": em,
+                "detalhe": "Senha diferente nos dois lados → Oracle vence (atualiza o Ativos)"}
+    return None
+
+
+def _sync_planejar():
+    """Monta o plano (dry-run) sem gravar nada. Retorna (acoes, resumo)."""
+    oracle, supa, ledger = _sync_coletar()
+    acoes = []
+    em_sync = 0
+    for em in sorted(set(oracle) | set(supa)):
+        a = _sync_decidir(em, oracle.get(em), supa.get(em), ledger.get(em), em in ledger)
+        if a:
+            acoes.append(a)
+        else:
+            em_sync += 1
+    resumo = {
+        "total_oracle": len(oracle), "total_supa": len(supa),
+        "em_sync": em_sync, "acoes": len(acoes),
+        "tem_delete": any(a["tipo"].startswith("DELETE") for a in acoes),
+    }
+    return acoes, resumo
+
+
+def _ledger_set(em, ph):
+    row = SyncUsuariosLedger.query.get(em)
+    if row:
+        row.password_hash = ph
+        row.synced_at = datetime.utcnow()
+    else:
+        db.session.add(SyncUsuariosLedger(email=em, password_hash=ph, synced_at=datetime.utcnow()))
+
+
+def _sync_aplicar(aplicar_deletes=False):
+    """Executa o sync de fato. Recalcula tudo do zero (não confia em preview velho),
+    aplica as mudanças, atualiza o ledger e devolve um resumo contável."""
+    oracle, supa, ledger = _sync_coletar()
+    r = {"criados_oracle": 0, "criados_supa": 0, "senha_oracle": 0, "senha_supa": 0,
+         "excluidos_oracle": 0, "excluidos_supa": 0, "conflitos": 0,
+         "ignorados_delete": 0, "erros": []}
+
+    for em in sorted(set(oracle) | set(supa)):
+        O, S, L = oracle.get(em), supa.get(em), ledger.get(em)
+        tinha = em in ledger
+        try:
+            if O and not S:
+                if tinha:                       # excluído no Supabase
+                    if aplicar_deletes:
+                        u = Usuario.query.get(O["id"])
+                        if u:
+                            db.session.delete(u)
+                        SyncUsuariosLedger.query.filter_by(email=em).delete()
+                        db.session.commit()
+                        r["excluidos_oracle"] += 1
+                    else:
+                        r["ignorados_delete"] += 1
+                else:                           # conta nova no Oracle → criar no Supabase
+                    sb.table("usuarios").insert({
+                        "nome_usuario": em.split("@")[0],
+                        "senha_hash": O["ph"],
+                        "email": em,
+                        "role": _SYNC_ROLE_SUPA_PADRAO,
+                        "site": O.get("site"),
+                    }).execute()
+                    _ledger_set(em, O["ph"]); db.session.commit()
+                    r["criados_supa"] += 1
+
+            elif S and not O:
+                if tinha:                       # excluído no Oracle
+                    if aplicar_deletes:
+                        sb.table("usuarios").delete().eq("email", em).execute()
+                        SyncUsuariosLedger.query.filter_by(email=em).delete()
+                        db.session.commit()
+                        r["excluidos_supa"] += 1
+                    else:
+                        r["ignorados_delete"] += 1
+                else:                           # conta nova no Supabase → criar no Oracle
+                    db.session.add(Usuario(
+                        nome=(S.get("nome_usuario") or em.split("@")[0]),
+                        email=em,
+                        password_hash=S["ph"],
+                        perfil=_SYNC_ROLE_ORACLE_PADRAO,
+                        site=S.get("site"),
+                        is_active=True,
+                    ))
+                    _ledger_set(em, S["ph"]); db.session.commit()
+                    r["criados_oracle"] += 1
+
+            elif O and S:
+                if O["ph"] == S["ph"]:
+                    _ledger_set(em, O["ph"]); db.session.commit()   # semente do ledger
+                elif tinha and O["ph"] == L and S["ph"] != L:        # mudou no Supabase
+                    u = Usuario.query.get(O["id"])
+                    if u:
+                        u.password_hash = S["ph"]
+                    _ledger_set(em, S["ph"]); db.session.commit()
+                    r["senha_oracle"] += 1
+                elif tinha and S["ph"] == L and O["ph"] != L:        # mudou no Oracle
+                    sb.table("usuarios").update({"senha_hash": O["ph"]}).eq("email", em).execute()
+                    _ledger_set(em, O["ph"]); db.session.commit()
+                    r["senha_supa"] += 1
+                else:                                                # conflito → Oracle vence
+                    sb.table("usuarios").update({"senha_hash": O["ph"]}).eq("email", em).execute()
+                    _ledger_set(em, O["ph"]); db.session.commit()
+                    r["senha_supa"] += 1; r["conflitos"] += 1
+        except Exception as ex:
+            db.session.rollback()
+            r["erros"].append(f"{em}: {ex}")
+    return r
+
+
+@app.route("/admin/usuarios-ativos/sync")
+@login_required
+@perfil_required("ADMIN")
+def admin_usuarios_ativos_sync():
+    """Pré-visualização (dry-run) do que o sync faria — não grava nada."""
+    try:
+        acoes, resumo = _sync_planejar()
+    except Exception as exc:
+        flash(f"Erro ao calcular a sincronização: {exc}", "danger")
+        return redirect(url_for("admin_usuarios_ativos"))
+    return render_template("admin_sync_usuarios.html",
+                           acoes=acoes, resumo=resumo, pendentes=_admin_pendentes())
+
+
+@app.route("/admin/usuarios-ativos/sync/aplicar", methods=["POST"])
+@login_required
+@perfil_required("ADMIN")
+def admin_usuarios_ativos_sync_aplicar():
+    aplicar_deletes = request.form.get("aplicar_deletes") == "1"
+    try:
+        r = _sync_aplicar(aplicar_deletes=aplicar_deletes)
+    except Exception as exc:
+        flash(f"Erro ao sincronizar: {exc}", "danger")
+        return redirect(url_for("admin_usuarios_ativos"))
+    partes = []
+    if r["criados_oracle"]:   partes.append(f"{r['criados_oracle']} criados no CCTV")
+    if r["criados_supa"]:     partes.append(f"{r['criados_supa']} criados no Ativos")
+    if r["senha_oracle"]:     partes.append(f"{r['senha_oracle']} senhas → CCTV")
+    if r["senha_supa"]:       partes.append(f"{r['senha_supa']} senhas → Ativos")
+    if r["excluidos_oracle"]: partes.append(f"{r['excluidos_oracle']} excluídos do CCTV")
+    if r["excluidos_supa"]:   partes.append(f"{r['excluidos_supa']} excluídos do Ativos")
+    if r["conflitos"]:        partes.append(f"{r['conflitos']} conflito(s) resolvido(s) p/ Oracle")
+    if r["ignorados_delete"]: partes.append(f"{r['ignorados_delete']} exclusão(ões) detectada(s) e ignorada(s)")
+    msg = "Sincronização concluída: " + (", ".join(partes) if partes else "nada a fazer (já estava igual)") + "."
+    flash(msg, "danger" if r["erros"] else "success")
+    if r["erros"]:
+        flash("Erros: " + " | ".join(r["erros"][:5]), "danger")
+    return redirect(url_for("admin_usuarios_ativos"))
+
+
 @app.route("/admin/solicitacoes")
 @login_required
 @perfil_required("ADMIN")
@@ -6381,7 +7735,11 @@ def admin_releases():
                 flash("Informe a versão antes de publicar.", "danger")
                 return redirect(url_for("admin_releases"))
             if not arquivo or not arquivo.filename:
-                flash("Selecione o arquivo .exe para upload.", "danger")
+                flash("Selecione o arquivo .zip (pacote one-folder) ou .exe para upload.", "danger")
+                return redirect(url_for("admin_releases"))
+            _ext = os.path.splitext(arquivo.filename)[1].lower()
+            if _ext not in (".zip", ".exe"):
+                flash("Formato inválido. Envie o pacote .zip do build one-folder (ou um .exe legado).", "danger")
                 return redirect(url_for("admin_releases"))
 
             exe_data      = arquivo.read()
@@ -6464,21 +7822,21 @@ def admin_release_download(rid):
 # CONTROLE DE CHAVES — Blueprint
 # =========================
 from chaves_blueprint import chaves_bp, setup_chaves
-setup_chaves(db)
+setup_chaves(db, UsuarioSite=UsuarioSite)
 app.register_blueprint(chaves_bp, url_prefix='/chaves')
 
 # =========================
 # GESTÃO DE ARMÁRIOS — Blueprint
 # =========================
 from armarios_blueprint import armarios_bp, setup_armarios
-setup_armarios(db)
+setup_armarios(db, UsuarioSite=UsuarioSite)
 app.register_blueprint(armarios_bp, url_prefix='/armarios')
 
 # =========================
 # ACHADOS E PERDIDOS — Blueprint
 # =========================
 from achados_blueprint import achados_bp, setup_achados
-setup_achados(db)
+setup_achados(db, uploads_root=UPLOADS_ROOT)
 app.register_blueprint(achados_bp, url_prefix='/achados')
 
 # =========================
@@ -6496,64 +7854,72 @@ setup_af(db, Usuario=Usuario, UsuarioSite=UsuarioSite)
 app.register_blueprint(af_bp, url_prefix='/site-af')
 
 # =========================
+# CONTROLE DE ATIVOS (redundância web do app desktop) — Blueprint
+# =========================
+from ativos_blueprint import ativos_bp, setup_ativos
+setup_ativos(sb)   # mesmo cliente Supabase usado na tela de Usuários Ativos
+app.register_blueprint(ativos_bp, url_prefix='/ativos')
+
+# =========================
 # INIT DB
 # =========================
-# Garante que todas as tabelas existem antes do Flask aceitar requests.
-# Rápido se as tabelas já existem (só consulta metadata do Oracle).
-with app.app_context():
-    try:
-        db.create_all()
-    except Exception:
-        pass  # banco indisponível no momento — continuará via _init_db background
+# IMPORTANTE: NÃO conectar ao Oracle aqui (nível de módulo). Isso rodava a CADA
+# import do app.py — antes do Flask sequer abrir a porta — e travava a
+# inicialização em ~18s via VPN. Toda a criação/migração de schema agora vive
+# em _init_db(), que o launcher chama uma vez e que pula o banco por completo
+# quando o marcador local de versão já bate (startup quase instantâneo).
+#
+# As tabelas/sequences de armário são modelos ORM → criadas pelo db.create_all()
+# dentro de _init_db(); as colunas extras estão na lista de migrações de _init_db().
 
-    # Popula NATUREZAS_OCORRENCIA com os valores padrão (idempotente)
-    try:
-        existentes = {n.nome for n in NaturezaOcorrencia.query.all()}
-        for nome in _NATUREZAS_PADRAO:
-            if nome not in existentes:
-                db.session.add(NaturezaOcorrencia(nome=nome))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
 
-    # Migrations críticas para módulo de armários — executadas de forma síncrona
-    # para garantir que as colunas existam antes de qualquer request ser atendido.
-    for _sql in [
-        "ALTER TABLE ARMARIO ADD (ASSINATURA_ATRIBUICAO CLOB)",
-        "ALTER TABLE ARMARIO ADD (ATRIBUIDO_POR VARCHAR2(150))",
-        "ALTER TABLE ARMARIO_CHAVE_RESERVA ADD (ASSINATURA CLOB)",
-        "CREATE SEQUENCE armario_id_seq START WITH 1 INCREMENT BY 1",
-        "CREATE SEQUENCE arm_chave_id_seq START WITH 1 INCREMENT BY 1",
-        "CREATE SEQUENCE arm_hist_id_seq START WITH 1 INCREMENT BY 1",
-        (
-            "CREATE TABLE ARMARIO_HISTORICO ("
-            "ID NUMBER PRIMARY KEY, "
-            "ARMARIO_ID NUMBER NOT NULL, "
-            "ARMARIO_NUMERO VARCHAR2(50), "
-            "BLOCO VARCHAR2(100), "
-            "SITE VARCHAR2(100) NOT NULL, "
-            "EVENTO VARCHAR2(50) NOT NULL, "
-            "COLABORADOR_NOME VARCHAR2(150), "
-            "COLABORADOR_CPF VARCHAR2(50), "
-            "OPERADOR VARCHAR2(150), "
-            "DATA_EVENTO TIMESTAMP DEFAULT SYSTIMESTAMP, "
-            "OBSERVACAO VARCHAR2(300)"
-            ")"
-        ),
-    ]:
-        try:
-            db.session.execute(db.text(_sql))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+# Versão do schema. BUMP a cada vez que novas migrações forem adicionadas ao
+# _init_db — isso força a reexecução única das DDLs em cada cliente e regrava o marcador.
+_SCHEMA_VERSION = "2026.06.23"
 
 
 def _init_db():
     """Aplica migrações de schema (ALTER TABLE).
-    Chamado em thread background pelo launcher após o Flask subir.
+    Chamado de forma síncrona pelo launcher antes de abrir a janela.
     Todas as operações são idempotentes (try/except ignora erros de 'já existe').
+
+    Otimização de startup em 2 níveis:
+      1) Marcador LOCAL (arquivo): se esta máquina já migrou esta versão de schema,
+         abre a janela SEM nenhuma conexão Oracle — elimina o round-trip via VPN,
+         que é o que mais demora antes da janela aparecer.
+      2) Marcador no banco (APP_SCHEMA_META): backup do nível 1; evita reexecutar
+         ~120 DDLs mesmo se o arquivo local não existir.
     """
+    _marker_file = os.path.join(_log_dir, ".schema_version")
+
+    # ── Nível 1: marcador local — zero conexão ao banco no caso comum ──
+    try:
+        with open(_marker_file, "r", encoding="utf-8") as _mf:
+            if _mf.read().strip() == _SCHEMA_VERSION:
+                return
+    except Exception:
+        pass
+
+    def _gravar_marker_local():
+        try:
+            with open(_marker_file, "w", encoding="utf-8") as _mf:
+                _mf.write(_SCHEMA_VERSION)
+        except Exception:
+            pass
+
     with app.app_context():
+        # ── Nível 2: marcador no banco — pula as migrações ──
+        try:
+            row = db.session.execute(db.text(
+                "SELECT VALOR FROM APP_SCHEMA_META WHERE CHAVE = 'schema_version'"
+            )).fetchone()
+            if row and (row[0] or "").strip() == _SCHEMA_VERSION:
+                _gravar_marker_local()   # grava o arquivo p/ pular o banco na próxima
+                return
+        except Exception:
+            # Tabela ainda não existe (primeira execução) — segue para migrar.
+            db.session.rollback()
+
         try:
             db.create_all()  # idempotente — só cria o que falta
             db.session.execute(db.text(
@@ -6662,6 +8028,8 @@ def _init_db():
             "CREATE TABLE APP_RELEASES (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, VERSAO VARCHAR2(20) NOT NULL, NOME_ARQUIVO VARCHAR2(255), TAMANHO_BYTES NUMBER, EXE_BLOB BLOB, PUBLICADO_EM TIMESTAMP DEFAULT SYSTIMESTAMP, PUBLICADO_POR VARCHAR2(120), ATIVO VARCHAR2(1) DEFAULT 'N')",
             # Tabela de achados e perdidos
             "CREATE TABLE ACHADOS_PERDIDOS (ID NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, ID_REGISTRO NUMBER NOT NULL, ID_ANTERIOR VARCHAR2(50), OBJETO VARCHAR2(200) NOT NULL, RESPONSAVEL VARCHAR2(150) NOT NULL, DATA VARCHAR2(20) NOT NULL, TURNO VARCHAR2(30) NOT NULL, DESCRICAO CLOB, FOTO_PATH VARCHAR2(500), STATUS VARCHAR2(30) DEFAULT 'Pendente', RETIRADO_POR VARCHAR2(150), SITE VARCHAR2(128), CRIADO_POR VARCHAR2(120), CREATED_AT TIMESTAMP DEFAULT SYSTIMESTAMP)",
+            # Coluna de foto em base64 (CLOB) — adicionada progressivamente
+            "ALTER TABLE ACHADOS_PERDIDOS ADD (FOTO_DADOS CLOB)",
             # Migração: converte TURNO de NUMBER para VARCHAR2 (caso tabela já existia com NUMBER)
             "ALTER TABLE ACHADOS_PERDIDOS ADD (TURNO_STR VARCHAR2(30))",
             "UPDATE ACHADOS_PERDIDOS SET TURNO_STR = TO_CHAR(TURNO) WHERE TURNO_STR IS NULL",
@@ -6695,12 +8063,66 @@ def _init_db():
             "ALTER TABLE BOTOES_PANICO ADD (HORA_TESTE VARCHAR2(10))",
             "ALTER TABLE BOTOES_PANICO ADD (HORA_RETORNO VARCHAR2(10))",
             "ALTER TABLE BOTOES_PANICO ADD (AGENTE_CFTV VARCHAR2(120))",
+            # Corrige registros ANC com status NULL ou vazio → ABERTO
+            "UPDATE ANCS SET STATUS = 'ABERTO' WHERE STATUS IS NULL OR TRIM(STATUS) = ''",
+            # Normaliza CONCLUIDO (sem acento) → CONCLUÍDO (com acento)
+            "UPDATE ANCS SET STATUS = 'CONCLUÍDO' WHERE STATUS = 'CONCLUIDO'",
+            # Corrige registros ANC com status inválido (qualquer valor diferente dos 3 válidos)
+            "UPDATE ANCS SET STATUS = 'ABERTO' WHERE STATUS NOT IN ('ABERTO','EM ANDAMENTO','CONCLUÍDO')",
+            # ── Soft-delete de ANCs ──────────────────────────────────────
+            "ALTER TABLE ANCS ADD (EXCLUIDO VARCHAR2(1) DEFAULT 'N')",
+            "UPDATE ANCS SET EXCLUIDO = 'N' WHERE EXCLUIDO IS NULL",
+            "ALTER TABLE ANCS ADD (EXCL_STATUS VARCHAR2(20))",
+            "ALTER TABLE ANCS ADD (EXCL_SOLICITADO_POR VARCHAR2(120))",
+            "ALTER TABLE ANCS ADD (EXCL_SOLICITADO_EM TIMESTAMP)",
+            "ALTER TABLE ANCS ADD (EXCL_SOLICITANTE_EMAIL VARCHAR2(120))",
+            "ALTER TABLE ANCS ADD (EXCL_MOTIVO VARCHAR2(500))",
+            "ALTER TABLE ANCS ADD (EXCL_ADMIN_POR VARCHAR2(120))",
+            "ALTER TABLE ANCS ADD (EXCL_ADMIN_EM TIMESTAMP)",
+            "ALTER TABLE ANCS ADD (EXCL_ADMIN_MOTIVO VARCHAR2(500))",
+            # Garante que GC existe como CLOB (migration 7546-7549 pode ter falhado
+            # em bancos que nunca tiveram GC como VARCHAR2, deixando a coluna ausente)
+            "ALTER TABLE OCORRENCIAS ADD (GC CLOB)",
+            # Limpa coluna temporária caso tenha ficado órfã da migration anterior
+            "ALTER TABLE OCORRENCIAS DROP COLUMN GC_TMP",
         ]:
             try:
                 db.session.execute(db.text(_col_sql))
                 db.session.commit()
             except Exception:
                 db.session.rollback()
+
+        # ── Popula NATUREZAS_OCORRENCIA com os valores padrão (idempotente) ──
+        try:
+            existentes = {n.nome for n in NaturezaOcorrencia.query.all()}
+            for nome in _NATUREZAS_PADRAO:
+                if nome not in existentes:
+                    db.session.add(NaturezaOcorrencia(nome=nome))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        # ── Grava o marcador de versão do schema (cria a tabela se preciso) ──
+        # A partir daqui, próximas aberturas pulam todo o bloco acima (fast-path).
+        try:
+            db.session.execute(db.text(
+                "CREATE TABLE APP_SCHEMA_META (CHAVE VARCHAR2(50) PRIMARY KEY, VALOR VARCHAR2(50))"
+            ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        try:
+            db.session.execute(db.text("DELETE FROM APP_SCHEMA_META WHERE CHAVE = 'schema_version'"))
+            db.session.execute(db.text(
+                "INSERT INTO APP_SCHEMA_META (CHAVE, VALOR) VALUES ('schema_version', :v)"
+            ), {"v": _SCHEMA_VERSION})
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    # Migrações concluídas nesta máquina → grava o marcador local para que as
+    # próximas aberturas pulem totalmente o banco (nível 1).
+    _gravar_marker_local()
 
 
 if __name__ == "__main__":

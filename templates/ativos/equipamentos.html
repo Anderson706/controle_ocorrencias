@@ -1,0 +1,242 @@
+{% extends "base_app.html" %}
+{% block page_title %}Equipamentos | Controle de Ativos{% endblock %}
+{% block topbar_title %}💻 Equipamentos do Colaborador{% endblock %}
+{% block topbar_subtitle %}{{ colab.nome_completo }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('ativos.colaboradores') }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px 22px; box-shadow:0 2px 8px rgba(0,0,0,.04); margin-bottom:16px; }
+  .card h3{ font-size:15px; font-weight:900; margin:0 0 14px; }
+  .pessoa{ display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .pessoa .dados{ font-size:13px; line-height:1.7; }
+  .pessoa .dados strong{ color:var(--dhl-red); }
+  .badge{ display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; }
+  .b-ativo{ background:#f0fdf4; color:#166534; }
+  .b-inativo{ background:#fef2f2; color:#991b1b; }
+  table{ width:100%; border-collapse:collapse; }
+  th{ padding:10px 14px; text-align:left; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; background:#f9fafb; border-bottom:1px solid var(--line); }
+  td{ padding:11px 14px; border-bottom:1px solid var(--line); font-size:13px; }
+  tr:last-child td{ border-bottom:none; }
+  .field{ margin-bottom:0; }
+  .field label{ display:block; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px; }
+  .field input{ width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:14px; font-family:inherit; background:#fafbfc; }
+  .grid-form{ display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:12px; align-items:end; }
+  .eq-fields{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  @media(max-width:760px){ .eq-fields{ grid-template-columns:1fr; } }
+  /* Foto */
+  .foto-row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .foto-wrapper{ position:relative; }
+  .foto-wrapper input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .foto-display{ display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border:1.5px dashed #d1d5db; border-radius:10px; background:#fafbfc; cursor:pointer; font-size:13px; color:var(--muted); font-weight:600; transition:.15s; }
+  .foto-display:hover{ border-color:var(--dhl-red); background:#fff9f9; }
+  .foto-display .ft.chosen{ color:var(--text); font-weight:700; }
+  .foto-preview-img{ max-height:120px; border-radius:8px; border:1px solid var(--line); display:none; }
+  .thumb{ width:42px; height:42px; border-radius:8px; object-fit:cover; border:1px solid var(--line); cursor:pointer; background:#f1f5f9; transition:.15s; }
+  .thumb:hover{ transform:scale(1.08); }
+  .no-foto{ width:42px; height:42px; border-radius:8px; background:#f1f5f9; display:inline-flex; align-items:center; justify-content:center; font-size:18px; }
+  /* Modal câmera */
+  #camera-video{ width:100%; max-height:360px; border-radius:10px; background:#000; object-fit:contain; }
+  #camera-erro{ display:none; color:#dc2626; font-size:12px; font-weight:700; margin-top:10px; text-align:center; }
+  /* Lightbox */
+  #foto-lightbox{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.82); z-index:9999; align-items:center; justify-content:center; cursor:pointer; }
+  #foto-lightbox.open{ display:flex; }
+  #foto-lightbox img{ max-width:90vw; max-height:85vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+</style>
+
+<div class="card">
+  <div class="pessoa">
+    <div class="dados">
+      <strong>CPF:</strong> {{ colab.cpf or '—' }} &nbsp;|&nbsp; <strong>Matrícula:</strong> {{ colab.matricula or '—' }}<br>
+      <strong>Empresa:</strong> {{ colab.empresa or '—' }} &nbsp;|&nbsp; <strong>Cargo:</strong> {{ colab.cargo or '—' }} &nbsp;|&nbsp; <strong>Site:</strong> {{ colab.site or '—' }}
+    </div>
+    <div>{% if (colab.status or '')|upper == 'ATIVO' %}<span class="badge b-ativo">ATIVO</span>{% else %}<span class="badge b-inativo">INATIVO</span>{% endif %}</div>
+  </div>
+</div>
+
+{% if pode_gerir %}
+<div class="card">
+  <h3>Vincular novo equipamento</h3>
+  <form method="POST" hx-boost="false" enctype="multipart/form-data"
+        action="{{ url_for('ativos.ativo_novo', cid=colab.id) }}"
+        onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+    <div class="eq-fields">
+      <div class="field"><label>Tipo *</label><input type="text" name="tipo" placeholder="Notebook, Rádio..." required></div>
+      <div class="field"><label>Código identificador *</label><input type="text" name="identificador_unico" placeholder="Código único" required></div>
+      <div class="field"><label>Modelo / descrição</label><input type="text" name="modelo_descricao" placeholder="Opcional"></div>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label>Foto do equipamento (opcional)</label>
+      <div class="foto-row">
+        <div class="foto-wrapper">
+          <div class="foto-display">
+            <span class="fi">📷</span>
+            <span class="ft" id="foto-txt">Anexar foto</span>
+          </div>
+          <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp,.gif" onchange="previewFoto(this)">
+        </div>
+        <button type="button" class="btn btn-soft" onclick="abrirCamera()">📸 Usar câmera</button>
+        <!-- Fallback p/ tablet em HTTP: câmera nativa via capture (sem getUserMedia/HTTPS) -->
+        <input type="file" id="foto-capture" accept="image/*" capture="environment"
+               style="display:none" onchange="capturaNativaFallback(this)">
+        <img id="foto-img" class="foto-preview-img" alt="preview">
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button type="submit" class="btn btn-red">+ Vincular</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>Equipamentos em posse ({{ ativos|length }})</h3>
+  <div style="overflow-x:auto">
+  <table>
+    <thead><tr><th style="width:56px">Foto</th><th>Tipo</th><th>Identificador</th><th>Modelo / descrição</th>{% if pode_gerir %}<th style="width:120px">Ações</th>{% endif %}</tr></thead>
+    <tbody>
+      {% for a in ativos %}
+      <tr>
+        <td>
+          {% if a.foto_url %}
+          <img class="thumb" src="{{ a.foto_url }}" alt="foto" onclick="abrirLightbox('{{ a.foto_url }}')">
+          {% else %}
+          <span class="no-foto" title="Sem foto">📦</span>
+          {% endif %}
+        </td>
+        <td><strong>{{ a.tipo }}</strong></td>
+        <td>{{ a.identificador_unico }}</td>
+        <td style="color:var(--muted)">{{ a.modelo_descricao or '—' }}</td>
+        {% if pode_gerir %}
+        <td>
+          <div style="display:flex;gap:6px;align-items:center">
+            <!-- Tirar/trocar foto (capture → câmera nativa no tablet) -->
+            <form method="POST" hx-boost="false" enctype="multipart/form-data"
+                  action="{{ url_for('ativos.ativo_foto', aid=a.id) }}"
+                  onchange="document.getElementById('loading-overlay').classList.add('show'); this.submit()">
+              <input type="hidden" name="cid" value="{{ colab.id }}">
+              <label class="btn btn-sm btn-soft" style="cursor:pointer;margin:0" title="Tirar/trocar foto">📷
+                <input type="file" name="foto" accept="image/*" capture="environment" style="display:none">
+              </label>
+            </form>
+            <!-- Devolver/remover -->
+            <form method="POST" hx-boost="false" action="{{ url_for('ativos.ativo_excluir', aid=a.id) }}" onsubmit="return confirm('Devolver/remover este equipamento?')">
+              <input type="hidden" name="cid" value="{{ colab.id }}">
+              <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#991b1b" title="Devolver/remover">🗑</button>
+            </form>
+          </div>
+        </td>
+        {% endif %}
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ 5 if pode_gerir else 4 }}" style="text-align:center;padding:30px;color:var(--muted)">Nenhum equipamento vinculado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- Lightbox foto -->
+<div id="foto-lightbox" onclick="this.classList.remove('open')">
+  <img id="lightbox-img" src="" alt="foto">
+</div>
+{% endblock %}
+
+{% block modals %}
+{% if pode_gerir %}
+<div class="modal-overlay" id="modal-camera" onclick="if(event.target===this) fecharCamera()">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
+    <div class="modal-head">
+      <h3>📷 Tirar Foto</h3>
+      <button class="modal-close" onclick="fecharCamera()">✕</button>
+    </div>
+    <div class="modal-body">
+      <video id="camera-video" autoplay playsinline></video>
+      <canvas id="camera-canvas" style="display:none"></canvas>
+      <p id="camera-erro"></p>
+    </div>
+    <div class="modal-foot" style="justify-content:center">
+      <button type="button" class="btn btn-soft" onclick="fecharCamera()">Cancelar</button>
+      <button type="button" class="btn btn-red" onclick="capturarFoto()">📸 Capturar</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+{% if pode_gerir %}
+<script>
+function previewFoto(input){
+  var txt = document.getElementById('foto-txt');
+  var img = document.getElementById('foto-img');
+  if(input.files && input.files[0]){
+    var f = input.files[0];
+    txt.textContent = f.name.length > 22 ? f.name.slice(0,22)+'…' : f.name;
+    txt.classList.add('chosen');
+    var reader = new FileReader();
+    reader.onload = function(e){ img.src = e.target.result; img.style.display='block'; };
+    reader.readAsDataURL(f);
+  }
+}
+
+/* Câmera nativa (capture) → injeta no input de upload real do formulário de novo equipamento */
+function capturaNativaFallback(input){
+  if(!input.files || !input.files[0]) return;
+  var dt = new DataTransfer();
+  dt.items.add(input.files[0]);
+  var main = document.querySelector('form[enctype] input[name=foto][accept*="png"]');
+  if(main){ main.files = dt.files; main.dispatchEvent(new Event('change', { bubbles:true })); }
+}
+
+/* ── getUserMedia (desktop/.exe e HTTPS) ── */
+var _cameraStream = null;
+async function abrirCamera(){
+  // Sem getUserMedia (tablet em HTTP) → cai na câmera nativa via capture
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    document.getElementById('foto-capture').click();
+    return;
+  }
+  var erro = document.getElementById('camera-erro');
+  erro.style.display = 'none';
+  document.getElementById('modal-camera').classList.add('open');
+  try{
+    _cameraStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
+    document.getElementById('camera-video').srcObject = _cameraStream;
+  }catch(e){
+    erro.textContent = 'Não foi possível acessar a câmera: ' + (e.message || e.name || e);
+    erro.style.display = 'block';
+  }
+}
+function fecharCamera(){
+  document.getElementById('modal-camera').classList.remove('open');
+  if(_cameraStream){ _cameraStream.getTracks().forEach(function(t){ t.stop(); }); _cameraStream = null; }
+}
+function capturarFoto(){
+  var video = document.getElementById('camera-video');
+  var canvas = document.getElementById('camera-canvas');
+  if(!video.videoWidth) return;
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(function(blob){
+    var file = new File([blob], 'foto_camera_' + Date.now() + '.jpg', { type:'image/jpeg' });
+    var dt = new DataTransfer(); dt.items.add(file);
+    var main = document.querySelector('form[enctype] input[name=foto][accept*="png"]');
+    if(main){ main.files = dt.files; main.dispatchEvent(new Event('change', { bubbles:true })); }
+    fecharCamera();
+  }, 'image/jpeg', 0.92);
+}
+
+/* ── Lightbox ── */
+function abrirLightbox(src){
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('foto-lightbox').classList.add('open');
+}
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){ fecharCamera(); document.getElementById('foto-lightbox').classList.remove('open'); }
+});
+</script>
+{% endif %}
+{% endblock %}

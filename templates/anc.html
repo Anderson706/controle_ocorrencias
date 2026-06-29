@@ -22,7 +22,7 @@
   .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
   .adm-tab.active{ background:#d40511; color:#ffcc00; }
   .adm-sep{ width:1px; background:var(--line); margin:0 4px; align-self:stretch; flex-shrink:0; }
-  .kpi-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:24px; }
+  .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:24px; }
   .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px 18px; box-shadow:var(--shadow); border-left:5px solid var(--dhl-yellow); display:flex; flex-direction:column; gap:4px; }
   .kpi-label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
   .kpi-value{ font-size:30px; font-weight:900; color:var(--dhl-red); line-height:1; }
@@ -49,6 +49,26 @@
   .badge-baixa{ background:#dcfce7; color:#166534; }
   thead tr{ background:var(--dhl-yellow); }
   th{ color:#111; text-transform:uppercase; letter-spacing:.5px; }
+  .badge-excl-pendente{ background:#fef3c7; color:#92400e; border:1px solid #fcd34d; font-size:10px; font-weight:900; padding:2px 7px; border-radius:999px; letter-spacing:.3px; margin-left:5px; }
+  .badge-excluida{ background:#f3f4f6; color:#6b7280; border:1px solid #d1d5db; font-size:10px; font-weight:900; padding:2px 7px; border-radius:999px; margin-left:5px; }
+  /* Painel admin de exclusões */
+  .excl-panel{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; margin-bottom:20px; }
+  .excl-panel-hdr{ background:linear-gradient(90deg,#92400e,#78350f); color:#fef3c7; padding:14px 20px; font-size:13px; font-weight:900; display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+  .excl-panel-hdr .count-badge{ background:#fef3c7; color:#92400e; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:900; }
+  .excl-panel-body{ padding:20px; }
+  .excl-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; background:#fffbeb; border:1px solid #fcd34d; border-radius:12px; padding:16px; margin-bottom:12px; }
+  .excl-row:last-child{ margin-bottom:0; }
+  .excl-field{ font-size:12px; }
+  .excl-label{ font-weight:800; color:#92400e; font-size:10px; text-transform:uppercase; letter-spacing:.4px; }
+  .excl-val{ color:#1f2937; font-weight:600; margin-top:2px; }
+  .excl-motivo-box{ background:#fef9c3; border-left:3px solid #eab308; padding:10px 12px; border-radius:6px; font-size:12px; color:#1f2937; margin:10px 0; }
+  .excl-actions{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .excluidas-row{ display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--line); font-size:13px; opacity:.75; }
+  .excluidas-row:last-child{ border-bottom:none; }
+  .btn-aprovar{ background:#16a34a; color:#fff; }
+  .btn-aprovar:hover{ background:#15803d; }
+  .btn-rejeitar{ background:#d40511; color:#fff; }
+  .btn-rejeitar:hover{ background:#b1030d; }
 </style>
 
 <!-- KPIs -->
@@ -65,7 +85,7 @@
   <div class="kpi-card critico"><div class="kpi-label">Críticos</div><div class="kpi-value">{{ resumo.criticos }}</div></div>
   {% if resumo.valor_total != '—' %}
   <div class="kpi-card" style="border-left-color:#7c3aed; background:#faf5ff;">
-    <div class="kpi-label"> Valor Total</div>
+    <div class="kpi-label">💰 Valor Total</div>
     <div class="kpi-value" style="color:#6d28d9; font-size:15px;">{{ resumo.valor_total }}</div>
   </div>
   {% endif %}
@@ -145,17 +165,20 @@
     </div>
   </div>
   <div class="table-wrap" style="border-radius:0; border:none;">
-    <table>
+    <table data-paginate="50">
       <thead>
         <tr>
-          <th>Identificação</th><th>Data</th>
-          <th>Gravidade</th><th>Natureza</th><th>Responsável</th><th>Plano de Ação</th><th>Ações</th>
+          <th data-sort="text">Identificação</th><th data-sort="date">Data</th>
+          <th data-sort="text">Gravidade</th><th data-sort="text">Natureza</th><th data-sort="text">Responsável</th><th data-sort="text">Plano de Ação</th><th>Ações</th>
         </tr>
       </thead>
       <tbody>
         {% for r in registros %}
         <tr>
-          <td><strong style="color:var(--dhl-red); font-family:monospace; letter-spacing:.5px;">{{ r.numero_anc or ('ANC-' ~ r.id) }}</strong></td>
+          <td>
+            <strong style="color:var(--dhl-red); font-family:monospace; letter-spacing:.5px;">{{ r.numero_anc or ('ANC-' ~ r.id) }}</strong>
+            {% if r.excl_status == 'PENDENTE' %}<span class="badge-excl-pendente">⏳ EXCLUSÃO PENDENTE</span>{% endif %}
+          </td>
           <td>{{ r.data_nc or '—' }}</td>
           <td>
             {% set g = (r.gravidade or '').upper() %}
@@ -168,9 +191,10 @@
           <td>{{ r.responsavel or '—' }}</td>
           <td>
             {% set st = (r.status or '').upper() %}
-            {% if st == 'ABERTO' %}<span class="badge badge-aberto">Aberto</span>
+            {% if st == 'ABERTO' or not st %}<span class="badge badge-aberto">Aberto</span>
             {% elif st == 'EM ANDAMENTO' %}<span class="badge badge-andamento">Em Andamento</span>
-            {% else %}<span class="badge badge-concluido">Concluído</span>{% endif %}
+            {% elif st in ('CONCLUÍDO', 'CONCLUIDO') %}<span class="badge badge-concluido">Concluído</span>
+            {% else %}<span class="badge badge-aberto" title="status: {{ r.status }}">Aberto</span>{% endif %}
           </td>
           <td>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -204,7 +228,13 @@
                 data-valor="{{ r.valor or '—' }}"
                 data-criado-por="{{ r.criado_por or '' }}"
                 data-ano="{{ r.criado_em.year if r.criado_em else '' }}"
-                data-url-email="{{ url_for('enviar_email_anc', anc_id=r.id) }}">
+                data-url-email="{{ url_for('enviar_email_anc', anc_id=r.id) }}"
+                data-excl-status="{{ r.excl_status or '' }}"
+                data-excl-motivo="{{ r.excl_motivo or '' }}"
+                data-excl-solicitado-por="{{ r.excl_solicitado_por or '' }}"
+                data-excl-admin-motivo="{{ r.excl_admin_motivo or '' }}"
+                data-url-solicitar-exclusao="{{ url_for('solicitar_exclusao_anc', anc_id=r.id) }}"
+                data-url-avaliar-exclusao="{{ url_for('avaliar_exclusao_anc', anc_id=r.id) }}">
                 Detalhes
               </button>
             </div>
@@ -224,6 +254,89 @@
     </div>
   </div>
 </div>
+{% if is_admin %}
+
+<!-- ── Painel: Solicitações de Exclusão Pendentes ── -->
+{% if pendentes_exclusao %}
+<div class="excl-panel">
+  <div class="excl-panel-hdr" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'">
+    ⏳ Solicitações de Exclusão Pendentes
+    <span class="count-badge">{{ pendentes_exclusao|length }}</span>
+    <span style="margin-left:auto; font-size:11px; opacity:.7;">▼ clique para expandir/recolher</span>
+  </div>
+  <div class="excl-panel-body">
+    {% for r in pendentes_exclusao %}
+    <div class="excl-row">
+      <div>
+        <div class="excl-label">ANC</div>
+        <div class="excl-val" style="color:var(--dhl-red); font-weight:900; font-family:monospace;">{{ r.numero_anc or ('ANC-' ~ r.id) }}</div>
+      </div>
+      <div>
+        <div class="excl-label">Site</div>
+        <div class="excl-val">{{ r.site or '—' }}</div>
+      </div>
+      <div>
+        <div class="excl-label">Natureza / Data</div>
+        <div class="excl-val">{{ r.natureza or '—' }} — {{ r.data_nc or '—' }}</div>
+      </div>
+      <div>
+        <div class="excl-label">Solicitado por</div>
+        <div class="excl-val">{{ r.excl_solicitado_por or '—' }}{% if r.excl_solicitado_em %} <span style="color:var(--muted);font-weight:400;font-size:11px;">em {{ r.excl_solicitado_em.strftime('%d/%m/%Y %H:%M') }}</span>{% endif %}</div>
+      </div>
+      <div style="grid-column:1/-1;">
+        <div class="excl-label">Motivo informado</div>
+        <div class="excl-motivo-box">{{ r.excl_motivo or '—' }}</div>
+      </div>
+      <div style="grid-column:1/-1;" class="excl-actions">
+        <form method="POST" action="{{ url_for('avaliar_exclusao_anc', anc_id=r.id) }}" hx-boost="false" onsubmit="mostrarLoading()" style="display:contents;">
+          <input type="hidden" name="acao" value="aprovar">
+          <input type="hidden" name="motivo_admin" value="Aprovado pelo administrador.">
+          <button type="submit" class="btn btn-sm btn-aprovar">✅ Aprovar Exclusão</button>
+        </form>
+        <button type="button" class="btn btn-sm btn-rejeitar" onclick="abrirRejeicaoInline(this, {{ r.id }})">❌ Rejeitar</button>
+        <div id="rejeicao-inline-{{ r.id }}" style="display:none; width:100%; margin-top:8px;">
+          <form method="POST" action="{{ url_for('avaliar_exclusao_anc', anc_id=r.id) }}" hx-boost="false" onsubmit="mostrarLoading()">
+            <input type="hidden" name="acao" value="rejeitar">
+            <textarea name="motivo_admin" rows="2" required placeholder="Motivo da rejeição *" style="width:100%; border:1.5px solid #fcd34d; border-radius:8px; padding:8px 12px; font-size:13px; font-family:inherit; outline:none; resize:vertical;"></textarea>
+            <div style="display:flex;gap:8px;margin-top:6px;">
+              <button type="submit" class="btn btn-sm btn-rejeitar">Confirmar Rejeição</button>
+              <button type="button" class="btn btn-soft btn-sm" onclick="document.getElementById('rejeicao-inline-{{ r.id }}').style.display='none'">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Painel: ANCs Excluídas (Arquivo) ── -->
+{% if ancs_excluidas %}
+<div class="excl-panel">
+  <div class="excl-panel-hdr" style="background:linear-gradient(90deg,#374151,#1f2937);" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display === 'none' ? '' : 'none'">
+    🗃 ANCs Excluídas (Arquivo)
+    <span class="count-badge" style="background:#d1d5db;color:#374151;">{{ ancs_excluidas|length }}</span>
+    <span style="margin-left:auto; font-size:11px; opacity:.7;">▼ clique para expandir/recolher</span>
+  </div>
+  <div class="excl-panel-body" style="display:none;">
+    {% for r in ancs_excluidas %}
+    <div class="excluidas-row">
+      <span style="font-family:monospace; font-weight:800; color:#6b7280; text-decoration:line-through;">{{ r.numero_anc or ('ANC-' ~ r.id) }}</span>
+      <span style="color:#9ca3af;">{{ r.site or '—' }}</span>
+      <span style="color:#9ca3af;">{{ r.natureza or '—' }}</span>
+      <span style="color:#9ca3af; font-size:11px;">Excl. por {{ r.excl_admin_por or '—' }}{% if r.excl_admin_em %} em {{ r.excl_admin_em.strftime('%d/%m/%Y') }}{% endif %}</span>
+      {% if r.excl_solicitado_por %}
+      <span style="color:#9ca3af; font-size:11px;">Solic. por {{ r.excl_solicitado_por }}</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endif %}{# end is_admin #}
+
 {% endblock %}
 
 {% block modals %}
@@ -271,11 +384,55 @@
           <button type="submit" class="btn btn-success" style="width:100%; padding:12px;">✔ Confirmar Fechamento</button>
         </form>
       </div>
+      <!-- Info: exclusão pendente (admin vê motivo + botões aprovar/rejeitar) -->
+      <div id="m-excl-info" style="display:none; margin-top:14px; background:#fffbeb; border:1px solid #fcd34d; border-radius:12px; padding:14px 16px;">
+        <div style="font-size:11px; font-weight:900; color:#92400e; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">⏳ Solicitação de Exclusão Pendente</div>
+        <div style="font-size:12px; color:#374151; margin-bottom:8px;"><strong>Solicitado por:</strong> <span id="m-excl-solicitado-por"></span></div>
+        <div style="font-size:12px; font-weight:700; color:#92400e; margin-bottom:4px;">Motivo:</div>
+        <div style="font-size:13px; color:#1f2937; background:#fef9c3; padding:8px 12px; border-radius:6px;" id="m-excl-motivo"></div>
+        {% if is_admin %}
+        <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;" id="m-excl-admin-actions">
+          <button type="button" class="btn btn-sm btn-aprovar" onclick="abrirFormAvaliar('aprovar')">✅ Aprovar Exclusão</button>
+          <button type="button" class="btn btn-sm btn-rejeitar" onclick="abrirFormAvaliar('rejeitar')">❌ Rejeitar</button>
+        </div>
+        <div id="m-form-avaliar-wrap" style="display:none; margin-top:12px;">
+          <form id="m-form-avaliar" method="POST" action="" hx-boost="false" onsubmit="mostrarLoading()">
+            <input type="hidden" name="acao" id="m-avaliar-acao">
+            <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:4px;" id="m-avaliar-label">Motivo</label>
+            <textarea name="motivo_admin" id="m-avaliar-motivo" rows="3" placeholder="Informe o motivo..." style="width:100%; border:1.5px solid var(--line); border-radius:10px; padding:9px 12px; font-size:13px; font-family:inherit; outline:none; resize:vertical;"></textarea>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <button type="submit" class="btn btn-sm" id="m-avaliar-submit" style="background:#1f2937;color:#fff;">Confirmar</button>
+              <button type="button" class="btn btn-soft btn-sm" onclick="document.getElementById('m-form-avaliar-wrap').style.display='none'">Cancelar</button>
+            </div>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Formulário solicitar exclusão (usuários não-admin) -->
+      {% if not is_admin %}
+      <div id="m-form-solicitar-exclusao-wrap" style="display:none; margin-top:14px;">
+        <div style="font-size:12px; font-weight:800; color:#92400e; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #fcd34d;">🗑 Solicitar Exclusão desta ANC</div>
+        <form id="m-form-solicitar-exclusao" method="POST" action="" hx-boost="false" onsubmit="return validarSolicitacaoExclusao();">
+          <label style="font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; display:block; margin-bottom:4px;">Motivo da solicitação *</label>
+          <textarea name="motivo_exclusao" id="m-motivo-exclusao" rows="3" placeholder="Descreva o motivo pelo qual esta ANC deve ser excluída..." style="width:100%; border:1.5px solid var(--line); border-radius:10px; padding:10px 12px; font-size:13px; font-family:inherit; resize:vertical; outline:none;"></textarea>
+          <p style="font-size:11px; color:var(--muted); margin:6px 0 10px;">Um e-mail será enviado aos administradores para aprovação.</p>
+          <div style="display:flex; gap:8px;">
+            <button type="submit" class="btn btn-sm" style="background:#92400e;color:#fff;">Enviar Solicitação</button>
+            <button type="button" class="btn btn-soft btn-sm" onclick="document.getElementById('m-form-solicitar-exclusao-wrap').style.display='none'">Cancelar</button>
+          </div>
+        </form>
+      </div>
+      {% endif %}
     </div>
+
     <div class="modal-foot">
       <a id="m-pdf" href="#" class="btn btn-red" style="flex:1; justify-content:center;">Baixar PDF</a>
       <a id="m-email-anc" href="#" class="btn btn-outline btn-sm"> E-mail</a>
       <a id="m-editar" href="#" class="btn btn-soft btn-sm" style="display:none;">️ Editar</a>
+      {% if not is_admin %}
+      <button type="button" id="m-btn-solicitar-exclusao" class="btn btn-sm" style="background:#92400e;color:#fff;display:none;" onclick="toggleSolicitarExclusao()">🗑 Solicitar Exclusão</button>
+      {% endif %}
       {% if is_admin %}
       <form id="m-form-excluir" method="POST" action="" style="margin:0;" hx-boost="false" onsubmit="mostrarLoading()">
         <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
@@ -351,6 +508,35 @@
       document.getElementById('m-form-fechar').action = d.urlFechar;
       document.getElementById('m-txt-fechamento').value = '';
     }
+
+    // ── Exclusão ──────────────────────────────────────────────────
+    var exclStatus = d.exclStatus || '';
+    var exclInfo   = document.getElementById('m-excl-info');
+    if (exclInfo) {
+      if (exclStatus === 'PENDENTE') {
+        document.getElementById('m-excl-solicitado-por').textContent = d.exclSolicitadoPor || '—';
+        document.getElementById('m-excl-motivo').textContent         = d.exclMotivo || '—';
+        var formAvaliar = document.getElementById('m-form-avaliar');
+        if (formAvaliar) formAvaliar.action = d.urlAvaliarExclusao;
+        var formAvaliarWrap = document.getElementById('m-form-avaliar-wrap');
+        if (formAvaliarWrap) formAvaliarWrap.style.display = 'none';
+        exclInfo.style.display = '';
+      } else {
+        exclInfo.style.display = 'none';
+      }
+    }
+
+    // Botão "Solicitar Exclusão" para não-admins
+    var btnSolicitar = document.getElementById('m-btn-solicitar-exclusao');
+    if (btnSolicitar) {
+      var podesolicitarExcl = exclStatus !== 'PENDENTE' && exclStatus !== 'APROVADO';
+      btnSolicitar.style.display = podesolicitarExcl ? '' : 'none';
+    }
+    var formSolicitar = document.getElementById('m-form-solicitar-exclusao');
+    if (formSolicitar) { formSolicitar.action = d.urlSolicitarExclusao; }
+    var wrapSolicitar = document.getElementById('m-form-solicitar-exclusao-wrap');
+    if (wrapSolicitar) wrapSolicitar.style.display = 'none'; // sempre começa fechado
+
     document.getElementById('modal').classList.add('open');
   };
 
@@ -359,6 +545,46 @@
     if (!txt) { alert('Por favor, informe o plano de ação / texto de fechamento.'); return false; }
     mostrarLoading(); return true;
   };
+
+  window.validarSolicitacaoExclusao = function() {
+    var txt = (document.getElementById('m-motivo-exclusao').value || '').trim();
+    if (!txt) { alert('Informe o motivo da solicitação de exclusão.'); return false; }
+    mostrarLoading(); return true;
+  };
+
+  window.toggleSolicitarExclusao = function() {
+    var wrap = document.getElementById('m-form-solicitar-exclusao-wrap');
+    if (wrap) wrap.style.display = wrap.style.display === 'none' ? '' : 'none';
+  };
+
+  window.abrirFormAvaliar = function(acao) {
+    var wrap   = document.getElementById('m-form-avaliar-wrap');
+    var input  = document.getElementById('m-avaliar-acao');
+    var label  = document.getElementById('m-avaliar-label');
+    var submit = document.getElementById('m-avaliar-submit');
+    var motivo = document.getElementById('m-avaliar-motivo');
+    if (!wrap) return;
+    input.value  = acao;
+    motivo.value = '';
+    if (acao === 'aprovar') {
+      label.textContent  = 'Observação (opcional)';
+      submit.textContent = '✅ Confirmar Aprovação';
+      submit.style.background = '#16a34a';
+      motivo.required = false;
+    } else {
+      label.textContent  = 'Motivo da rejeição *';
+      submit.textContent = '❌ Confirmar Rejeição';
+      submit.style.background = '#d40511';
+      motivo.required = true;
+    }
+    wrap.style.display = '';
+  };
+
+  window.abrirRejeicaoInline = function(btn, id) {
+    var el = document.getElementById('rejeicao-inline-' + id);
+    if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  };
+
   window.fecharModalAnc     = function() { document.getElementById('modal').classList.remove('open'); };
   window.fecharModalAncFora = function(e) { if (e.target === document.getElementById('modal')) window.fecharModalAnc(); };
 

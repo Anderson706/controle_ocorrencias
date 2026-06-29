@@ -1,0 +1,88 @@
+{% extends "base_app.html" %}
+{% block page_title %}Sincronizar Logins | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🔄 Sincronizar Logins — CCTV ↔ Ativos{% endblock %}
+{% block topbar_subtitle %}Pré-visualização — nada é gravado até você confirmar{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('admin_usuarios_ativos') }}" class="btn btn-soft">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .sync-cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
+  .sync-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
+  .sync-card .n{ font-size:26px; font-weight:900; color:var(--text); line-height:1; }
+  .sync-card .l{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:6px; }
+
+  .info-box{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:12px 16px; font-size:13px; color:#1e40af; margin-bottom:16px; }
+  .warn-box{ background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:12px 16px; font-size:13px; color:#92400e; margin-bottom:16px; }
+
+  .table-wrap{ background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.04); margin-bottom:18px; }
+  .table-head{ padding:14px 20px; border-bottom:1px solid var(--line); font-size:15px; font-weight:900; }
+  table{ width:100%; border-collapse:collapse; }
+  th{ padding:10px 16px; text-align:left; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; background:#f9fafb; border-bottom:1px solid var(--line); }
+  td{ padding:11px 16px; border-bottom:1px solid var(--line); font-size:13px; color:var(--text); vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+
+  .tag{ display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:.3px; white-space:nowrap; }
+  .tag-create{ background:#f0fdf4; color:#166534; }
+  .tag-pw{ background:#eff6ff; color:#1e40af; }
+  .tag-del{ background:#fef2f2; color:#991b1b; }
+  .tag-conf{ background:#fffbeb; color:#92400e; }
+
+  .apply-bar{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .chk{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); }
+</style>
+
+<div class="info-box">
+  ℹ️ Sincroniza <strong>existência da conta</strong> (criar) e <strong>senha</strong> (login único) entre o CCTV (Oracle) e o Controle de Ativos (Supabase), casando por e-mail.
+  <strong>Role e site não são alterados</strong> — cada app mantém o seu modelo de permissão. Conflito de senha: o <strong>Oracle vence</strong>.
+</div>
+
+<div class="sync-cards">
+  <div class="sync-card"><div class="n">{{ resumo.total_oracle }}</div><div class="l">Contas no CCTV</div></div>
+  <div class="sync-card"><div class="n">{{ resumo.total_supa }}</div><div class="l">Contas no Ativos</div></div>
+  <div class="sync-card"><div class="n" style="color:#16a34a">{{ resumo.em_sync }}</div><div class="l">Já em sincronia</div></div>
+  <div class="sync-card"><div class="n" style="color:{{ '#d40511' if resumo.acoes else '#16a34a' }}">{{ resumo.acoes }}</div><div class="l">Ações pendentes</div></div>
+</div>
+
+{% if acoes %}
+<div class="table-wrap">
+  <div class="table-head">{{ acoes|length }} ação(ões) a executar</div>
+  <table>
+    <thead><tr><th>Tipo</th><th>E-mail</th><th>O que acontece</th></tr></thead>
+    <tbody>
+      {% for a in acoes %}
+      <tr>
+        <td>
+          {% if a.tipo.startswith('CREATE') %}<span class="tag tag-create">CRIAR</span>
+          {% elif a.tipo.startswith('UPDATE') %}<span class="tag tag-pw">SENHA</span>
+          {% elif a.tipo.startswith('DELETE') %}<span class="tag tag-del">EXCLUIR</span>
+          {% else %}<span class="tag tag-conf">CONFLITO</span>{% endif %}
+        </td>
+        <td><strong>{{ a.email }}</strong></td>
+        <td style="color:var(--muted)">{{ a.detalhe }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if resumo.tem_delete %}
+<div class="warn-box">⚠️ Há <strong>exclusões</strong> detectadas. Por segurança, elas só são aplicadas se você marcar a opção abaixo. Sem marcar, tudo o mais é sincronizado e as exclusões ficam só reportadas.</div>
+{% endif %}
+{% else %}
+<div class="table-wrap">
+  <div class="table-head" style="color:#16a34a">✓ Tudo sincronizado — nenhuma ação necessária</div>
+  <table><tbody><tr><td style="text-align:center;padding:30px;color:var(--muted)">As duas listas de logins já estão iguais (mesmas contas e mesmas senhas). Aplicar aqui apenas <strong>registra a linha de base</strong> (para o sistema detectar exclusões no futuro).</td></tr></tbody></table>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('admin_usuarios_ativos_sync_aplicar') }}" class="apply-bar"
+      onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+  {% if resumo.tem_delete %}
+  <label class="chk"><input type="checkbox" name="aplicar_deletes" value="1"> Também aplicar as exclusões detectadas</label>
+  {% endif %}
+  <button type="submit" class="btn btn-red">{{ '✓ Aplicar sincronização' if acoes else '✓ Registrar linha de base' }}</button>
+  <a href="{{ url_for('admin_usuarios_ativos') }}" class="btn btn-soft">Voltar</a>
+</form>
+{% endblock %}

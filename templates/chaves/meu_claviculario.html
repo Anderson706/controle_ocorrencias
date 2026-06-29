@@ -225,6 +225,11 @@
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               <button type="button" class="btn btn-soft btn-sm" onclick="verDetalhe({{ chave.id }})">🔍 Detalhes</button>
               {% if can_manage and not chave._retirada %}
+              <button type="button" class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;"
+                      data-id="{{ chave.id }}"
+                      data-numero="{{ chave.numero_chave }}"
+                      data-local="{{ chave.local }}"
+                      onclick="abrirModalEditar(this)">✏️ Editar</button>
               <form method="POST" action="{{ url_for('chaves.excluir_chave_clav', chave_id=chave.id) }}" onsubmit="return confirm('Remover esta chave do claviculário?')">
                 <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;">🗑️ Remover</button>
               </form>
@@ -254,6 +259,7 @@
 {% endblock %}
 
 {% block modals %}
+<!-- Modal: Detalhes da Chave -->
 <div class="modal-overlay" id="modalOverlay" onclick="fecharModalChave(event)">
   <div class="modal-box" onclick="event.stopPropagation()">
     <div class="modal-head">
@@ -263,6 +269,38 @@
     <div class="modal-body" id="modalBody">
       <p style="color:var(--muted);">Carregando...</p>
     </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Chave -->
+<div class="modal-overlay" id="modalEditarOverlay" onclick="fecharModalEditar(event)">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:480px;">
+    <div class="modal-head">
+      <h3>✏️ Editar Chave</h3>
+      <button class="modal-close" onclick="fecharModalEditar()">✕</button>
+    </div>
+    <form id="formEditar" method="POST" action="#">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-field">
+            <label>Nº da Chave *</label>
+            <input type="text" id="edit-numero" name="numero_chave" required
+                   placeholder="Ex: CH-001"
+                   style="width:100%;padding:11px 13px;border:1px solid #d7dbe1;border-radius:12px;background:#f9fafb;font-size:13px;outline:none;">
+          </div>
+          <div class="form-field">
+            <label>Local / Descrição *</label>
+            <input type="text" id="edit-local" name="local" required
+                   placeholder="Ex: Sala de Segurança"
+                   style="width:100%;padding:11px 13px;border:1px solid #d7dbe1;border-radius:12px;background:#f9fafb;font-size:13px;outline:none;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot" style="justify-content:flex-end;">
+        <button type="button" class="btn btn-soft btn-sm" onclick="fecharModalEditar()">Cancelar</button>
+        <button type="submit" class="btn btn-red btn-sm">💾 Salvar alterações</button>
+      </div>
+    </form>
   </div>
 </div>
 {% endblock %}
@@ -309,6 +347,26 @@ function verDetalhe(id){
 function fecharModalChave(e){
   if(!e || e.target === document.getElementById('modalOverlay')){
     document.getElementById('modalOverlay').classList.remove('open');
+  }
+}
+
+/* ── Modal de edição ── */
+var _URL_EDITAR = "{{ url_for('chaves.editar_chave_clav', chave_id=0) }}";
+
+function abrirModalEditar(btn){
+  var id     = btn.dataset.id;
+  var numero = btn.dataset.numero;
+  var local  = btn.dataset.local;
+  document.getElementById('edit-numero').value = numero;
+  document.getElementById('edit-local').value  = local;
+  document.getElementById('formEditar').action = _URL_EDITAR.replace(/\/0$/, '/' + id);
+  document.getElementById('modalEditarOverlay').classList.add('open');
+  setTimeout(function(){ document.getElementById('edit-numero').focus(); }, 120);
+}
+
+function fecharModalEditar(e){
+  if(!e || e.target === document.getElementById('modalEditarOverlay')){
+    document.getElementById('modalEditarOverlay').classList.remove('open');
   }
 }
 

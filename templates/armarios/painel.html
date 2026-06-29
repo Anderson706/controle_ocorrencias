@@ -239,6 +239,9 @@
           <td>
             {% if arm.status == 'OCUPADO' %}
             <span class="badge badge-danger">OCUPADO</span>
+            {% if arm.id in ids_termo_pendente %}
+            <span class="badge" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;" title="Reservado — termo ainda não assinado">⚠ Termo pendente</span>
+            {% endif %}
             {% else %}
             <span class="badge badge-ok">LIVRE</span>
             {% endif %}
@@ -336,9 +339,46 @@
           <span style="font-size:12px;color:var(--muted);">Assine no espaço acima com o mouse ou touch.</span>
         </div>
 
+        <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-red" style="flex:1;min-width:190px;" onclick="_reservarSemAssinar=false">✓ Atribuir e assinar</button>
+          <button type="submit" class="btn btn-soft" style="flex:1;min-width:170px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;"
+                  onclick="_reservarSemAssinar=true" title="Atribui o armário agora; o termo pode ser assinado depois">📌 Apenas reservar</button>
+          <button type="button" class="btn btn-soft" onclick="fecharModal('modalAtribuir')">Cancelar</button>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">Use <strong>Apenas reservar</strong> quando o colaborador ainda não puder assinar — o termo fica pendente e pode ser assinado depois.</p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Assinar Termo depois (armário já reservado) -->
+<div class="modal-overlay" id="modalAssinarTermo" onclick="fecharModal('modalAssinarTermo', event)">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:780px;max-height:92vh;overflow-y:auto;">
+    <div class="modal-head" style="position:sticky;top:0;z-index:10;">
+      <h3>✍️ Assinar Termo — <span id="assinarTermoNumero"></span></h3>
+      <button class="modal-close" onclick="fecharModal('modalAssinarTermo')">✕</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" id="formAssinarTermo" hx-boost="false">
+        <input type="hidden" name="assinatura" id="assinaturaTermoInput">
+        <p style="font-size:11px;font-weight:900;color:var(--dhl-red);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px;border-bottom:1.5px solid var(--dhl-red);padding-bottom:4px;">📋 Termo de Responsabilidade</p>
+        <div class="termo-box">
+          Recebi um armário pelo qual me responsabilizo, inclusive por sua boa conservação. Estou ciente de que devo avisar a Segurança Patrimonial quando não mais for utilizá-lo.<br><br>
+          Declaro estar ciente que devo utilizar esse armário apenas para a guarda de objetos pessoais de meu uso diário, sendo recomendada a não estocagem de valores, alimentos ou bebidas. Tenho conhecimento também que não poderei trocá-lo por outro sem autorização da área de Segurança Patrimonial. Concordo que o armário seja auditado periodicamente, na minha presença, pela Segurança Patrimonial/RH.<br><br>
+          Comprometo-me em trazer um cadeado de boa qualidade e uma cópia da chave de meu armário ficará sob a tutela da Segurança Patrimonial.<br><br>
+          Declaro ter ciência que em caso de esquecimento de minha chave deverei acionar um integrante da Segurança Patrimonial para devidas providências.
+        </div>
+        <p style="font-size:11px;font-weight:900;color:var(--dhl-red);text-transform:uppercase;letter-spacing:.4px;margin:16px 0 8px;border-bottom:1.5px solid var(--dhl-red);padding-bottom:4px;">✍️ Assinatura do Colaborador</p>
+        <div class="modal-sig-wrap" id="sigTermoWrap">
+          <canvas id="sigTermoCanvas"></canvas>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <button type="button" class="btn btn-soft btn-sm" onclick="limparSigTermo()">🗑 Limpar</button>
+          <span style="font-size:12px;color:var(--muted);">Assine no espaço acima com o mouse ou touch.</span>
+        </div>
         <div style="display:flex;gap:10px;margin-top:18px;">
-          <button type="submit" class="btn btn-red" style="flex:1;">✓ Confirmar Atribuição</button>
-          <button type="button" class="btn btn-soft" onclick="fecharModal('modalAtribuir')" style="flex:1;">Cancelar</button>
+          <button type="submit" class="btn btn-red" style="flex:1;">✓ Confirmar Assinatura</button>
+          <button type="button" class="btn btn-soft" onclick="fecharModal('modalAssinarTermo')" style="flex:1;">Cancelar</button>
         </div>
       </form>
     </div>
@@ -555,12 +595,78 @@
     if(inp) inp.value = '';
   }
 
+  /* ── Assinar termo depois (modal próprio) ── */
+  function abrirAssinarTermo(armId, numero){
+    document.getElementById('assinarTermoNumero').textContent = numero;
+    document.getElementById('formAssinarTermo').action = URL_ASSINAR_TERMO + armId;
+    limparSigTermo();
+    abrirModal('modalAssinarTermo');
+    setTimeout(() => {
+      const wrap = document.getElementById('sigTermoWrap');
+      const cv   = document.getElementById('sigTermoCanvas');
+      if(wrap && cv){ cv.width = wrap.getBoundingClientRect().width; cv.height = 130; }
+    }, 80);
+  }
+
+  (function(){
+    let drawing = false, lastX = 0, lastY = 0;
+    function pos(cv, e){ const r = cv.getBoundingClientRect(); const s = e.touches ? e.touches[0] : e; return { x: s.clientX - r.left, y: s.clientY - r.top }; }
+    function ctxOf(){ const cv = document.getElementById('sigTermoCanvas'); if(!cv) return null; const ctx = cv.getContext('2d'); ctx.strokeStyle = '#111827'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; return ctx; }
+    document.addEventListener('mousedown', e => { const cv = document.getElementById('sigTermoCanvas'); if(!cv || !cv.contains(e.target)) return; drawing = true; const p = pos(cv, e); lastX = p.x; lastY = p.y; });
+    document.addEventListener('mousemove', e => { if(!drawing) return; const cv = document.getElementById('sigTermoCanvas'); if(!cv) return; const ctx = ctxOf(); if(!ctx) return; const p = pos(cv, e); ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y); ctx.stroke(); lastX = p.x; lastY = p.y; });
+    document.addEventListener('mouseup', () => { if(drawing){ drawing = false; capturarSigTermo(); } });
+    document.addEventListener('touchstart', e => { const cv = document.getElementById('sigTermoCanvas'); if(!cv || !cv.contains(e.target)) return; e.preventDefault(); drawing = true; const p = pos(cv, e); lastX = p.x; lastY = p.y; }, {passive:false});
+    document.addEventListener('touchmove', e => { if(!drawing) return; const cv = document.getElementById('sigTermoCanvas'); if(!cv || !cv.contains(e.target)) return; e.preventDefault(); const ctx = ctxOf(); if(!ctx) return; const p = pos(cv, e); ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y); ctx.stroke(); lastX = p.x; lastY = p.y; }, {passive:false});
+    document.addEventListener('touchend', () => { if(drawing){ drawing = false; capturarSigTermo(); } });
+  })();
+
+  function capturarSigTermo(){
+    const cv = document.getElementById('sigTermoCanvas');
+    if(cv) document.getElementById('assinaturaTermoInput').value = cv.toDataURL('image/png');
+  }
+  function limparSigTermo(){
+    const cv = document.getElementById('sigTermoCanvas');
+    if(cv){ cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); }
+    const inp = document.getElementById('assinaturaTermoInput');
+    if(inp) inp.value = '';
+  }
+
+  var _reservarSemAssinar = false;
+
+  function _canvasVazio(cv){
+    if(!cv) return true;
+    var blank = document.createElement('canvas');
+    blank.width = cv.width; blank.height = cv.height;
+    return cv.toDataURL() === blank.toDataURL();
+  }
+
   document.getElementById('formAtribuir').addEventListener('submit', function(e){
     const nome = this.querySelector('input[name="colaborador_nome"]').value.trim();
     const cpf  = this.querySelector('input[name="colaborador_cpf"]').value.trim();
-    if(!nome){ e.preventDefault(); alert('Informe o nome do colaborador.'); return; }
-    if(!cpf){  e.preventDefault(); alert('Informe o CPF/matrícula.'); return; }
-    capturarSigAtribuir();
+    if(!nome){ e.preventDefault(); alert('Informe o nome do colaborador.'); _reservarSemAssinar=false; return; }
+    if(!cpf){  e.preventDefault(); alert('Informe o CPF/matrícula.');     _reservarSemAssinar=false; return; }
+
+    if(_reservarSemAssinar){
+      // Reserva sem assinar → termo fica pendente (assinatura vazia)
+      document.getElementById('assinaturaAtribuirInput').value = '';
+    } else {
+      // Exige assinatura real
+      const cv = document.getElementById('sigAtribuirCanvas');
+      if(_canvasVazio(cv)){
+        e.preventDefault();
+        alert('Assine o termo ou use o botão "Apenas reservar (assinar depois)".');
+        return;
+      }
+      capturarSigAtribuir();
+    }
+    _reservarSemAssinar = false;
+    mostrarLoading();
+  });
+
+  document.getElementById('formAssinarTermo').addEventListener('submit', function(e){
+    const cv = document.getElementById('sigTermoCanvas');
+    if(_canvasVazio(cv)){ e.preventDefault(); alert('Assine o termo antes de confirmar.'); return; }
+    capturarSigTermo();
     mostrarLoading();
   });
 
@@ -571,6 +677,7 @@
   var URL_EXCLUIR        = "{{ url_for('armarios.excluir',           arm_id=0) }}".replace(/\/0$/, '/');
   var URL_EDITAR_COLAB   = "{{ url_for('armarios.editar_colaborador',arm_id=0) }}".replace(/\/0$/, '/');
   var URL_TERMO          = "{{ url_for('armarios.termo_atribuicao',  arm_id=0) }}".replace(/\/0$/, '/');
+  var URL_ASSINAR_TERMO  = "{{ url_for('armarios.assinar_termo',     arm_id=0) }}".replace(/\/0$/, '/');
 
   function verDetalhe(armId){
     abrirModal('modalDetalhe');
@@ -595,6 +702,9 @@
           <div class="modal-row">
             <div class="modal-field"><label>Atribuído em</label><span>${d.atribuido_em}</span></div>
           </div>`;
+          if(d.termo_pendente){
+            html += `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 13px;margin-top:8px;font-size:12.5px;font-weight:700;color:#9a3412;">⚠ Termo pendente de assinatura — o colaborador reservou o armário e ainda não assinou.</div>`;
+          }
         }
         html += `<hr style="border:none;border-top:1px solid #e5e7eb;margin:8px 0;"><p style="font-size:12px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin:0 0 6px;">Chave Reserva</p>`;
         if(d.chave_retirada){
@@ -616,8 +726,13 @@
         html += `<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0 10px;"><div style="display:flex;gap:8px;flex-wrap:wrap;">`;
 
         if(d.status === 'OCUPADO'){
-          html += `<a href="${URL_TERMO}${d.id}" data-filename="termo_armario_${d.numero}.pdf"
-                      style="display:inline-flex;align-items:center;gap:6px;padding:8px 13px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:10px;font-size:12px;font-weight:800;text-decoration:none;cursor:pointer;">📄 Baixar Termo</a>`;
+          if(d.termo_pendente){
+            html += `<button onclick="fecharModal('modalDetalhe');abrirAssinarTermo(${d.id},'${d.numero}')"
+                        style="display:inline-flex;align-items:center;gap:6px;padding:8px 13px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;">✍️ Assinar termo</button>`;
+          } else {
+            html += `<a href="${URL_TERMO}${d.id}" data-filename="termo_armario_${d.numero}.pdf"
+                        style="display:inline-flex;align-items:center;gap:6px;padding:8px 13px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:10px;font-size:12px;font-weight:800;text-decoration:none;cursor:pointer;">📄 Baixar Termo</a>`;
+          }
         }
 
         // Atribuir / Liberar / Editar — todos os usuários logados

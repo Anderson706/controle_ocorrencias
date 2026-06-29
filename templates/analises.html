@@ -113,15 +113,15 @@
   </div>
 
   <div class="table-wrap">
-    <table>
+    <table data-paginate="50">
       <thead>
         <tr>
-          <th>Nº</th>
-          {% if is_admin %}<th>Site</th>{% endif %}
-          <th>Data</th>
-          <th>Empresa</th>
-          <th>Responsável pelo Levantamento</th>
-          <th>Status</th>
+          <th data-sort="num">Nº</th>
+          {% if is_admin %}<th data-sort="text">Site</th>{% endif %}
+          <th data-sort="date">Data</th>
+          <th data-sort="text">Empresa</th>
+          <th data-sort="text">Responsável pelo Levantamento</th>
+          <th data-sort="text">Status</th>
           <th style="text-align:center;">Ações</th>
         </tr>
       </thead>

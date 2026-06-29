@@ -11,6 +11,8 @@ from io import BytesIO
 
 from flask import (Blueprint, session, request, redirect, url_for,
                    flash, render_template, jsonify, send_file)
+from sqlalchemy.orm import defer
+from sqlalchemy import func as _func
 
 # ─── Blueprint ────────────────────────────────────────────────────────────────
 af_bp = Blueprint("af", __name__, template_folder="templates")
@@ -152,7 +154,24 @@ def _site_usuario():
 
 
 def _is_admin():
-    return (session.get("user_perfil") or "").upper() in ("ADMIN", "MULTISITES")
+    return (session.get("user_perfil") or "").upper() == "ADMIN"
+
+
+def _sites_autorizados():
+    """Retorna lista de sites que o usuário logado pode visualizar.
+    ADMIN → [] (sem filtro — vê tudo); demais → sites vinculados ou site principal."""
+    if _is_admin():
+        return []
+    user_id = session.get("user_id")
+    if user_id and _UsuarioSite:
+        try:
+            vinculos = _UsuarioSite.query.filter_by(usuario_id=user_id).all()
+            if vinculos:
+                return [v.site_nome for v in vinculos]
+        except Exception:
+            pass
+    site = _site_usuario()
+    return [site] if site else []
 
 
 def _get_usuarios_site(site):
@@ -165,15 +184,17 @@ def _get_usuarios_site(site):
         por_site = _Usuario.query.filter_by(site=site, is_active=True).all()
         for u in por_site:
             usuarios.append({"id": u.id, "nome": u.nome, "email": u.email or ""})
-        # Usuários vinculados via UsuarioSite (MULTISITES)
+        # Usuários vinculados via UsuarioSite (MULTISITES) — UMA query (elimina N+1)
         if _UsuarioSite:
             vinculos = _UsuarioSite.query.filter_by(site_nome=site).all()
             ids_ja = {u["id"] for u in usuarios}
-            for v in vinculos:
-                if v.usuario_id not in ids_ja:
-                    u2 = _Usuario.query.get(v.usuario_id)
-                    if u2 and u2.is_active:
-                        usuarios.append({"id": u2.id, "nome": u2.nome, "email": u2.email or ""})
+            ids_faltantes = [v.usuario_id for v in vinculos if v.usuario_id not in ids_ja]
+            if ids_faltantes:
+                extras = (_Usuario.query
+                          .filter(_Usuario.id.in_(ids_faltantes), _Usuario.is_active == True)
+                          .all())
+                for u2 in extras:
+                    usuarios.append({"id": u2.id, "nome": u2.nome, "email": u2.email or ""})
         usuarios.sort(key=lambda x: x["nome"])
     except Exception:
         pass
@@ -291,10 +312,15 @@ def _enviar_email_abertura(destinatario_raw, ciclo_id, site, fech_por):
 def controle():
     site     = _site_usuario()
     is_admin = _is_admin()
+    _sites   = _sites_autorizados()  # [] para admin, lista de sites para os demais
 
     q = SiteAF.query
-    if not is_admin:
-        q = q.filter_by(site=site)
+    if _sites:
+        # Restringe aos sites autorizados (1 ou vários via UsuarioSite)
+        if len(_sites) == 1:
+            q = q.filter(SiteAF.site == _sites[0])
+        else:
+            q = q.filter(SiteAF.site.in_(_sites))
 
     # Filtros
     f_status = (request.args.get("status") or "").strip()
@@ -307,17 +333,26 @@ def controle():
     if f_ini:    q = q.filter(SiteAF.fech_data >= f_ini)
     if f_fim:    q = q.filter(SiteAF.fech_data <= f_fim)
 
-    registros = q.order_by(SiteAF.id.desc()).all()
+    # Defere os CLOBs pesados (assinaturas + checklist JSON) — a lista só mostra
+    # datas, responsáveis e status; carregar esses campos para cada ciclo seria
+    # transferência à toa.
+    _sem_clob = [defer(SiteAF.fech_assinatura), defer(SiteAF.fech_checklist),
+                 defer(SiteAF.fech_aprov_sig), defer(SiteAF.aber_assinatura),
+                 defer(SiteAF.aber_checklist), defer(SiteAF.aber_aprov_sig),
+                 defer(SiteAF.aber_alarme_problemas)]
+    registros = q.options(*_sem_clob).order_by(SiteAF.id.desc()).all()
 
-    # KPIs
-    todos = SiteAF.query if is_admin else SiteAF.query.filter_by(site=site)
-    todos = todos.all()
+    # KPIs via COUNT/GROUP BY no SQL — não carrega objetos (nem CLOBs) só pra contar.
+    kpi_q = _db.session.query(SiteAF.status, _func.count(SiteAF.id))
+    if _sites:
+        kpi_q = kpi_q.filter(SiteAF.site.in_(_sites))
+    _cont = dict(kpi_q.group_by(SiteAF.status).all())
     kpis = {
-        "total":               len(todos),
-        "aguardando_abertura": sum(1 for r in todos if r.status == "AGUARDANDO_ABERTURA"),
-        "pendente_aprovacao":  sum(1 for r in todos if r.status == "PENDENTE_APROVACAO"),
-        "aprovados":           sum(1 for r in todos if r.status == "APROVADO"),
-        "rejeitados":          sum(1 for r in todos if r.status == "REJEITADO"),
+        "total":               sum(_cont.values()),
+        "aguardando_abertura": _cont.get("AGUARDANDO_ABERTURA", 0),
+        "pendente_aprovacao":  _cont.get("PENDENTE_APROVACAO", 0),
+        "aprovados":           _cont.get("APROVADO", 0),
+        "rejeitados":          _cont.get("REJEITADO", 0),
     }
 
     todos_sites = sorted({r.site for r in SiteAF.query.with_entities(SiteAF.site).all() if r.site}) if is_admin else []
@@ -389,7 +424,8 @@ def abertura(ciclo_id):
     reg  = SiteAF.query.get_or_404(ciclo_id)
     site = _site_usuario()
 
-    if not _is_admin() and reg.site != site:
+    _sites = _sites_autorizados()
+    if _sites and reg.site not in _sites:
         flash("Acesso negado.", "danger")
         return redirect(url_for("af.controle"))
 

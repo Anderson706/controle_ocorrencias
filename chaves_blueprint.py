@@ -39,12 +39,14 @@ def _tempo_decorrido(dt):
 _db              = None
 ClavicularioChave    = None
 ClavicularioRetirada = None
+_UsuarioSite         = None  # injetado pelo app.py
 
 
 # ── Inicialização (chamada de app.py após db = SQLAlchemy(app)) ────────────────
-def setup_chaves(db):
-    global _db, ClavicularioChave, ClavicularioRetirada
+def setup_chaves(db, UsuarioSite=None):
+    global _db, ClavicularioChave, ClavicularioRetirada, _UsuarioSite
     _db = db
+    _UsuarioSite = UsuarioSite
 
     # ── Models ────────────────────────────────────────────────────────────────
 
@@ -117,6 +119,22 @@ def _is_can_manage():
     """Retorna True para perfis que podem gerenciar chaves (inclui KEYUSER)."""
     return (session.get("user_perfil") or "").upper() in ("ADMIN", "GESTOR", "KEYUSER")
 
+def _sites_autorizados():
+    """Retorna lista de sites que o usuário logado pode visualizar.
+    ADMIN → [] (sem filtro — vê tudo); demais → sites vinculados ou site principal."""
+    if _is_privileged():
+        return []
+    user_id = session.get("user_id")
+    if user_id and _UsuarioSite:
+        try:
+            vinculos = _UsuarioSite.query.filter_by(usuario_id=user_id).all()
+            if vinculos:
+                return [v.site_nome for v in vinculos]
+        except Exception:
+            pass
+    site = session.get("user_site", "")
+    return [site] if site else []
+
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -180,6 +198,7 @@ def meu_claviculario():
         return redirect(url_for("chaves.meu_claviculario"))
 
     site_filtro = request.args.get("site", "") if is_admin else ""
+    _sites      = _sites_autorizados()  # [] para admin, lista de sites para os demais
 
     if is_admin:
         chaves = (ClavicularioChave.query
@@ -187,10 +206,13 @@ def meu_claviculario():
                   .order_by(ClavicularioChave.site, ClavicularioChave.id)
                   .all())
     else:
-        chaves = (ClavicularioChave.query
-                  .filter_by(site=site, ativa=True)
-                  .order_by(ClavicularioChave.id)
-                  .all())
+        q = ClavicularioChave.query.filter_by(ativa=True)
+        if _sites:
+            if len(_sites) == 1:
+                q = q.filter(ClavicularioChave.site == _sites[0])
+            else:
+                q = q.filter(ClavicularioChave.site.in_(_sites))
+        chaves = q.order_by(ClavicularioChave.id).all()
 
     agora           = datetime.now()
     tres_dias_atras = agora - timedelta(days=3)
@@ -234,11 +256,10 @@ def meu_claviculario():
 @chaves_bp.route("/meu-claviculario/detalhe/<int:chave_id>")
 @login_required_chaves
 def detalhe_chave_clav(chave_id):
-    chave    = ClavicularioChave.query.get_or_404(chave_id)
-    site     = session.get("user_site", "")
-    is_admin = _is_privileged()
+    chave  = ClavicularioChave.query.get_or_404(chave_id)
+    _sites = _sites_autorizados()
 
-    if chave.site != site and not is_admin:
+    if _sites and chave.site not in _sites:
         return jsonify({"erro": "Acesso negado"}), 403
 
     ret = (ClavicularioRetirada.query
@@ -259,6 +280,45 @@ def detalhe_chave_clav(chave_id):
         "responsavel_entrega": ret.responsavel_entrega if ret else None,
         "comprovante_url":     url_for("chaves.comprovante_retirada", retirada_id=ret.id) if ret else None,
     })
+
+
+@chaves_bp.route("/meu-claviculario/editar/<int:chave_id>", methods=["POST"])
+@login_required_chaves
+@admin_required
+def editar_chave_clav(chave_id):
+    chave  = ClavicularioChave.query.get_or_404(chave_id)
+    _sites = _sites_autorizados()
+
+    # Só edita chaves de sites autorizados
+    if _sites and chave.site not in _sites:
+        flash("Sem permissão para editar esta chave.", "danger")
+        return redirect(url_for("chaves.meu_claviculario"))
+
+    # Bloqueia edição se a chave está em uso
+    em_uso = (ClavicularioRetirada.query
+              .filter_by(chave_id=chave.id, status="EM USO")
+              .first())
+    if em_uso:
+        flash("Não é possível editar uma chave que está em uso.", "danger")
+        return redirect(url_for("chaves.meu_claviculario"))
+
+    numero_chave = request.form.get("numero_chave", "").strip()
+    local        = request.form.get("local", "").strip()
+
+    if not numero_chave or not local:
+        flash("Preencha o número da chave e o local.", "warning")
+        return redirect(url_for("chaves.meu_claviculario"))
+
+    try:
+        chave.numero_chave = numero_chave
+        chave.local        = local
+        _db.session.commit()
+        flash(f"Chave '{numero_chave}' atualizada com sucesso!", "success")
+    except Exception as e:
+        _db.session.rollback()
+        flash(f"Erro ao atualizar a chave: {e}", "danger")
+
+    return redirect(url_for("chaves.meu_claviculario"))
 
 
 @chaves_bp.route("/meu-claviculario/excluir/<int:chave_id>", methods=["POST"])
@@ -287,16 +347,16 @@ def excluir_chave_clav(chave_id):
 @admin_required
 def excluir_lote_chaves():
     ids      = request.form.getlist("ids")
-    site     = session.get("user_site", "")
     is_admin = _is_privileged()
+    _sites   = _sites_autorizados()
     if not ids:
         flash("Nenhuma chave selecionada.", "warning")
         return redirect(url_for("chaves.meu_claviculario"))
     removidas = ignoradas = 0
     for chave_id in ids:
         q = ClavicularioChave.query.filter_by(id=chave_id, ativa=True)
-        if not is_admin:
-            q = q.filter_by(site=site)
+        if _sites:
+            q = q.filter(ClavicularioChave.site.in_(_sites))
         chave = q.first()
         if not chave:
             continue
@@ -329,12 +389,13 @@ def excluir_lote_chaves():
 def realizar_retirada():
     site       = session.get("user_site", "")
     usuario_id = session.get("user_id")
+    _sites     = _sites_autorizados()
 
     if request.method == "POST":
         chave_id = request.form.get("chave_id", type=int)
         chave    = ClavicularioChave.query.get(chave_id)
 
-        if not chave or chave.site != site or not chave.ativa:
+        if not chave or not chave.ativa or (_sites and chave.site not in _sites):
             flash("Chave inválida ou não pertence ao seu site.", "danger")
             return redirect(url_for("chaves.realizar_retirada"))
 
@@ -379,21 +440,31 @@ def realizar_retirada():
             flash(f"Erro ao registrar retirada: {e}", "danger")
             return redirect(url_for("chaves.realizar_retirada"))
 
-    # Chaves disponíveis do site (sem retirada ativa)
-    chaves_site = (ClavicularioChave.query
-                   .filter_by(site=site, ativa=True)
-                   .order_by(ClavicularioChave.numero_chave)
-                   .all())
-    chaves_disponiveis = [
-        c for c in chaves_site
-        if not ClavicularioRetirada.query.filter_by(chave_id=c.id, status="EM USO").first()
-    ]
+    # Chaves disponíveis dos sites autorizados (sem retirada ativa)
+    _q_chaves = ClavicularioChave.query.filter_by(ativa=True)
+    if _sites:
+        if len(_sites) == 1:
+            _q_chaves = _q_chaves.filter(ClavicularioChave.site == _sites[0])
+        else:
+            _q_chaves = _q_chaves.filter(ClavicularioChave.site.in_(_sites))
+    chaves_site = _q_chaves.order_by(ClavicularioChave.numero_chave).all()
+    # IDs de chaves atualmente EM USO — UMA query só (antes era uma por chave: N+1,
+    # que ficava lentíssimo pela VPN com muitas chaves).
+    _em_uso_ids = {
+        row.chave_id for row in ClavicularioRetirada.query
+            .filter_by(status="EM USO")
+            .with_entities(ClavicularioRetirada.chave_id).all()
+    }
+    chaves_disponiveis = [c for c in chaves_site if c.id not in _em_uso_ids]
 
-    # Retiradas ativas do site para exibir no painel de status
-    retiradas_ativas = (ClavicularioRetirada.query
-                        .filter_by(site=site, status="EM USO")
-                        .order_by(ClavicularioRetirada.data_retirada.desc())
-                        .all())
+    # Retiradas ativas dos sites autorizados para exibir no painel de status
+    _q_ret = ClavicularioRetirada.query.filter_by(status="EM USO")
+    if _sites:
+        if len(_sites) == 1:
+            _q_ret = _q_ret.filter(ClavicularioRetirada.site == _sites[0])
+        else:
+            _q_ret = _q_ret.filter(ClavicularioRetirada.site.in_(_sites))
+    retiradas_ativas = _q_ret.order_by(ClavicularioRetirada.data_retirada.desc()).all()
     # ── UMA query para todas as chaves referenciadas (elimina N+1) ───────────
     ret_chave_ids = [r.chave_id for r in retiradas_ativas]
     chaves_ret_map = {}
@@ -426,15 +497,28 @@ def realizar_retirada():
 @chaves_bp.route("/realizar-devolucao")
 @login_required_chaves
 def realizar_devolucao():
-    site = session.get("user_site", "")
-    retiradas = (ClavicularioRetirada.query
-                 .filter_by(site=site, status="EM USO")
-                 .order_by(ClavicularioRetirada.data_retirada.asc())
-                 .all())
+    site   = session.get("user_site", "")
+    _sites = _sites_autorizados()
+    _q = ClavicularioRetirada.query.filter_by(status="EM USO")
+    if _sites:
+        if len(_sites) == 1:
+            _q = _q.filter(ClavicularioRetirada.site == _sites[0])
+        else:
+            _q = _q.filter(ClavicularioRetirada.site.in_(_sites))
+    retiradas = _q.order_by(ClavicularioRetirada.data_retirada.asc()).all()
 
+    # UMA query para todas as chaves referenciadas (elimina o N+1 — antes era um
+    # get() por retirada, lento pela VPN).
+    _chave_ids = [r.chave_id for r in retiradas]
+    _chaves_map = {}
+    if _chave_ids:
+        _chaves_map = {
+            c.id: c for c in ClavicularioChave.query
+                .filter(ClavicularioChave.id.in_(_chave_ids)).all()
+        }
     agora = datetime.now()
     for r in retiradas:
-        chave        = ClavicularioChave.query.get(r.chave_id)
+        chave           = _chaves_map.get(r.chave_id)
         r._numero_chave = chave.numero_chave if chave else "?"
         r._local        = chave.local        if chave else "?"
         r._tempo        = _tempo_decorrido(r.data_retirada)
@@ -466,6 +550,7 @@ def exportar_historico_excel():
 
     site      = session.get("user_site", "")
     is_admin  = (session.get("user_perfil") or "").upper() == "ADMIN"
+    _sites    = _sites_autorizados()
 
     # Filtros via query string
     data_ini  = request.args.get("data_ini", "").strip()
@@ -473,9 +558,12 @@ def exportar_historico_excel():
     status_f  = request.args.get("status",   "").strip().upper()  # EM USO | DEVOLVIDA | "" = todos
 
     query = ClavicularioRetirada.query
-    if not is_admin:
-        query = query.filter_by(site=site)
-    else:
+    if _sites:
+        if len(_sites) == 1:
+            query = query.filter(ClavicularioRetirada.site == _sites[0])
+        else:
+            query = query.filter(ClavicularioRetirada.site.in_(_sites))
+    elif is_admin:
         site_f = request.args.get("site", site).strip()
         if site_f:
             query = query.filter_by(site=site_f)
@@ -499,11 +587,15 @@ def exportar_historico_excel():
 
     retiradas = query.order_by(ClavicularioRetirada.data_retirada.desc()).all()
 
-    # Pré-carrega chaves para evitar N+1
+    # Pré-carrega chaves em UMA query (elimina N+1 — antes era 1 query por
+    # chave distinta no histórico)
+    _hist_chave_ids = list({r.chave_id for r in retiradas})
     chaves_map = {}
-    for r in retiradas:
-        if r.chave_id not in chaves_map:
-            chaves_map[r.chave_id] = ClavicularioChave.query.get(r.chave_id)
+    if _hist_chave_ids:
+        chaves_map = {
+            c.id: c for c in ClavicularioChave.query
+                .filter(ClavicularioChave.id.in_(_hist_chave_ids)).all()
+        }
 
     # ── Workbook ──────────────────────────────────────────────────────────────
     wb  = Workbook()
@@ -635,11 +727,24 @@ def export_devolucao_excel():
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-    site      = session.get("user_site", "")
-    retiradas = (ClavicularioRetirada.query
-                 .filter_by(site=site, status="EM USO")
-                 .order_by(ClavicularioRetirada.data_retirada.asc())
-                 .all())
+    site   = session.get("user_site", "")
+    _sites = _sites_autorizados()
+    _q = ClavicularioRetirada.query.filter_by(status="EM USO")
+    if _sites:
+        if len(_sites) == 1:
+            _q = _q.filter(ClavicularioRetirada.site == _sites[0])
+        else:
+            _q = _q.filter(ClavicularioRetirada.site.in_(_sites))
+    retiradas = _q.order_by(ClavicularioRetirada.data_retirada.asc()).all()
+
+    # ── UMA query para todas as chaves referenciadas (elimina N+1) ───────────
+    _chave_ids = list({r.chave_id for r in retiradas})
+    _chaves_map = {}
+    if _chave_ids:
+        _chaves_map = {
+            c.id: c for c in ClavicularioChave.query
+                .filter(ClavicularioChave.id.in_(_chave_ids)).all()
+        }
 
     wb = Workbook()
     ws = wb.active
@@ -675,7 +780,7 @@ def export_devolucao_excel():
     # ── Dados ─────────────────────────────────────────────────────────────────
     agora = datetime.now()
     for row_idx, r in enumerate(retiradas, start=5):
-        chave = ClavicularioChave.query.get(r.chave_id)
+        chave = _chaves_map.get(r.chave_id)
         dias  = (agora - r.data_retirada).days
         row_data = [
             chave.numero_chave if chave else "?",

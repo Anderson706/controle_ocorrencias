@@ -1,0 +1,331 @@
+{% extends "base_app.html" %}
+{% block page_title %}Exportar Apresentação | CCTV Control Panel{% endblock %}
+{% block topbar_title %}📊 Gerador de Apresentação{% endblock %}
+{% block topbar_subtitle %}Monte um relatório dos dashboards (PDF ou PowerPoint) escolhendo sites e elementos{% endblock %}
+
+{% block page_content %}
+<style>
+  .exp-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start; }
+  @media (max-width:900px){ .exp-grid{ grid-template-columns:1fr; } }
+  .exp-card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:20px 22px; box-shadow:0 2px 10px rgba(0,0,0,.05); }
+  .exp-card h3{ font-size:14px; font-weight:900; margin:0 0 4px; color:var(--text); }
+  .exp-card .sub{ font-size:12px; color:var(--muted); margin:0 0 16px; }
+  .exp-tools{ display:flex; gap:8px; margin-bottom:12px; }
+  .exp-mini{ font-size:11px; font-weight:800; padding:5px 11px; border-radius:8px; border:1px solid var(--line); background:#fafbfc; color:#374151; cursor:pointer; font-family:inherit; transition:.15s; }
+  .exp-mini:hover{ background:#d40511; color:#fff; border-color:#d40511; }
+  .exp-list{ display:flex; flex-direction:column; gap:4px; max-height:300px; overflow-y:auto; }
+  .exp-check{ display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid var(--line); border-radius:10px; cursor:pointer; transition:.12s; font-size:13px; color:var(--text); }
+  .exp-check:hover{ background:#fafafa; border-color:#d1d5db; }
+  .exp-check input{ accent-color:#d40511; width:16px; height:16px; cursor:pointer; flex-shrink:0; }
+  .exp-check.checked{ background:#fff5f5; border-color:#fca5a5; }
+  .exp-mod{ margin-bottom:14px; }
+  .exp-mod-title{ font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.5px; color:#9ca3af; margin:0 0 7px; display:flex; align-items:center; gap:6px; }
+  .exp-fmt{ display:flex; gap:10px; }
+  .exp-fmt label{ flex:1; display:flex; align-items:center; gap:10px; padding:14px 16px; border:1.5px solid var(--line); border-radius:12px; cursor:pointer; transition:.15s; }
+  .exp-fmt label.sel{ border-color:#d40511; background:#fff5f5; }
+  .exp-fmt input{ accent-color:#d40511; width:17px; height:17px; }
+  .exp-fmt .fmt-ico{ font-size:22px; }
+  .exp-fmt .fmt-name{ font-size:13px; font-weight:800; color:var(--text); }
+  .exp-fmt .fmt-desc{ font-size:11px; color:var(--muted); }
+  .exp-input{ width:100%; padding:10px 13px; border:1.5px solid var(--line); border-radius:10px; font-size:13px; font-family:inherit; outline:none; box-sizing:border-box; }
+  .exp-input:focus{ border-color:#d40511; }
+  .exp-footer{ display:flex; align-items:center; gap:14px; margin-top:20px; padding:18px 22px; background:#fff; border:1px solid var(--line); border-radius:16px; }
+  .exp-gerar{ padding:13px 30px; background:#d40511; color:#fff; border:none; border-radius:12px; font-size:14px; font-weight:900; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:9px; transition:.15s; }
+  .exp-gerar:hover{ opacity:.88; } .exp-gerar:disabled{ opacity:.5; cursor:default; }
+  .exp-hint{ font-size:12px; color:var(--muted); }
+  #exp-toast{ display:none; position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:9999; background:#1f2937; color:#fff; padding:12px 22px; border-radius:12px; font-size:13px; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,.3); }
+  #exp-render{ position:fixed; left:-10000px; top:0; }
+</style>
+
+<div class="exp-grid">
+  <!-- Sites -->
+  <div class="exp-card">
+    <h3>🏭 Sites</h3>
+    <p class="sub">Escolha os sites vinculados que entram na consolidação.</p>
+    <div class="exp-tools">
+      <button class="exp-mini" onclick="expSel('site', true)">Todos</button>
+      <button class="exp-mini" onclick="expSel('site', false)">Nenhum</button>
+    </div>
+    <div class="exp-list">
+      {% for s in sites %}
+      <label class="exp-check checked">
+        <input type="checkbox" class="exp-site" value="{{ s }}" checked onchange="expSync(this)">
+        <span>{{ s }}</span>
+      </label>
+      {% else %}
+      <p class="exp-hint">Nenhum site disponível para o seu perfil.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Elementos -->
+  <div class="exp-card">
+    <h3>🧩 Elementos</h3>
+    <p class="sub">Marque os indicadores e gráficos de cada módulo.</p>
+    <div class="exp-tools">
+      <button class="exp-mini" onclick="expSel('el', true)">Todos</button>
+      <button class="exp-mini" onclick="expSel('el', false)">Nenhum</button>
+    </div>
+    {% for mod in catalogo %}
+    <div class="exp-mod">
+      <p class="exp-mod-title">{{ mod.icone }} {{ mod.titulo }}</p>
+      {% for e in mod.elementos %}
+      <label class="exp-check checked" style="margin-bottom:4px">
+        <input type="checkbox" class="exp-el" value="{{ e.chave }}" checked onchange="expSync(this)">
+        <span>{{ e.rotulo }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Config -->
+<div class="exp-card" style="margin-top:18px">
+  <h3>⚙️ Configuração</h3>
+  <p class="sub">Título e formato do arquivo gerado.</p>
+  <div style="margin-bottom:16px">
+    <label class="exp-mod-title">Título da apresentação</label>
+    <input type="text" id="exp-titulo" class="exp-input" value="Apresentação de Indicadores — DHL Security" maxlength="120">
+  </div>
+  <div style="margin-bottom:16px">
+    <label class="exp-mod-title">Período (opcional)</label>
+    <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+      <div style="flex:1; min-width:150px;">
+        <span style="font-size:11px; color:var(--muted); font-weight:700;">De</span>
+        <input type="date" id="exp-data-ini" class="exp-input">
+      </div>
+      <div style="flex:1; min-width:150px;">
+        <span style="font-size:11px; color:var(--muted); font-weight:700;">Até</span>
+        <input type="date" id="exp-data-fim" class="exp-input">
+      </div>
+      <button class="exp-mini" onclick="document.getElementById('exp-data-ini').value='';document.getElementById('exp-data-fim').value='';" style="height:40px;">Limpar</button>
+    </div>
+    <p class="exp-hint" style="margin:7px 0 0;">Deixe em branco para incluir todos os registros, sem limite de data.</p>
+  </div>
+  <label class="exp-mod-title">Formato</label>
+  <div class="exp-fmt">
+    <label class="sel" id="fmt-pdf-lbl">
+      <input type="radio" name="formato" value="pdf" checked onchange="expFmt()">
+      <span class="fmt-ico">📄</span>
+      <span><span class="fmt-name">PDF</span><br><span class="fmt-desc">Relatório DHL para imprimir/arquivar</span></span>
+    </label>
+    <label id="fmt-pptx-lbl">
+      <input type="radio" name="formato" value="pptx" onchange="expFmt()">
+      <span class="fmt-ico">📊</span>
+      <span><span class="fmt-name">PowerPoint</span><br><span class="fmt-desc">Apresentação editável (.pptx)</span></span>
+    </label>
+  </div>
+</div>
+
+<div class="exp-footer">
+  <button class="exp-gerar" id="exp-btn" onclick="expGerar()"><span>⬇</span> Gerar apresentação</button>
+  <span class="exp-hint" id="exp-status">Pronto para gerar.</span>
+</div>
+
+<!-- Área oculta de renderização dos gráficos -->
+<div id="exp-render"></div>
+<div id="exp-toast"></div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="/static/chart.umd.min.js"></script>
+<script src="/static/chartjs-plugin-datalabels.min.js"></script>
+<script>
+Chart.register(ChartDataLabels);
+</script>
+<script>
+var EXP_CATALOGO = {{ catalogo|tojson }};
+// Paleta de fallback: cores neutras que NÃO colidem com os mapeamentos semânticos abaixo
+var EXP_PALETA = ['#7c3aed','#0891b2','#db2777','#ea580c','#0d9488','#be185d','#b45309','#4338ca'];
+
+function expSync(cb){ cb.closest('.exp-check').classList.toggle('checked', cb.checked); }
+function expSel(tipo, val){
+  document.querySelectorAll(tipo==='site'?'.exp-site':'.exp-el').forEach(function(cb){
+    cb.checked = val; expSync(cb);
+  });
+}
+function expFmt(){
+  var pdf = document.querySelector('input[name=formato][value=pdf]').checked;
+  document.getElementById('fmt-pdf-lbl').classList.toggle('sel', pdf);
+  document.getElementById('fmt-pptx-lbl').classList.toggle('sel', !pdf);
+}
+function expToast(msg, bg){
+  var t = document.getElementById('exp-toast'); t.textContent = msg;
+  t.style.background = bg || '#1f2937'; t.style.display = 'block';
+  setTimeout(function(){ t.style.display='none'; }, 4000);
+}
+function _modDoChave(chave){
+  for (var i=0;i<EXP_CATALOGO.length;i++){
+    for (var j=0;j<EXP_CATALOGO[i].elementos.length;j++){
+      if (EXP_CATALOGO[i].elementos[j].chave === chave)
+        return { modulo: EXP_CATALOGO[i].modulo, el: EXP_CATALOGO[i].elementos[j] };
+    }
+  }
+  return null;
+}
+
+// Mapeia labels de status/prioridade/gravidade para cores semânticas
+function _corPorLabel(lbl) {
+  var l = (lbl || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/\bconclu|\bfecha|\bencerr/.test(l)) return '#16a34a'; // verde — concluído/fechado (não pega "inconclusiva")
+  if (/criti/.test(l))                return '#7f1d1d'; // vermelho escuro — crítica
+  if (/\balta\b/.test(l))             return '#d40511'; // vermelho   — alta
+  if (/pendent|aguard/.test(l))       return '#f59e0b'; // âmbar      — pendente
+  if (/andamento/.test(l))            return '#0078d4'; // azul       — em andamento
+  if (/\baberto/.test(l))             return '#0891b2'; // azul-ciano — aberto (distinto de em andamento)
+  if (/\bmedia\b/.test(l))            return '#f59e0b'; // âmbar      — média
+  if (/baixa/.test(l))                return '#9ca3af'; // cinza      — baixa
+  return null; // sem mapeamento → usa paleta neutra por índice
+}
+
+// Renderiza um gráfico off-screen e devolve o PNG (dataURL) via callback
+function _capturarGrafico(chave, def, dataset, cb){
+  var holder = document.getElementById('exp-render');
+  var canvas = document.createElement('canvas');
+  canvas.width = 560; canvas.height = 360;
+  holder.appendChild(canvas);
+  var tipo = def.grafico || 'bar';
+  // Para doughnut: cor semântica por label; para bar: vermelho DHL (ou semântico se label bater)
+  var cores = dataset.labels.map(function(lbl, i){
+    return _corPorLabel(lbl) || EXP_PALETA[i % EXP_PALETA.length];
+  });
+  var bgColors = tipo === 'bar'
+    ? cores.map(function(c, i){ return _corPorLabel(dataset.labels[i]) || '#d40511'; })
+    : cores;
+  var conf = {
+    type: tipo,
+    data: { labels: dataset.labels,
+            datasets: [{ data: dataset.valores,
+                         backgroundColor: bgColors,
+                         borderWidth: 1, borderColor:'#fff' }] },
+    options: {
+      responsive:false, animation:false,
+      plugins:{
+        legend:{ display: tipo!=='bar', position:'right', labels:{ font:{size:11} } },
+        title:{ display:true, text:def.rotulo.replace('Gráfico — ',''), font:{size:15, weight:'bold'} },
+        datalabels: tipo === 'bar' ? {
+          display: function(ctx){ return ctx.dataset.data[ctx.dataIndex] > 0; },
+          anchor: 'end', align: 'top',
+          color: '#374151',
+          font: { weight: 'bold', size: 12 },
+          formatter: function(v){ return v; }
+        } : {
+          display: function(ctx){ return ctx.dataset.data[ctx.dataIndex] > 0; },
+          anchor: 'center', align: 'center',
+          color: '#fff',
+          font: { weight: 'bold', size: 12 },
+          formatter: function(v, ctx){
+            var total = ctx.dataset.data.reduce(function(a,b){ return a+b; }, 0);
+            var pct = total > 0 ? Math.round(v / total * 100) : 0;
+            return v + '\n' + pct + '%';
+          }
+        }
+      },
+      scales: tipo==='bar' ? { y:{ beginAtZero:true, ticks:{ precision:0 } } } : {}
+    }
+  };
+  var chart = new Chart(canvas, conf);
+  // animation:false → frame pronto; captura no próximo tick
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      var url = canvas.toDataURL('image/png');
+      chart.destroy(); holder.removeChild(canvas);
+      cb(url);
+    });
+  });
+}
+
+function expGerar(){
+  var sites = Array.from(document.querySelectorAll('.exp-site:checked')).map(function(c){return c.value;});
+  var elementos = Array.from(document.querySelectorAll('.exp-el:checked')).map(function(c){return c.value;});
+  var formato = document.querySelector('input[name=formato]:checked').value;
+  var titulo = document.getElementById('exp-titulo').value.trim() || 'Apresentação de Indicadores';
+  var dataIni = document.getElementById('exp-data-ini').value || '';
+  var dataFim = document.getElementById('exp-data-fim').value || '';
+
+  if (dataIni && dataFim && dataIni > dataFim){ expToast('A data inicial não pode ser maior que a final.', '#d40511'); return; }
+  if (sites.length === 0){ expToast('Selecione ao menos um site.', '#d40511'); return; }
+  if (elementos.length === 0){ expToast('Selecione ao menos um elemento.', '#d40511'); return; }
+
+  var btn = document.getElementById('exp-btn');
+  var st  = document.getElementById('exp-status');
+  btn.disabled = true; btn.innerHTML = '<span>⏳</span> Gerando...';
+  st.textContent = 'Coletando dados...';
+
+  // 1) busca datasets agregados
+  fetch('/apresentacao/dados', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ sites: sites, data_ini: dataIni, data_fim: dataFim })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(resp){
+    if (!resp.ok) throw new Error(resp.erro || 'Falha ao obter dados');
+    var dados = resp.dados;
+
+    // 2) renderiza e captura apenas os gráficos selecionados
+    var chartChaves = elementos.filter(function(ch){
+      var info = _modDoChave(ch); return info && info.el.tipo === 'chart';
+    });
+    var imagens = {}; var i = 0;
+    st.textContent = 'Renderizando gráficos ('+chartChaves.length+')...';
+
+    function proximo(){
+      if (i >= chartChaves.length){ return enviar(imagens); }
+      var ch = chartChaves[i++]; var info = _modDoChave(ch);
+      var ds = (dados[info.modulo] && dados[info.modulo].charts[ch]) || {labels:[],valores:[]};
+      if (!ds.labels.length){ return proximo(); }   // sem dados → pula
+      _capturarGrafico(ch, info.el, ds, function(url){ imagens[ch] = url; proximo(); });
+    }
+    proximo();
+
+    // 3) envia para o servidor montar o arquivo; depois baixa via "Salvar como"
+    function enviar(imgs){
+      st.textContent = 'Montando arquivo...';
+      fetch('/apresentacao/gerar', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ sites:sites, elementos:elementos, formato:formato, titulo:titulo,
+                               data_ini:dataIni, data_fim:dataFim, imagens:imgs })
+      })
+      .then(function(r){
+        if (!r.ok) return r.json().then(function(e){ throw new Error(e.erro || 'Erro no servidor'); });
+        return r.json();
+      })
+      .then(function(resp){
+        if (!resp.ok) throw new Error(resp.erro || 'Falha ao gerar o arquivo');
+        var url = '/apresentacao/arquivo/' + resp.token;
+
+        // Caminho preferido: bridge do app abre o diálogo "Salvar como" e mostra o caminho
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.download){
+          st.textContent = 'Escolha onde salvar o arquivo...';
+          return window.pywebview.api.download(url, resp.filename, document.cookie).then(function(res){
+            if (res && res.ok){
+              st.textContent = 'Salvo em: ' + res.path;
+              expToast('✓ Arquivo salvo!', '#16a34a');
+            } else if (res && res.error){
+              st.textContent = 'Erro ao salvar: ' + res.error;
+              expToast('Erro ao salvar: ' + res.error, '#d40511');
+            } else {
+              st.textContent = 'Download cancelado.';
+            }
+          });
+        }
+
+        // Fallback (navegador comum): baixa direto para a pasta padrão
+        var a = document.createElement('a');
+        a.href = url; a.download = resp.filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        st.textContent = 'Download iniciado (pasta Downloads).';
+        expToast('✓ Download iniciado!', '#16a34a');
+      })
+      .catch(function(e){ st.textContent = 'Erro: ' + e.message; expToast('Erro: ' + e.message, '#d40511'); })
+      .finally(function(){ btn.disabled = false; btn.innerHTML = '<span>⬇</span> Gerar apresentação'; });
+    }
+  })
+  .catch(function(e){
+    st.textContent = 'Erro: ' + e.message; expToast('Erro: ' + e.message, '#d40511');
+    btn.disabled = false; btn.innerHTML = '<span>⬇</span> Gerar apresentação';
+  });
+}
+</script>
+{% endblock %}

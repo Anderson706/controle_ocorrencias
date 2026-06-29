@@ -650,3 +650,545 @@
 2026-05-26 17:18:58,874 INFO: 127.0.0.1 - - [26/May/2026 17:18:58] "GET /achados/lista HTTP/1.1" 200 -
 2026-05-26 17:18:59,053 INFO: 127.0.0.1 - - [26/May/2026 17:18:59] "[33mGET /static/uploads/achados_perdidos/AP_1_20260526_094217_1_4.png HTTP/1.1[0m" 404 -
 2026-05-26 17:19:28,162 INFO: 127.0.0.1 - - [26/May/2026 17:19:28] "[33mGET /static/uploads/achados_perdidos/AP_1_20260526_094217_1_4.png HTTP/1.1[0m" 404 -
+2026-06-16 18:34:04,203 ERROR: Error closing cursor
+Traceback (most recent call last):
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2223, in _safe_close_cursor
+    cursor.close()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\cursor.py", line 274, in close
+    self._verify_open()
+    ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\cursor.py", line 179, in _verify_open
+    self.connection._verify_connected()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\connection.py", line 85, in _verify_connected
+    errors._raise_err(errors.ERR_NOT_CONNECTED)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\errors.py", line 199, in _raise_err
+    raise error.exc_type(error) from cause
+oracledb.exceptions.InterfaceError: DPY-1001: not connected to database
+2026-06-16 18:34:04,227 ERROR: Exception on /api/ancs-site [GET]
+Traceback (most recent call last):
+  File "src/oracledb/impl/thin/transport.pyx", line 345, in oracledb.thin_impl.Transport.read_packet
+ConnectionResetError: [WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 1197, in fetchall
+    rows = dbapi_cursor.fetchall()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\cursor.py", line 968, in fetchall
+    row = fetch_next_row(self)
+  File "src/oracledb/impl/base/cursor.pyx", line 576, in oracledb.base_impl.BaseCursorImpl.fetch_next_row
+  File "src/oracledb/impl/thin/cursor.pyx", line 268, in oracledb.thin_impl.ThinCursorImpl._fetch_rows
+  File "src/oracledb/impl/thin/protocol.pyx", line 501, in oracledb.thin_impl.Protocol._process_single_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 502, in oracledb.thin_impl.Protocol._process_single_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 470, in oracledb.thin_impl.Protocol._process_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 446, in oracledb.thin_impl.Protocol._process_message
+  File "src/oracledb/impl/thin/messages/base.pyx", line 790, in oracledb.thin_impl.Message.process
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1263, in oracledb.thin_impl.MessageWithData._process_message
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1349, in oracledb.thin_impl.MessageWithData._process_row_data
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1101, in oracledb.thin_impl.MessageWithData._process_column_data
+  File "src/oracledb/impl/base/buffer.pyx", line 171, in oracledb.base_impl.Buffer.read_oracle_data
+  File "src/oracledb/impl/base/buffer.pyx", line 276, in oracledb.base_impl.Buffer.read_raw_bytes_and_length
+  File "src/oracledb/impl/thin/packet.pyx", line 388, in oracledb.thin_impl.ReadBuffer._read_raw_bytes_and_length
+  File "src/oracledb/impl/thin/packet.pyx", line 311, in oracledb.thin_impl.ReadBuffer._get_raw
+  File "src/oracledb/impl/thin/packet.pyx", line 728, in oracledb.thin_impl.ReadBuffer.wait_for_packets_sync
+  File "src/oracledb/impl/thin/transport.pyx", line 350, in oracledb.thin_impl.Transport.read_packet
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\errors.py", line 199, in _raise_err
+    raise error.exc_type(error) from cause
+oracledb.exceptions.DatabaseError: DPY-4011: the database or network closed the connection
+[WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+Help: https://python-oracledb.readthedocs.io/en/latest/user_guide/troubleshooting.html#dpy-4011
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\app.py", line 1729, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\app.py", line 4447, in api_ancs_site
+    ancs = q.order_by(ANC.id.desc()).limit(200).all()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\query.py", line 2711, in all
+    return self._iter().all()  # type: ignore
+           ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 1799, in all
+    return self._allrows()
+           ~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 560, in _allrows
+    rows = self._fetchall_impl()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 1706, in _fetchall_impl
+    return self._real_result._fetchall_impl()
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 2310, in _fetchall_impl
+    return list(self.iterator)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\loading.py", line 220, in chunks
+    fetch = cursor._raw_all_rows()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 552, in _raw_all_rows
+    rows = self._fetchall_impl()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 2257, in _fetchall_impl
+    return self.cursor_strategy.fetchall(self, self.cursor)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 1201, in fetchall
+    self.handle_exception(result, dbapi_cursor, e)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 1145, in handle_exception
+    result.connection._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, None, None, dbapi_cursor, result.context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 1197, in fetchall
+    rows = dbapi_cursor.fetchall()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\cursor.py", line 968, in fetchall
+    row = fetch_next_row(self)
+  File "src/oracledb/impl/base/cursor.pyx", line 576, in oracledb.base_impl.BaseCursorImpl.fetch_next_row
+  File "src/oracledb/impl/thin/cursor.pyx", line 268, in oracledb.thin_impl.ThinCursorImpl._fetch_rows
+  File "src/oracledb/impl/thin/protocol.pyx", line 501, in oracledb.thin_impl.Protocol._process_single_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 502, in oracledb.thin_impl.Protocol._process_single_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 470, in oracledb.thin_impl.Protocol._process_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 446, in oracledb.thin_impl.Protocol._process_message
+  File "src/oracledb/impl/thin/messages/base.pyx", line 790, in oracledb.thin_impl.Message.process
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1263, in oracledb.thin_impl.MessageWithData._process_message
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1349, in oracledb.thin_impl.MessageWithData._process_row_data
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1101, in oracledb.thin_impl.MessageWithData._process_column_data
+  File "src/oracledb/impl/base/buffer.pyx", line 171, in oracledb.base_impl.Buffer.read_oracle_data
+  File "src/oracledb/impl/base/buffer.pyx", line 276, in oracledb.base_impl.Buffer.read_raw_bytes_and_length
+  File "src/oracledb/impl/thin/packet.pyx", line 388, in oracledb.thin_impl.ReadBuffer._read_raw_bytes_and_length
+  File "src/oracledb/impl/thin/packet.pyx", line 311, in oracledb.thin_impl.ReadBuffer._get_raw
+  File "src/oracledb/impl/thin/packet.pyx", line 728, in oracledb.thin_impl.ReadBuffer.wait_for_packets_sync
+  File "src/oracledb/impl/thin/transport.pyx", line 350, in oracledb.thin_impl.Transport.read_packet
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\errors.py", line 199, in _raise_err
+    raise error.exc_type(error) from cause
+sqlalchemy.exc.DatabaseError: (oracledb.exceptions.DatabaseError) DPY-4011: the database or network closed the connection
+[WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+Help: https://python-oracledb.readthedocs.io/en/latest/user_guide/troubleshooting.html#dpy-4011
+(Background on this error at: https://sqlalche.me/e/20/4xp6)
+2026-06-16 18:34:04,294 ERROR: Traceback (most recent call last):
+  File "src/oracledb/impl/thin/transport.pyx", line 345, in oracledb.thin_impl.Transport.read_packet
+ConnectionResetError: [WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 1197, in fetchall
+    rows = dbapi_cursor.fetchall()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\cursor.py", line 968, in fetchall
+    row = fetch_next_row(self)
+  File "src/oracledb/impl/base/cursor.pyx", line 576, in oracledb.base_impl.BaseCursorImpl.fetch_next_row
+  File "src/oracledb/impl/thin/cursor.pyx", line 268, in oracledb.thin_impl.ThinCursorImpl._fetch_rows
+  File "src/oracledb/impl/thin/protocol.pyx", line 501, in oracledb.thin_impl.Protocol._process_single_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 502, in oracledb.thin_impl.Protocol._process_single_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 470, in oracledb.thin_impl.Protocol._process_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 446, in oracledb.thin_impl.Protocol._process_message
+  File "src/oracledb/impl/thin/messages/base.pyx", line 790, in oracledb.thin_impl.Message.process
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1263, in oracledb.thin_impl.MessageWithData._process_message
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1349, in oracledb.thin_impl.MessageWithData._process_row_data
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1101, in oracledb.thin_impl.MessageWithData._process_column_data
+  File "src/oracledb/impl/base/buffer.pyx", line 171, in oracledb.base_impl.Buffer.read_oracle_data
+  File "src/oracledb/impl/base/buffer.pyx", line 276, in oracledb.base_impl.Buffer.read_raw_bytes_and_length
+  File "src/oracledb/impl/thin/packet.pyx", line 388, in oracledb.thin_impl.ReadBuffer._read_raw_bytes_and_length
+  File "src/oracledb/impl/thin/packet.pyx", line 311, in oracledb.thin_impl.ReadBuffer._get_raw
+  File "src/oracledb/impl/thin/packet.pyx", line 728, in oracledb.thin_impl.ReadBuffer.wait_for_packets_sync
+  File "src/oracledb/impl/thin/transport.pyx", line 350, in oracledb.thin_impl.Transport.read_packet
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\errors.py", line 199, in _raise_err
+    raise error.exc_type(error) from cause
+oracledb.exceptions.DatabaseError: DPY-4011: the database or network closed the connection
+[WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+Help: https://python-oracledb.readthedocs.io/en/latest/user_guide/troubleshooting.html#dpy-4011
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\app.py", line 1729, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\app.py", line 4447, in api_ancs_site
+    ancs = q.order_by(ANC.id.desc()).limit(200).all()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\query.py", line 2711, in all
+    return self._iter().all()  # type: ignore
+           ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 1799, in all
+    return self._allrows()
+           ~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 560, in _allrows
+    rows = self._fetchall_impl()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 1706, in _fetchall_impl
+    return self._real_result._fetchall_impl()
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 2310, in _fetchall_impl
+    return list(self.iterator)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\loading.py", line 220, in chunks
+    fetch = cursor._raw_all_rows()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\result.py", line 552, in _raw_all_rows
+    rows = self._fetchall_impl()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 2257, in _fetchall_impl
+    return self.cursor_strategy.fetchall(self, self.cursor)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 1201, in fetchall
+    self.handle_exception(result, dbapi_cursor, e)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 1145, in handle_exception
+    result.connection._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, None, None, dbapi_cursor, result.context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\cursor.py", line 1197, in fetchall
+    rows = dbapi_cursor.fetchall()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\cursor.py", line 968, in fetchall
+    row = fetch_next_row(self)
+  File "src/oracledb/impl/base/cursor.pyx", line 576, in oracledb.base_impl.BaseCursorImpl.fetch_next_row
+  File "src/oracledb/impl/thin/cursor.pyx", line 268, in oracledb.thin_impl.ThinCursorImpl._fetch_rows
+  File "src/oracledb/impl/thin/protocol.pyx", line 501, in oracledb.thin_impl.Protocol._process_single_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 502, in oracledb.thin_impl.Protocol._process_single_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 470, in oracledb.thin_impl.Protocol._process_message
+  File "src/oracledb/impl/thin/protocol.pyx", line 446, in oracledb.thin_impl.Protocol._process_message
+  File "src/oracledb/impl/thin/messages/base.pyx", line 790, in oracledb.thin_impl.Message.process
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1263, in oracledb.thin_impl.MessageWithData._process_message
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1349, in oracledb.thin_impl.MessageWithData._process_row_data
+  File "src/oracledb/impl/thin/messages/base.pyx", line 1101, in oracledb.thin_impl.MessageWithData._process_column_data
+  File "src/oracledb/impl/base/buffer.pyx", line 171, in oracledb.base_impl.Buffer.read_oracle_data
+  File "src/oracledb/impl/base/buffer.pyx", line 276, in oracledb.base_impl.Buffer.read_raw_bytes_and_length
+  File "src/oracledb/impl/thin/packet.pyx", line 388, in oracledb.thin_impl.ReadBuffer._read_raw_bytes_and_length
+  File "src/oracledb/impl/thin/packet.pyx", line 311, in oracledb.thin_impl.ReadBuffer._get_raw
+  File "src/oracledb/impl/thin/packet.pyx", line 728, in oracledb.thin_impl.ReadBuffer.wait_for_packets_sync
+  File "src/oracledb/impl/thin/transport.pyx", line 350, in oracledb.thin_impl.Transport.read_packet
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\errors.py", line 199, in _raise_err
+    raise error.exc_type(error) from cause
+sqlalchemy.exc.DatabaseError: (oracledb.exceptions.DatabaseError) DPY-4011: the database or network closed the connection
+[WinError 10054] Foi forçado o cancelamento de uma conexão existente pelo host remoto
+Help: https://python-oracledb.readthedocs.io/en/latest/user_guide/troubleshooting.html#dpy-4011
+(Background on this error at: https://sqlalche.me/e/20/4xp6)
+
+2026-06-16 18:34:04,318 ERROR: Exception on /api/ancs-site [GET]
+Traceback (most recent call last):
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\app.py", line 1729, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\app.py", line 4447, in api_ancs_site
+    ancs = q.order_by(ANC.id.desc()).limit(200).all()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\query.py", line 2711, in all
+    return self._iter().all()  # type: ignore
+           ~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\query.py", line 2864, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+        params,
+        ^^^^^^^
+        execution_options={"_sa_orm_load_options": self.load_options},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2351, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2239, in _execute_internal
+    conn = self._connection_for_bind(bind)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2108, in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 2, in _connection_for_bind
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1187, in _connection_for_bind
+    conn = bind.connect()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3293, in connect
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 143, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3317, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 448, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 1272, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 717, in checkout
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 715, in checkout
+    dbapi_connection = rec.get_connection()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 866, in get_connection
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\create.py", line 667, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\default.py", line 630, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\connection.py", line 1768, in connect
+    return conn_class(dsn=dsn, pool=pool, params=params, **kwargs)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\connection.py", line 892, in __init__
+    impl.connect(params_impl)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "src/oracledb/impl/thin/connection.pyx", line 544, in oracledb.thin_impl.ThinConnImpl.connect
+  File "src/oracledb/impl/thin/connection.pyx", line 540, in oracledb.thin_impl.ThinConnImpl.connect
+  File "src/oracledb/impl/thin/connection.pyx", line 478, in oracledb.thin_impl.ThinConnImpl._connect_with_params
+  File "src/oracledb/impl/base/connect_params.pyx", line 1061, in oracledb.base_impl.DescriptionList.set_active_children
+  File "src/oracledb/impl/base/connect_params.pyx", line 623, in oracledb.base_impl.ConnectParamsNode._set_active_children
+  File "src/oracledb/impl/base/connect_params.pyx", line 623, in oracledb.base_impl.ConnectParamsNode._set_active_children
+  File "src/oracledb/impl/base/connect_params.pyx", line 744, in oracledb.base_impl.AddressList._set_active_children
+  File "src/oracledb/impl/base/connect_params.pyx", line 690, in oracledb.base_impl.Address.resolve_host_name
+  File "C:\Users\deivimar\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 987, in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+socket.gaierror: [Errno 11001] getaddrinfo failed
+2026-06-16 18:34:04,372 ERROR: Traceback (most recent call last):
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\app.py", line 1729, in wrapper
+    return func(*args, **kwargs)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\app.py", line 4447, in api_ancs_site
+    ancs = q.order_by(ANC.id.desc()).limit(200).all()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\query.py", line 2711, in all
+    return self._iter().all()  # type: ignore
+           ~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\query.py", line 2864, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+        params,
+        ^^^^^^^
+        execution_options={"_sa_orm_load_options": self.load_options},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2351, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2239, in _execute_internal
+    conn = self._connection_for_bind(bind)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2108, in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 2, in _connection_for_bind
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1187, in _connection_for_bind
+    conn = bind.connect()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3293, in connect
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 143, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\base.py", line 3317, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 448, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 1272, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 717, in checkout
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 715, in checkout
+    dbapi_connection = rec.get_connection()
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 866, in get_connection
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 121, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\pool\base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\create.py", line 667, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\sqlalchemy\engine\default.py", line 630, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\connection.py", line 1768, in connect
+    return conn_class(dsn=dsn, pool=pool, params=params, **kwargs)
+  File "C:\Users\deivimar\OneDrive - DPDHL\Documents\GitHub\controle_ocorrencias\venv\Lib\site-packages\oracledb\connection.py", line 892, in __init__
+    impl.connect(params_impl)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "src/oracledb/impl/thin/connection.pyx", line 544, in oracledb.thin_impl.ThinConnImpl.connect
+  File "src/oracledb/impl/thin/connection.pyx", line 540, in oracledb.thin_impl.ThinConnImpl.connect
+  File "src/oracledb/impl/thin/connection.pyx", line 478, in oracledb.thin_impl.ThinConnImpl._connect_with_params
+  File "src/oracledb/impl/base/connect_params.pyx", line 1061, in oracledb.base_impl.DescriptionList.set_active_children
+  File "src/oracledb/impl/base/connect_params.pyx", line 623, in oracledb.base_impl.ConnectParamsNode._set_active_children
+  File "src/oracledb/impl/base/connect_params.pyx", line 623, in oracledb.base_impl.ConnectParamsNode._set_active_children
+  File "src/oracledb/impl/base/connect_params.pyx", line 744, in oracledb.base_impl.AddressList._set_active_children
+  File "src/oracledb/impl/base/connect_params.pyx", line 690, in oracledb.base_impl.Address.resolve_host_name
+  File "C:\Users\deivimar\AppData\Local\Programs\Python\Python314\Lib\socket.py", line 987, in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+socket.gaierror: [Errno 11001] getaddrinfo failed
+
+2026-06-23 19:07:17,698 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5050
+2026-06-23 19:07:17,698 INFO: [33mPress CTRL+C to quit[0m
+2026-06-23 19:07:19,489 INFO: 127.0.0.1 - - [23/Jun/2026 19:07:19] "[32mGET /admin/usuarios-ativos HTTP/1.1[0m" 302 -
+2026-06-23 19:12:38,516 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-06-23 19:12:38,517 INFO: [33mPress CTRL+C to quit[0m
+2026-06-23 19:13:27,745 INFO: 127.0.0.1 - - [23/Jun/2026 19:13:27] "[32mGET / HTTP/1.1[0m" 302 -
+2026-06-23 19:13:27,920 INFO: 127.0.0.1 - - [23/Jun/2026 19:13:27] "[32mGET / HTTP/1.1[0m" 302 -
+2026-06-23 19:13:31,753 INFO: 127.0.0.1 - - [23/Jun/2026 19:13:31] "GET /login HTTP/1.1" 200 -
+2026-06-23 19:13:32,310 INFO: 127.0.0.1 - - [23/Jun/2026 19:13:32] "GET /login HTTP/1.1" 200 -
+2026-06-23 19:13:32,399 INFO: 127.0.0.1 - - [23/Jun/2026 19:13:32] "GET /static/shared%20image%20(1).png HTTP/1.1" 200 -
+2026-06-23 19:13:32,411 INFO: 127.0.0.1 - - [23/Jun/2026 19:13:32] "GET /static/panel.js HTTP/1.1" 200 -
+2026-06-23 19:13:54,621 INFO: 127.0.0.1 - - [23/Jun/2026 19:13:54] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-06-23 19:14:01,776 INFO: 127.0.0.1 - - [23/Jun/2026 19:14:01] "GET /ocorrencias HTTP/1.1" 200 -
+2026-06-23 19:14:01,811 INFO: 127.0.0.1 - - [23/Jun/2026 19:14:01] "GET /static/htmx.min.js HTTP/1.1" 200 -
+2026-06-23 19:14:01,814 INFO: 127.0.0.1 - - [23/Jun/2026 19:14:01] "GET /static/filters.js HTTP/1.1" 200 -
+2026-06-23 19:14:01,815 INFO: 127.0.0.1 - - [23/Jun/2026 19:14:01] "GET /static/table-paginate.js HTTP/1.1" 200 -
+2026-06-23 19:14:01,815 INFO: 127.0.0.1 - - [23/Jun/2026 19:14:01] "GET /static/img-compress.js HTTP/1.1" 200 -
+2026-06-23 19:14:01,816 INFO: 127.0.0.1 - - [23/Jun/2026 19:14:01] "GET /static/shared%20image.png HTTP/1.1" 200 -
+2026-06-23 19:14:07,741 INFO: 127.0.0.1 - - [23/Jun/2026 19:14:07] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-23 19:14:12,225 INFO: 127.0.0.1 - - [23/Jun/2026 19:14:12] "GET /admin/usuarios HTTP/1.1" 200 -
+2026-06-25 15:32:28,971 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-06-25 15:32:28,972 INFO: [33mPress CTRL+C to quit[0m
+2026-06-25 15:32:40,842 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:40] "[32mGET / HTTP/1.1[0m" 302 -
+2026-06-25 15:32:41,699 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:41] "[32mGET / HTTP/1.1[0m" 302 -
+2026-06-25 15:32:51,871 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:51] "GET /ocorrencias HTTP/1.1" 200 -
+2026-06-25 15:32:51,975 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:51] "GET /ocorrencias HTTP/1.1" 200 -
+2026-06-25 15:32:52,002 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:52] "GET /static/panel.js HTTP/1.1" 200 -
+2026-06-25 15:32:52,003 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:52] "GET /static/htmx.min.js HTTP/1.1" 200 -
+2026-06-25 15:32:52,006 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:52] "GET /static/filters.js HTTP/1.1" 200 -
+2026-06-25 15:32:52,020 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:52] "GET /static/shared%20image.png HTTP/1.1" 200 -
+2026-06-25 15:32:52,020 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:52] "GET /static/img-compress.js HTTP/1.1" 200 -
+2026-06-25 15:32:52,020 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:52] "GET /static/table-paginate.js HTTP/1.1" 200 -
+2026-06-25 15:32:56,549 INFO: 127.0.0.1 - - [25/Jun/2026 15:32:56] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-06-25 15:33:09,009 INFO: 127.0.0.1 - - [25/Jun/2026 15:33:09] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:33:34,583 INFO: 127.0.0.1 - - [25/Jun/2026 15:33:34] "GET /chaves/meu-claviculario HTTP/1.1" 200 -
+2026-06-25 15:33:38,080 INFO: 127.0.0.1 - - [25/Jun/2026 15:33:38] "GET /chaves/realizar-devolucao HTTP/1.1" 200 -
+2026-06-25 15:33:56,017 INFO: 127.0.0.1 - - [25/Jun/2026 15:33:56] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-25 15:34:35,358 INFO: 127.0.0.1 - - [25/Jun/2026 15:34:35] "GET /ocorrencias HTTP/1.1" 200 -
+2026-06-25 15:34:53,658 INFO: 127.0.0.1 - - [25/Jun/2026 15:34:53] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:35:54,538 INFO: 127.0.0.1 - - [25/Jun/2026 15:35:54] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-25 15:39:01,177 INFO: 127.0.0.1 - - [25/Jun/2026 15:39:01] "[32mGET / HTTP/1.1[0m" 302 -
+2026-06-25 15:39:02,432 INFO: 127.0.0.1 - - [25/Jun/2026 15:39:02] "GET /login HTTP/1.1" 200 -
+2026-06-25 15:39:02,962 INFO: 127.0.0.1 - - [25/Jun/2026 15:39:02] "GET /static/shared%20image%20(1).png HTTP/1.1" 200 -
+2026-06-25 15:39:02,966 INFO: 127.0.0.1 - - [25/Jun/2026 15:39:02] "GET /static/panel.js HTTP/1.1" 200 -
+2026-06-25 15:39:06,098 INFO: 127.0.0.1 - - [25/Jun/2026 15:39:06] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-06-25 15:45:56,246 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-06-25 15:45:56,247 INFO: [33mPress CTRL+C to quit[0m
+2026-06-25 15:46:08,636 INFO: 127.0.0.1 - - [25/Jun/2026 15:46:08] "GET /ocorrencias?data_inicial=2026-05-25&data_final=&natureza=&operador=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:46:31,906 INFO: 127.0.0.1 - - [25/Jun/2026 15:46:31] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:46:45,245 INFO: 127.0.0.1 - - [25/Jun/2026 15:46:45] "GET /ocorrencias?data_inicial=2026-05-06&data_final=&natureza=&operador=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:46:59,130 INFO: 127.0.0.1 - - [25/Jun/2026 15:46:59] "GET /ocorrencias?data_inicial=2026-05-06&data_final=2026-07-25&natureza=&operador=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:47:08,664 INFO: 127.0.0.1 - - [25/Jun/2026 15:47:08] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:47:10,183 INFO: 127.0.0.1 - - [25/Jun/2026 15:47:10] "GET /ocorrencias?data_inicial=2026-05-06&data_final=2026-06-25&natureza=&operador=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:47:22,125 INFO: 127.0.0.1 - - [25/Jun/2026 15:47:22] "GET /ocorrencias?data_inicial=2026-05-06&data_final=2026-06-13&natureza=&operador=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:47:23,157 INFO: 127.0.0.1 - - [25/Jun/2026 15:47:23] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:47:34,875 INFO: 127.0.0.1 - - [25/Jun/2026 15:47:34] "GET /ocorrencias?data_inicial=2026-05-06&data_final=2026-06-06&natureza=&operador=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:47:49,569 INFO: 127.0.0.1 - - [25/Jun/2026 15:47:49] "GET /ocorrencias?data_inicial=2026-05-06&data_final=2026-06-06&natureza=&operador=&status=&site_filtro=SHEIN+-+GUARULHOS HTTP/1.1" 200 -
+2026-06-25 15:47:58,309 INFO: 127.0.0.1 - - [25/Jun/2026 15:47:58] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:48:25,651 INFO: 127.0.0.1 - - [25/Jun/2026 15:48:25] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:48:39,154 INFO: 127.0.0.1 - - [25/Jun/2026 15:48:39] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:48:45,915 INFO: 127.0.0.1 - - [25/Jun/2026 15:48:45] "GET /api/analises-site HTTP/1.1" 200 -
+2026-06-25 15:49:32,387 INFO: 127.0.0.1 - - [25/Jun/2026 15:49:32] "GET /nova-investigacao HTTP/1.1" 200 -
+2026-06-25 15:49:42,829 INFO: 127.0.0.1 - - [25/Jun/2026 15:49:42] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-25 15:50:03,442 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:03] "GET /dashboard HTTP/1.1" 200 -
+2026-06-25 15:50:03,557 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:03] "GET /static/chartjs-plugin-datalabels.min.js HTTP/1.1" 200 -
+2026-06-25 15:50:03,564 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:03] "GET /static/chart.umd.min.js HTTP/1.1" 200 -
+2026-06-25 15:50:16,941 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:16] "GET /dashboard?data_inicial=2026-05-25&data_final=&local=&natureza=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:50:16,966 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:16] "[36mGET /static/chart.umd.min.js HTTP/1.1[0m" 304 -
+2026-06-25 15:50:16,969 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:16] "[36mGET /static/chartjs-plugin-datalabels.min.js HTTP/1.1[0m" 304 -
+2026-06-25 15:50:23,455 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:23] "GET /dashboard?data_inicial=2026-04-25&data_final=&local=&natureza=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:50:27,296 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:27] "GET /dashboard?data_inicial=2026-05-25&data_final=&local=&natureza=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:50:32,830 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:32] "GET /dashboard?data_inicial=2026-05-06&data_final=&local=&natureza=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:50:39,190 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:39] "GET /dashboard?data_inicial=2026-05-06&data_final=2026-06-06&local=&natureza=&status=&site_filtro= HTTP/1.1" 200 -
+2026-06-25 15:50:43,920 INFO: 127.0.0.1 - - [25/Jun/2026 15:50:43] "GET /dashboard?data_inicial=2026-05-06&data_final=2026-06-06&local=&natureza=&status=&site_filtro=SHEIN+-+GUARULHOS HTTP/1.1" 200 -
+2026-06-25 15:53:24,005 INFO: 127.0.0.1 - - [25/Jun/2026 15:53:24] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-25 15:53:37,705 INFO: 127.0.0.1 - - [25/Jun/2026 15:53:37] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-25 15:53:39,023 INFO: 127.0.0.1 - - [25/Jun/2026 15:53:39] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-25 15:53:40,214 INFO: 127.0.0.1 - - [25/Jun/2026 15:53:40] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-25 15:53:45,158 INFO: 127.0.0.1 - - [25/Jun/2026 15:53:45] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-25 15:53:57,010 INFO: 127.0.0.1 - - [25/Jun/2026 15:53:57] "GET /api/ancs-site HTTP/1.1" 200 -
+2026-06-26 10:43:34,329 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on https://127.0.0.1:5000
+ * Running on https://7.9.61.135:5000
+2026-06-26 10:43:34,330 INFO: [33mPress CTRL+C to quit[0m
+2026-06-26 10:44:19,130 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on https://127.0.0.1:5000
+ * Running on https://7.9.61.135:5000
+2026-06-26 10:44:19,131 INFO: [33mPress CTRL+C to quit[0m
+2026-06-26 10:45:29,840 INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on https://127.0.0.1:5443
+ * Running on https://7.9.61.135:5443
+2026-06-26 10:45:29,841 INFO: [33mPress CTRL+C to quit[0m
+2026-06-26 10:45:48,733 INFO: 127.0.0.1 - - [26/Jun/2026 10:45:48] "GET /login HTTP/1.1" 200 -
+2026-06-26 10:46:18,533 INFO: 7.9.61.135 - - [26/Jun/2026 10:46:18] "GET /login HTTP/1.1" 200 -

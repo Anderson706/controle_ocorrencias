@@ -3,7 +3,7 @@
 {% block topbar_title %}✍️ Assinar Recebimento de Turno{% endblock %}
 {% block topbar_subtitle %}Passagem #{{ ocorrencia.id }} — {{ ocorrencia.turno }} | {{ ocorrencia.site }}{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('sh_index') }}" class="btn btn-soft btn-sm">← Voltar</a>
+  <a href="{{ url_for('sh_controle') }}" class="btn btn-soft btn-sm">← Voltar</a>
 {% endblock %}
 
 {% block page_content %}
@@ -112,7 +112,7 @@
 
     <div class="actions" style="margin-top:18px;">
       <button type="submit" class="btn btn-yellow" id="btn-confirmar" onclick="return validarSig()">✔ Confirmar Recebimento</button>
-      <a href="{{ url_for('sh_index') }}" class="btn btn-soft">Cancelar</a>
+      <a href="{{ url_for('sh_controle') }}" class="btn btn-soft">Cancelar</a>
     </div>
   </form>
 </div>

@@ -1,0 +1,203 @@
+{% extends "base_app.html" %}
+{% block page_title %}Controle de Ativos | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🏷️ Controle de Ativos — Colaboradores{% endblock %}
+{% block topbar_subtitle %}Redundância web do app de Ativos — mesmos dados (Supabase){% endblock %}
+{% block topbar_actions %}{% endblock %}
+
+{% block page_content %}
+<style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+
+  .info-box{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:12px 16px; font-size:13px; color:#1e40af; margin-bottom:16px; }
+  .bar{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .bar form{ display:flex; gap:8px; align-items:center; }
+  .bar input{ padding:9px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:13px; min-width:240px; }
+
+  .table-wrap{ background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.04); }
+  .table-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .table-head h3{ font-size:15px; font-weight:900; margin:0; }
+  table{ width:100%; border-collapse:collapse; }
+  th{ padding:11px 16px; text-align:left; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; background:#f9fafb; border-bottom:1px solid var(--line); }
+  td{ padding:12px 16px; border-bottom:1px solid var(--line); font-size:13px; vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  tr:hover td{ background:#fafafa; }
+
+  .badge{ display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:.3px; }
+  .b-ativo{ background:#f0fdf4; color:#166534; }
+  .b-inativo{ background:#fef2f2; color:#991b1b; }
+  .actions{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px; }
+  .field input,.field select{ width:100%; padding:11px 13px; border:1px solid #d1d5db; border-radius:10px; font-size:14px; font-family:inherit; background:#fafbfc; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-bottom:16px; }
+  .kpi-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; box-shadow:0 2px 8px rgba(0,0,0,.04); display:flex; align-items:center; gap:14px; }
+  .kpi-icon{ width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+  .kpi-card .n{ font-size:26px; font-weight:900; color:var(--text); line-height:1; }
+  .kpi-card .l{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:5px; }
+  @media(max-width:760px){ .kpi-grid{ grid-template-columns:1fr; } }
+</style>
+
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:#fff1f2;color:#b1030d">👥</div>
+    <div><div class="n">{{ kpis.colaboradores }}</div><div class="l">Colaboradores cadastrados</div></div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:#eff6ff;color:#1e40af">💻</div>
+    <div><div class="n">{{ kpis.ativos }}</div><div class="l">Ativos cadastrados</div></div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:#f0fdf4;color:#166534">🌐</div>
+    <div><div class="n">{{ kpis.sites }}</div><div class="l">Sites com usuários</div></div>
+  </div>
+</div>
+
+<div class="info-box">ℹ️ Estes dados vivem no <strong>Supabase</strong> (mesmo banco do app Controle de Ativos). Alterações aqui refletem lá e vice-versa. {% if not pode_gerir %}Você está em modo <strong>leitura</strong> — vê apenas o seu site ({{ site_usuario or '—' }}).{% endif %}</div>
+
+<div class="bar">
+  <form method="GET" action="{{ url_for('ativos.colaboradores') }}">
+    <input type="text" name="busca" value="{{ busca }}" placeholder="🔍 Nome, CPF, matrícula ou empresa...">
+    <button type="submit" class="btn btn-red btn-sm">Buscar</button>
+    {% if busca %}<a href="{{ url_for('ativos.colaboradores') }}" class="btn btn-soft btn-sm">Limpar</a>{% endif %}
+  </form>
+  {% if pode_gerir %}<button class="btn btn-red btn-sm" style="margin-left:auto" onclick="abrirNovo()">+ Novo colaborador</button>{% endif %}
+</div>
+
+<div class="table-wrap">
+  <div class="table-head"><h3>{{ colaboradores|length }} colaborador(es)</h3></div>
+  <table>
+    <thead><tr><th>Nome</th><th>CPF</th><th>Matrícula</th><th>Empresa</th><th>Site</th><th>Status</th><th>Ações</th></tr></thead>
+    <tbody>
+      {% for c in colaboradores %}
+      <tr>
+        <td><strong>{{ c.nome_completo }}</strong></td>
+        <td>{{ c.cpf or '—' }}</td>
+        <td>{{ c.matricula or '—' }}</td>
+        <td style="color:var(--muted)">{{ c.empresa or '—' }}</td>
+        <td style="color:var(--muted)">{{ c.site or '—' }}</td>
+        <td>{% if (c.status or '')|upper == 'ATIVO' %}<span class="badge b-ativo">ATIVO</span>{% else %}<span class="badge b-inativo">INATIVO</span>{% endif %}</td>
+        <td>
+          <div class="actions">
+            <a href="{{ url_for('ativos.equipamentos', cid=c.id) }}" class="btn btn-sm btn-soft" title="Equipamentos">💻</a>
+            {% if pode_gerir %}
+            <button class="btn btn-sm btn-soft" title="Editar" onclick='abrirEditar({{ c.id }})'>✏️</button>
+            {% if (c.status or '')|upper == 'ATIVO' %}
+            <button class="btn btn-sm btn-soft" title="Revogar acesso"
+              onclick="confirmar('Revogar acesso','Tornar <strong>{{ c.nome_completo }}</strong> INATIVO?','{{ url_for('ativos.colaborador_status', cid=c.id) }}','INATIVO','🚫 Revogar','btn-red')">🚫</button>
+            {% else %}
+            <button class="btn btn-sm btn-soft" title="Restaurar acesso"
+              onclick="confirmar('Restaurar acesso','Tornar <strong>{{ c.nome_completo }}</strong> ATIVO?','{{ url_for('ativos.colaborador_status', cid=c.id) }}','ATIVO','✓ Restaurar','btn-red')">♻️</button>
+            {% endif %}
+            <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b" title="Excluir"
+              onclick="confirmarDel('⚠️ Excluir <strong>{{ c.nome_completo }}</strong> e todos os equipamentos vinculados? Não pode ser desfeito.','{{ url_for('ativos.colaborador_excluir', cid=c.id) }}')">🗑</button>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Nenhum colaborador encontrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block modals %}
+{% if pode_gerir %}
+<div class="modal-overlay" id="modal-colab">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:520px">
+    <div class="modal-head"><h3 id="mc-title">Novo colaborador</h3><button class="modal-close" onclick="fechar('modal-colab')">✕</button></div>
+    <div class="modal-body">
+      <form id="form-colab" method="POST" hx-boost="false" onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+        <div class="field"><label>Nome completo *</label><input type="text" name="nome_completo" id="mc-nome" required></div>
+        <div class="grid2">
+          <div class="field"><label>CPF *</label><input type="text" name="cpf" id="mc-cpf" maxlength="14" required></div>
+          <div class="field"><label>Matrícula</label><input type="text" name="matricula" id="mc-mat"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Empresa</label><input type="text" name="empresa" id="mc-emp"></div>
+          <div class="field"><label>Cargo</label><input type="text" name="cargo" id="mc-cargo"></div>
+        </div>
+        <div class="field"><label>Site *</label>
+          <select name="site" id="mc-site" required>
+            <option value="" disabled selected>Selecione...</option>
+            {% for s in sites %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+          <button type="button" class="btn btn-soft btn-sm" onclick="fechar('modal-colab')">Cancelar</button>
+          <button type="submit" class="btn btn-red btn-sm">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:520px">
+    <div class="modal-head"><h3 id="cf-title">Confirmar</h3><button class="modal-close" onclick="fechar('modal-confirm')">✕</button></div>
+    <div class="modal-body">
+      <p id="cf-msg"></p>
+      <form id="cf-form" method="POST" hx-boost="false" onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+        <input type="hidden" name="status" id="cf-status">
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+          <button type="button" class="btn btn-soft btn-sm" onclick="fechar('modal-confirm')">Cancelar</button>
+          <button type="submit" id="cf-btn" class="btn btn-sm btn-red">Confirmar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+{% if pode_gerir %}
+<script>
+const COLABS = {{ colaboradores|tojson }};
+const URL_NOVO = "{{ url_for('ativos.colaborador_novo') }}";
+const URL_EDIT_BASE = "{{ url_for('ativos.colaborador_editar', cid=0) }}";
+
+function fechar(id){ document.getElementById(id).classList.remove('open'); }
+function abrir(id){ document.getElementById(id).classList.add('open'); }
+
+function abrirNovo(){
+  const f = document.getElementById('form-colab');
+  f.reset(); f.action = URL_NOVO;
+  document.getElementById('mc-title').textContent = 'Novo colaborador';
+  abrir('modal-colab');
+}
+function abrirEditar(id){
+  const c = COLABS.find(x => x.id === id); if(!c) return;
+  const f = document.getElementById('form-colab');
+  f.action = URL_EDIT_BASE.replace(/0$/, id);
+  document.getElementById('mc-title').textContent = 'Editar colaborador';
+  document.getElementById('mc-nome').value  = c.nome_completo || '';
+  document.getElementById('mc-cpf').value   = c.cpf || '';
+  document.getElementById('mc-mat').value   = c.matricula || '';
+  document.getElementById('mc-emp').value   = c.empresa || '';
+  document.getElementById('mc-cargo').value = c.cargo || '';
+  document.getElementById('mc-site').value  = c.site || '';
+  abrir('modal-colab');
+}
+function confirmar(titulo, msg, action, status, label, cls){
+  document.getElementById('cf-title').textContent = titulo;
+  document.getElementById('cf-msg').innerHTML = msg;
+  const f = document.getElementById('cf-form'); f.action = action;
+  document.getElementById('cf-status').value = status || '';
+  const b = document.getElementById('cf-btn'); b.textContent = label; b.className = 'btn btn-sm ' + cls;
+  abrir('modal-confirm');
+}
+function confirmarDel(msg, action){ confirmar('Excluir', msg, action, '', '🗑 Excluir', 'btn-red'); }
+
+document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if(e.target===o) o.classList.remove('open'); }));
+document.addEventListener('keydown', e => { if(e.key==='Escape') document.querySelectorAll('.modal-overlay').forEach(o=>o.classList.remove('open')); });
+</script>
+{% endif %}
+{% endblock %}

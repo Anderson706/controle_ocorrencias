@@ -45,9 +45,10 @@ class Api:
 
         ext = os.path.splitext(filename)[1].lower() or ".bin"
         tipos = {
-            ".pdf":  [("PDF",   "*.pdf"),  ("Todos os arquivos", "*.*")],
-            ".xlsx": [("Excel", "*.xlsx"), ("Todos os arquivos", "*.*")],
-            ".docx": [("Word",  "*.docx"), ("Todos os arquivos", "*.*")],
+            ".pdf":  [("PDF",        "*.pdf"),  ("Todos os arquivos", "*.*")],
+            ".xlsx": [("Excel",      "*.xlsx"), ("Todos os arquivos", "*.*")],
+            ".docx": [("Word",       "*.docx"), ("Todos os arquivos", "*.*")],
+            ".pptx": [("PowerPoint", "*.pptx"), ("Todos os arquivos", "*.*")],
         }
         filetypes = tipos.get(ext, [("Todos os arquivos", "*.*")])
 
@@ -128,23 +129,53 @@ _DOWNLOAD_JS = r"""
 """
 
 
+# ── Cronometragem de inicialização (grava num log p/ diagnóstico) ─────────────
+def _startup_log_path():
+    try:
+        if getattr(sys, 'frozen', False):
+            d = os.path.dirname(sys.executable)
+            if os.path.basename(d).lower() == "app":
+                d = os.path.dirname(d)   # install root (sobrevive a updates)
+            return os.path.join(d, "startup_timing.log")
+    except Exception:
+        pass
+    return os.path.join(BASE_DIR, "startup_timing.log")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    _t0 = time.time()
+    _marcas = []
+    def _marca(nome):
+        _marcas.append((nome, time.time() - _t0))
+
     # 1. Inicia Flask em background (carrega app.py lá dentro)
     threading.Thread(target=_run_flask, daemon=True).start()
+    _marca("flask_thread_iniciada")
 
     # 2. Enquanto Flask carrega app.py, carregamos webview aqui em paralelo
     #    (webview/CLR é pesado — ~5-10s — e agora sobrepõe com o import do Flask)
     import webview
+    _marca("webview_importado")
 
     # 3. Aguarda Flask estar pronto (provavelmente já está)
     _aguardar_flask()
+    _marca("flask_pronto")
 
-    # 4. Migrações de schema — fire-and-forget em daemon thread.
-    #    Não bloqueamos a thread principal: o app abre imediatamente após o Flask subir.
-    #    As migrações são todas idempotentes (try/except), então rodam sem risco em background.
+    # 4. Migrações de schema — síncrono antes de abrir a janela. Com marcador local,
+    #    no caso comum NÃO toca no banco (zero round-trip Oracle via VPN).
     from app import _init_db
-    threading.Thread(target=_init_db, daemon=True).start()
+    _init_db()
+    _marca("init_db")
+
+    # Grava o log de tempos (ajuda a diagnosticar lentidão de startup)
+    try:
+        from datetime import datetime as _dt
+        with open(_startup_log_path(), "a", encoding="utf-8") as _lf:
+            _lf.write(_dt.now().strftime("%Y-%m-%d %H:%M:%S") + "  ")
+            _lf.write("  ".join(f"{n}={d:.2f}s" for n, d in _marcas) + "\n")
+    except Exception:
+        pass
 
     # 5. Fecha o splash nativo do PyInstaller
     try:
@@ -170,6 +201,13 @@ def main():
 
     def on_loaded():
         window.evaluate_js(_DOWNLOAD_JS)
+        try:
+            from datetime import datetime as _dt
+            with open(_startup_log_path(), "a", encoding="utf-8") as _lf:
+                _lf.write(_dt.now().strftime("%Y-%m-%d %H:%M:%S") +
+                          f"  janela_carregada={time.time() - _t0:.2f}s (total ate a 1a tela)\n")
+        except Exception:
+            pass
 
     window.events.loaded += on_loaded
 

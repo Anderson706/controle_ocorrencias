@@ -147,15 +147,15 @@
     <span class="section-chip">{{ resumo.total }} registro{{ 's' if resumo.total != 1 else '' }}</span>
   </div>
   <div class="table-wrap">
-    <table>
+    <table data-paginate="50">
       <thead>
         <tr>
-          <th>ID</th>
-          <th>Data / Hora</th>
-          <th>Natureza</th>
-          <th>Operador</th>
-          <th>Prioridade</th>
-          <th>Status</th>
+          <th data-sort="text">ID</th>
+          <th data-sort="date">Data / Hora</th>
+          <th data-sort="text">Natureza</th>
+          <th data-sort="text">Operador</th>
+          <th data-sort="text">Prioridade</th>
+          <th data-sort="text">Status</th>
           <th>Vínculos</th>
           <th style="text-align:center;">Ações</th>
         </tr>

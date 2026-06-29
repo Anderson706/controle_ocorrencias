@@ -7,6 +7,8 @@ from functools import wraps
 from datetime import datetime
 from io import BytesIO
 import base64
+from sqlalchemy.orm import defer
+from sqlalchemy import func as _func
 
 armarios_bp = Blueprint('armarios', __name__, template_folder='templates')
 
@@ -14,6 +16,7 @@ _db    = None
 Armario             = None
 ArmarioChaveReserva = None
 ArmarioHistorico    = None
+_UsuarioSite        = None  # injetado pelo app.py
 
 
 def _tempo_decorrido(dt):
@@ -32,9 +35,10 @@ def _tempo_decorrido(dt):
 
 
 # ── Inicialização ─────────────────────────────────────────────────────────────
-def setup_armarios(db):
-    global _db, Armario, ArmarioChaveReserva, ArmarioHistorico
+def setup_armarios(db, UsuarioSite=None):
+    global _db, Armario, ArmarioChaveReserva, ArmarioHistorico, _UsuarioSite
     _db = db
+    _UsuarioSite = UsuarioSite
 
     class _Armario(db.Model):
         """Armário físico do site. Atribuição fixa ao colaborador."""
@@ -109,14 +113,31 @@ def _is_privileged():
     return (session.get("user_perfil") or "").upper() in ("ADMIN",)
 
 def _is_can_manage():
-    """Retorna True para perfis que podem gerenciar armários (inclui KEYUSER)."""
-    return (session.get("user_perfil") or "").upper() in ("ADMIN", "GESTOR", "KEYUSER")
+    """Retorna True para perfis 'keyuser e acima' que podem gerenciar/excluir armários.
+    Consistente com _is_can_manage() do app.py (inclui MULTISITES)."""
+    return (session.get("user_perfil") or "").upper() in ("ADMIN", "GESTOR", "MULTISITES", "KEYUSER")
+
+def _sites_autorizados():
+    """Retorna lista de sites que o usuário logado pode visualizar.
+    ADMIN → [] (sem filtro — vê tudo); demais → sites vinculados ou site principal."""
+    if _is_privileged():
+        return []
+    user_id = session.get("user_id")
+    if user_id and _UsuarioSite:
+        try:
+            vinculos = _UsuarioSite.query.filter_by(usuario_id=user_id).all()
+            if vinculos:
+                return [v.site_nome for v in vinculos]
+        except Exception:
+            pass
+    site = session.get("user_site", "")
+    return [site] if site else []
 
 def _admin_required(f):
     @wraps(f)
     def dec(*a, **kw):
         if not _is_can_manage():
-            flash("Acesso restrito a administradores, gestores e key users.", "danger")
+            flash("Acesso restrito a administradores, gestores, multisites e key users.", "danger")
             return redirect(url_for("armarios.painel"))
         return f(*a, **kw)
     return dec
@@ -162,22 +183,43 @@ def _reg_historico(armario_id, armario_numero, bloco, site, evento,
 def painel():
     site     = session.get("user_site", "")
     is_admin = _is_privileged()
+    _sites   = _sites_autorizados()  # [] para admin, lista de sites para os demais
 
     bloco_filtro  = request.args.get("bloco",  "")
     status_filtro = request.args.get("status", "")
     site_filtro   = request.args.get("site",   "") if is_admin else ""
 
     # ── Uma query para TODOS os armários (KPIs + blocos + lista) ────
+    # Defere a assinatura (CLOB) — não é usada na grade; carregá-la para todos
+    # os armários seria transferência pesada à toa.
+    _sem_sig = [defer(Armario.assinatura_atribuicao)]
     if is_admin:
-        todos = (Armario.query
+        todos = (Armario.query.options(*_sem_sig)
                  .filter_by(ativo=True)
                  .order_by(Armario.site, Armario.bloco, Armario.numero)
                  .all())
     else:
-        todos = (Armario.query
-                 .filter_by(site=site, ativo=True)
-                 .order_by(Armario.bloco, Armario.numero)
-                 .all())
+        q = Armario.query.options(*_sem_sig).filter_by(ativo=True)
+        if _sites:
+            if len(_sites) == 1:
+                q = q.filter(Armario.site == _sites[0])
+            else:
+                q = q.filter(Armario.site.in_(_sites))
+        todos = q.order_by(Armario.bloco, Armario.numero).all()
+
+    # IDs de armários OCUPADOS com termo pendente (sem assinatura), via query leve
+    # baseada em LENGTH() — não carrega o CLOB. Alimenta o badge "Termo pendente".
+    ids_termo_pendente = set()
+    try:
+        _rows = _db.session.query(Armario.id).filter(
+            Armario.ativo == True,
+            Armario.status == 'OCUPADO',
+            (Armario.assinatura_atribuicao.is_(None)) |
+            (_func.length(Armario.assinatura_atribuicao) == 0)
+        ).all()
+        ids_termo_pendente = {r[0] for r in _rows}
+    except Exception:
+        ids_termo_pendente = set()
 
     total    = len(todos)
     ocupados = sum(1 for a in todos if a.status == 'OCUPADO')
@@ -228,6 +270,7 @@ def painel():
         site=site,
         is_admin=is_admin,
         can_manage=_is_can_manage(),
+        ids_termo_pendente=ids_termo_pendente,
         total=total, ocupados=ocupados, livres=livres, chave_fora=chave_fora,
     )
 
@@ -236,11 +279,12 @@ def painel():
 @armarios_bp.route("/detalhe/<int:arm_id>")
 @_login_required
 def detalhe(arm_id):
-    arm  = Armario.query.get_or_404(arm_id)
-    site = session.get("user_site", "")
-    if arm.site != site and not _is_privileged():
+    arm    = Armario.query.get_or_404(arm_id)
+    _sites = _sites_autorizados()
+    if _sites and arm.site not in _sites:
         return jsonify({"erro": "Acesso negado"}), 403
     ch = _chave_ativa(arm.id)
+    _tem_assinatura = bool((arm.assinatura_atribuicao or "").strip())
     return jsonify({
         "id":               arm.id,
         "numero":           arm.numero,
@@ -249,6 +293,8 @@ def detalhe(arm_id):
         "colaborador_nome": arm.colaborador_nome or "—",
         "colaborador_cpf":  arm.colaborador_cpf  or "—",
         "atribuido_em":     arm.atribuido_em.strftime("%d/%m/%Y") if arm.atribuido_em else "—",
+        "termo_pendente":   arm.status == 'OCUPADO' and not _tem_assinatura,
+        "tem_assinatura":   _tem_assinatura,
         "chave_retirada":   bool(ch),
         "chave_retirado_por":   ch.retirado_por_nome if ch else None,
         "chave_cpf":            ch.retirado_por_cpf  if ch else None,
@@ -371,6 +417,33 @@ def atribuir(arm_id):
     return redirect(url_for("armarios.painel"))
 
 
+@armarios_bp.route("/assinar-termo/<int:arm_id>", methods=["POST"])
+@_login_required
+def assinar_termo(arm_id):
+    """Captura a assinatura do termo DEPOIS da atribuição (casos de 'apenas reservar')."""
+    arm = Armario.query.get_or_404(arm_id)
+    if arm.status != 'OCUPADO':
+        flash("Só é possível assinar o termo de um armário atribuído.", "warning")
+        return redirect(url_for("armarios.painel"))
+
+    assinatura = (request.form.get("assinatura") or "").strip()
+    if not assinatura:
+        flash("Assine o termo antes de confirmar.", "warning")
+        return redirect(url_for("armarios.painel"))
+
+    try:
+        arm.assinatura_atribuicao = assinatura
+        _db.session.commit()
+        _reg_historico(arm.id, arm.numero, arm.bloco, arm.site, 'TERMO ASSINADO',
+                       colaborador_nome=arm.colaborador_nome, colaborador_cpf=arm.colaborador_cpf,
+                       operador=session.get("user_nome", ""))
+        flash(f"Termo do armário {arm.numero} assinado com sucesso!", "success")
+    except Exception as e:
+        _db.session.rollback()
+        flash(f"Erro ao salvar a assinatura: {e}", "danger")
+    return redirect(url_for("armarios.painel"))
+
+
 @armarios_bp.route("/liberar/<int:arm_id>", methods=["POST"])
 @_login_required
 def liberar(arm_id):
@@ -430,16 +503,16 @@ def excluir(arm_id):
 @_admin_required
 def excluir_lote():
     ids      = request.form.getlist("ids")
-    site     = session.get("user_site", "")
     is_admin = _is_privileged()
+    _sites   = _sites_autorizados()
     if not ids:
         flash("Nenhum armário selecionado.", "warning")
         return redirect(url_for("armarios.painel"))
     removidos = ignorados = 0
     for arm_id in ids:
         q = Armario.query.filter_by(id=arm_id, ativo=True)
-        if not is_admin:
-            q = q.filter_by(site=site)
+        if _sites:
+            q = q.filter(Armario.site.in_(_sites))
         arm = q.first()
         if not arm:
             continue
@@ -470,10 +543,10 @@ def excluir_lote():
 @armarios_bp.route("/editar-colaborador/<int:arm_id>", methods=["POST"])
 @_login_required
 def editar_colaborador(arm_id):
-    arm  = Armario.query.get_or_404(arm_id)
-    site = session.get("user_site", "")
+    arm    = Armario.query.get_or_404(arm_id)
+    _sites = _sites_autorizados()
 
-    if arm.site != site and not _is_privileged():
+    if _sites and arm.site not in _sites:
         flash("Acesso negado.", "danger")
         return redirect(url_for("armarios.painel"))
 
@@ -513,12 +586,13 @@ def editar_colaborador(arm_id):
 def chave_reserva():
     site       = session.get("user_site", "")
     usuario_id = session.get("user_id")
+    _sites     = _sites_autorizados()
 
     if request.method == "POST":
         arm_id = request.form.get("armario_id", type=int)
         arm    = Armario.query.get(arm_id)
 
-        if not arm or arm.site != site or not arm.ativo:
+        if not arm or not arm.ativo or (_sites and arm.site not in _sites):
             flash("Armário inválido ou não pertence ao seu site.", "danger")
             return redirect(url_for("armarios.chave_reserva"))
 
@@ -556,26 +630,43 @@ def chave_reserva():
 
         return redirect(url_for("armarios.chave_reserva"))
 
-    # Retiradas ativas
-    ativas = (ArmarioChaveReserva.query
-              .filter_by(site=site, status='RETIRADA')
-              .order_by(ArmarioChaveReserva.data_retirada.asc())
-              .all())
+    # Retiradas ativas (todos os sites autorizados)
+    _q_ativas = ArmarioChaveReserva.query.filter_by(status='RETIRADA')
+    if _sites:
+        if len(_sites) == 1:
+            _q_ativas = _q_ativas.filter(ArmarioChaveReserva.site == _sites[0])
+        else:
+            _q_ativas = _q_ativas.filter(ArmarioChaveReserva.site.in_(_sites))
+    ativas = _q_ativas.order_by(ArmarioChaveReserva.data_retirada.asc()).all()
+
+    # ── UMA query para todos os armários referenciados (elimina N+1) ─────────
+    _ativas_arm_ids = [r.armario_id for r in ativas]
+    _armarios_map = {}
+    if _ativas_arm_ids:
+        _armarios_map = {
+            a.id: a for a in Armario.query
+                .filter(Armario.id.in_(_ativas_arm_ids)).all()
+        }
     for r in ativas:
-        arm_r        = Armario.query.get(r.armario_id)
+        arm_r        = _armarios_map.get(r.armario_id)
         r._numero    = arm_r.numero if arm_r else "?"
         r._bloco     = arm_r.bloco  if arm_r else "—"
         r._tempo     = _tempo_decorrido(r.data_retirada)
         r._alerta    = (datetime.now() - r.data_retirada).days >= 1
 
-    # Armários do site para o select do formulário
-    armarios_site = (Armario.query
-                     .filter_by(site=site, ativo=True)
-                     .order_by(Armario.bloco, Armario.numero)
-                     .all())
-    # Marca quais já têm chave fora
+    # Armários dos sites autorizados para o select do formulário
+    _q_arm = Armario.query.filter_by(ativo=True)
+    if _sites:
+        if len(_sites) == 1:
+            _q_arm = _q_arm.filter(Armario.site == _sites[0])
+        else:
+            _q_arm = _q_arm.filter(Armario.site.in_(_sites))
+    armarios_site = _q_arm.order_by(Armario.bloco, Armario.numero).all()
+    # Marca quais já têm chave fora — reaproveita os ids já carregados em `ativas`
+    # (mesmo escopo de site), eliminando 1 query por armário.
+    _ids_em_uso = set(_ativas_arm_ids)
     for a in armarios_site:
-        a._chave_fora = bool(_chave_ativa(a.id))
+        a._chave_fora = a.id in _ids_em_uso
 
     return render_template(
         "armarios/chave_reserva.html",
@@ -646,9 +737,9 @@ def termo_atribuicao(arm_id):
         HRFlowable, Image as RLImage,
     )
 
-    arm = Armario.query.get_or_404(arm_id)
-    site = session.get("user_site", "")
-    if arm.site != site and not _is_privileged():
+    arm    = Armario.query.get_or_404(arm_id)
+    _sites = _sites_autorizados()
+    if _sites and arm.site not in _sites:
         flash("Acesso negado.", "danger")
         return redirect(url_for("armarios.painel"))
 
@@ -1011,6 +1102,7 @@ def exportar_situacao_excel():
 
     site     = session.get("user_site", "")
     is_admin = _is_privileged()
+    _sites   = _sites_autorizados()
 
     # Filtros opcionais (query string)
     bloco_f   = request.args.get("bloco",    "").strip()
@@ -1051,17 +1143,33 @@ def exportar_situacao_excel():
     ws1       = wb.active
     ws1.title = "Situação dos Armários"
 
-    q = Armario.query.filter_by(site=site, ativo=True)
+    q = Armario.query.filter_by(ativo=True)
+    if _sites:
+        if len(_sites) == 1:
+            q = q.filter(Armario.site == _sites[0])
+        else:
+            q = q.filter(Armario.site.in_(_sites))
     if bloco_f:
         q = q.filter_by(bloco=bloco_f)
     if status_f in ("LIVRE", "OCUPADO"):
         q = q.filter_by(status=status_f)
     armarios = q.order_by(Armario.bloco, Armario.numero).all()
 
+    # ── UMA query para todas as chaves reserva ativas (elimina N+1 — antes
+    # eram até 2 queries por armário: uma pro KPI, outra por linha) ──────────
+    _arm_ids = [a.id for a in armarios]
+    _chaves_ativas_map = {}
+    if _arm_ids:
+        _chaves_ativas_map = {
+            r.armario_id: r for r in ArmarioChaveReserva.query
+                .filter(ArmarioChaveReserva.armario_id.in_(_arm_ids))
+                .filter_by(status='RETIRADA').all()
+        }
+
     total     = len(armarios)
     ocupados  = sum(1 for a in armarios if a.status == "OCUPADO")
     livres    = sum(1 for a in armarios if a.status == "LIVRE")
-    chv_fora  = sum(1 for a in armarios if _chave_ativa(a.id))
+    chv_fora  = sum(1 for a in armarios if a.id in _chaves_ativas_map)
 
     filtros_desc = []
     if bloco_f:  filtros_desc.append(f"Bloco: {bloco_f}")
@@ -1090,7 +1198,7 @@ def exportar_situacao_excel():
     fill_alerta    = PatternFill("solid", fgColor="FEE2E2")
 
     for row_i, arm in enumerate(armarios, start=5):
-        ch = _chave_ativa(arm.id)
+        ch = _chaves_ativas_map.get(arm.id)
         row_data = [
             arm.numero,
             arm.bloco or "—",
@@ -1138,7 +1246,12 @@ def exportar_situacao_excel():
     # ── ABA 2: Histórico de Chaves Reserva ───────────────────────────────────
     ws2       = wb.create_sheet("Histórico Chave Reserva")
 
-    q2 = ArmarioChaveReserva.query.filter_by(site=site)
+    q2 = ArmarioChaveReserva.query
+    if _sites:
+        if len(_sites) == 1:
+            q2 = q2.filter(ArmarioChaveReserva.site == _sites[0])
+        else:
+            q2 = q2.filter(ArmarioChaveReserva.site.in_(_sites))
     if data_ini:
         try:
             q2 = q2.filter(ArmarioChaveReserva.data_retirada >= datetime.strptime(data_ini, "%Y-%m-%d"))
@@ -1151,6 +1264,16 @@ def exportar_situacao_excel():
         except ValueError:
             pass
     historico = q2.order_by(ArmarioChaveReserva.data_retirada.desc()).all()
+
+    # ── UMA query para todos os armários referenciados (elimina N+1 — antes
+    # era 1 query por armário distinto) ───────────────────────────────────────
+    _hist_arm_ids = list({r.armario_id for r in historico})
+    _arm_cache = {}
+    if _hist_arm_ids:
+        _arm_cache = {
+            a.id: a for a in Armario.query
+                .filter(Armario.id.in_(_hist_arm_ids)).all()
+        }
 
     total_h      = len(historico)
     retiradas_h  = sum(1 for r in historico if r.status == "RETIRADA")
@@ -1177,7 +1300,6 @@ def exportar_situacao_excel():
     ]
     linha_headers(ws2, 4, headers2)
 
-    arm_cache = {}
     agora     = datetime.now()
 
     fill_ret = PatternFill("solid", fgColor="FEF3C7")
@@ -1185,9 +1307,7 @@ def exportar_situacao_excel():
     fill_vig = PatternFill("solid", fgColor="FEE2E2")
 
     for row_i, r in enumerate(historico, start=5):
-        if r.armario_id not in arm_cache:
-            arm_cache[r.armario_id] = Armario.query.get(r.armario_id)
-        arm_r = arm_cache[r.armario_id]
+        arm_r = _arm_cache.get(r.armario_id)
         dias  = ((r.data_devolucao or agora) - r.data_retirada).days
 
         row_data = [
@@ -1240,6 +1360,7 @@ def exportar_situacao_excel():
 def historico():
     site     = session.get("user_site", "")
     is_admin = _is_privileged()
+    _sites   = _sites_autorizados()
 
     site_f   = request.args.get("site",    "" if is_admin else site)
     arm_f    = request.args.get("armario", "").strip()
@@ -1251,8 +1372,11 @@ def historico():
     if is_admin:
         if site_f:
             q = q.filter_by(site=site_f)
-    else:
-        q = q.filter_by(site=site)
+    elif _sites:
+        if len(_sites) == 1:
+            q = q.filter(ArmarioHistorico.site == _sites[0])
+        else:
+            q = q.filter(ArmarioHistorico.site.in_(_sites))
 
     if arm_f:
         q = q.filter(ArmarioHistorico.armario_numero.ilike(f"%{arm_f}%"))
@@ -1302,6 +1426,7 @@ def exportar_historico():
 
     site     = session.get("user_site", "")
     is_admin = _is_privileged()
+    _sites   = _sites_autorizados()
 
     site_f   = request.args.get("site",    "" if is_admin else site)
     arm_f    = request.args.get("armario", "").strip()
@@ -1313,8 +1438,11 @@ def exportar_historico():
     if is_admin:
         if site_f:
             q = q.filter_by(site=site_f)
-    else:
-        q = q.filter_by(site=site)
+    elif _sites:
+        if len(_sites) == 1:
+            q = q.filter(ArmarioHistorico.site == _sites[0])
+        else:
+            q = q.filter(ArmarioHistorico.site.in_(_sites))
 
     if arm_f:
         q = q.filter(ArmarioHistorico.armario_numero.ilike(f"%{arm_f}%"))

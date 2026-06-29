@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "comunications",
+      "runtimeExecutable": "C:\\Users\\deivimar\\OneDrive - DPDHL\\Documents\\GitHub\\comunications\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["C:\\Users\\deivimar\\OneDrive - DPDHL\\Documents\\GitHub\\comunications\\app.py"],
+      "port": 5000
+    }
+  ]
+}

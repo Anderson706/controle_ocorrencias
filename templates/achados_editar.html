@@ -35,6 +35,15 @@
   .foto-display .fi{ font-size:18px; }
   .foto-display .ft{ font-size:12px; color:var(--muted); font-weight:600; }
   .foto-display .ft.chosen{ color:var(--text); font-weight:700; }
+  .foto-row{ display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; }
+  .foto-row .foto-wrapper{ flex:1; min-width:220px; }
+  .btn-camera{ flex-shrink:0; white-space:nowrap; }
+  .foto-preview{ margin-top:10px; display:none; }
+  .foto-preview img{ max-height:160px; border-radius:10px; border:1px solid var(--line); }
+
+  /* Modal câmera */
+  #camera-video{ width:100%; max-height:380px; border-radius:10px; background:#000; object-fit:contain; }
+  #camera-erro{ display:none; color:#dc2626; font-size:12px; font-weight:700; margin-top:10px; text-align:center; }
 </style>
 
 <div class="form-card">
@@ -94,8 +103,8 @@
 
     <!-- Foto atual -->
     <div class="foto-atual">
-      {% if reg.foto_path %}
-      <img src="{{ url_for('static', filename=reg.foto_path) }}" alt="foto atual">
+      {% if reg.foto_dados or reg.foto_path %}
+      <img src="{{ url_for('achados.foto_imagem', row_id=reg.id) }}" alt="foto atual">
       <div class="foto-atual-info">
         <strong>Foto atual</strong>
         Selecione uma nova imagem abaixo para substituir.
@@ -111,12 +120,22 @@
 
     <div class="field">
       <label>Nova foto <span style="font-weight:500;text-transform:none">(opcional)</span></label>
-      <div class="foto-wrapper">
-        <div class="foto-display" id="foto-display">
-          <span class="fi">📷</span>
-          <span class="ft" id="foto-txt">Clique para trocar a foto (PNG, JPG, WEBP)</span>
+      <div class="foto-row">
+        <div class="foto-wrapper">
+          <div class="foto-display" id="foto-display">
+            <span class="fi">📷</span>
+            <span class="ft" id="foto-txt">Clique para trocar a foto (PNG, JPG, WEBP)</span>
+          </div>
+          <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp,.gif" onchange="atualizarFoto(this)">
         </div>
-        <input type="file" name="foto" accept=".png,.jpg,.jpeg,.webp,.gif" onchange="atualizarFoto(this)">
+        <button type="button" class="btn btn-soft btn-camera" onclick="abrirCamera()">📸 Usar câmera</button>
+        <!-- Fallback p/ tablet/celular em HTTP: câmera nativa via atributo capture
+             (não exige getUserMedia nem HTTPS). Disparado por abrirCamera(). -->
+        <input type="file" id="foto-capture" accept="image/*" capture="environment"
+               style="display:none" onchange="capturaNativaFallback(this)">
+      </div>
+      <div class="foto-preview" id="foto-preview">
+        <img id="foto-img" src="" alt="preview">
       </div>
     </div>
 
@@ -128,11 +147,33 @@
 </div>
 {% endblock %}
 
+{% block modals %}
+<div class="modal-overlay" id="modal-camera" onclick="if(event.target===this) fecharCamera()">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
+    <div class="modal-head">
+      <h3>📷 Tirar Foto</h3>
+      <button class="modal-close" onclick="fecharCamera()">✕</button>
+    </div>
+    <div class="modal-body">
+      <video id="camera-video" autoplay playsinline></video>
+      <canvas id="camera-canvas" style="display:none"></canvas>
+      <p id="camera-erro"></p>
+    </div>
+    <div class="modal-foot" style="justify-content:center">
+      <button type="button" class="btn btn-soft" onclick="fecharCamera()">Cancelar</button>
+      <button type="button" class="btn btn-red" onclick="capturarFoto()">📸 Capturar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block page_scripts %}
 <script>
 function atualizarFoto(input) {
-  var txt = document.getElementById('foto-txt');
-  var disp = document.getElementById('foto-display');
+  var txt     = document.getElementById('foto-txt');
+  var disp    = document.getElementById('foto-display');
+  var preview = document.getElementById('foto-preview');
+  var img     = document.getElementById('foto-img');
   if (input.files && input.files[0]) {
     var f = input.files[0];
     txt.textContent = f.name + '  (' + (f.size/1048576).toFixed(1) + ' MB)';
@@ -140,7 +181,79 @@ function atualizarFoto(input) {
     disp.style.borderColor = '#16a34a'; disp.style.borderStyle = 'solid';
     disp.style.background = '#f0fdf4';
     disp.querySelector('.fi').textContent = '✔';
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      img.src = e.target.result;
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(f);
   }
 }
+
+/* ── Câmera ── */
+var _cameraStream = null;
+
+/* Recebe a foto do input nativo (capture) e injeta no input de upload real,
+   reaproveitando 100% o preview/envio já existentes. */
+function capturaNativaFallback(input) {
+  if (!input.files || !input.files[0]) return;
+  var dt = new DataTransfer();
+  dt.items.add(input.files[0]);
+  var main = document.querySelector('input[name=foto]');
+  main.files = dt.files;
+  main.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+async function abrirCamera() {
+  // getUserMedia só existe em contexto seguro (HTTPS ou localhost). Em HTTP por
+  // IP (tablet na rede), cai no input "capture" → câmera nativa, sem HTTPS.
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById('foto-capture').click();
+    return;
+  }
+  var erro = document.getElementById('camera-erro');
+  erro.style.display = 'none';
+  document.getElementById('modal-camera').classList.add('open');
+  try {
+    _cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }, audio: false
+    });
+    document.getElementById('camera-video').srcObject = _cameraStream;
+  } catch (e) {
+    erro.textContent = 'Não foi possível acessar a câmera: ' + (e.message || e.name || e);
+    erro.style.display = 'block';
+  }
+}
+
+function fecharCamera() {
+  document.getElementById('modal-camera').classList.remove('open');
+  if (_cameraStream) {
+    _cameraStream.getTracks().forEach(function(t){ t.stop(); });
+    _cameraStream = null;
+  }
+}
+
+function capturarFoto() {
+  var video  = document.getElementById('camera-video');
+  var canvas = document.getElementById('camera-canvas');
+  if (!video.videoWidth) return;
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(function(blob) {
+    var file  = new File([blob], 'foto_camera_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+    var dt    = new DataTransfer();
+    dt.items.add(file);
+    var input = document.querySelector('input[name=foto]');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    fecharCamera();
+  }, 'image/jpeg', 0.92);
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') fecharCamera();
+});
 </script>
 {% endblock %}

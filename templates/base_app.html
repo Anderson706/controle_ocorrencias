@@ -34,7 +34,7 @@
   #loading-overlay.show{ display:flex; }
 
   /* ══ Sidebar ════════════════════════════════════════════════ */
-  .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow:hidden; display:flex; flex-direction:column; }
+  .sidebar{ width:260px; background:linear-gradient(180deg,#161a1d,#20262b); color:#fff; position:fixed; top:0; left:0; bottom:0; padding:22px 16px 16px; box-shadow:6px 0 22px rgba(0,0,0,.18); z-index:1000; overflow:hidden; display:flex; flex-direction:column; transition:transform .25s ease; }
   .brand{ padding-bottom:16px; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,.08); }
   .brand-badge{ display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#ffcc00; color:#111; font-size:10px; font-weight:900; letter-spacing:.5px; margin-bottom:8px; }
   .brand-title{ font-size:15px; font-weight:900; line-height:1.2; color:#fff; }
@@ -82,7 +82,7 @@
   .app-footer{ background:#fff; border-top:1px solid var(--line); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; font-size:10px; font-weight:800; color:var(--muted); letter-spacing:.4px; text-transform:uppercase; flex-shrink:0; gap:12px; }
 
   /* ══ Main + topbar ══════════════════════════════════════════ */
-  .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; }
+  .main{ margin-left:260px; width:calc(100% - 260px); min-height:100vh; display:flex; flex-direction:column; transition:margin-left .25s ease, width .25s ease; }
   .topbar{ height:76px; background:#fff; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 24px; position:sticky; top:0; z-index:900; }
   .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; flex:1; }
   .topbar-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; flex-wrap:wrap; }
@@ -189,6 +189,12 @@
 
   /* ══ Table ══════════════════════════════════════════════════ */
   .table-wrap{ overflow:auto; border:1px solid var(--line); border-radius:18px; background:#fff; }
+  /* Toda tabela tem min-width:640px → em telas estreitas ela passa do container.
+     Garante scroll horizontal em QUALQUER wrapper de tabela (só aparece scrollbar
+     quando necessário). !important vence o overflow:hidden que algumas telas
+     definem localmente em .table-wrap/.table-card e que cortava a lateral. */
+  .table-wrap, .table-card, .table-container, .cfg-table-wrap,
+  .picker-table-wrap, .chk-table-wrap{ overflow-x:auto !important; }
   table{ width:100%; border-collapse:collapse; min-width:640px; background:#fff; }
   th,td{ padding:10px 12px; border-bottom:1px solid #edf0f4; text-align:left; vertical-align:top; font-size:13px; }
   thead th{ background:#fff8db; color:#4b3c00; position:sticky; top:0; z-index:2; font-weight:800; white-space:nowrap; }
@@ -232,14 +238,34 @@
   .tbl-pager-info{ font-size:12px; font-weight:700; color:#6b7280; white-space:nowrap; }
 
   /* ══ Responsive ═════════════════════════════════════════════ */
+  /* Botão de menu/recolher — visível em qualquer largura (no desktop recolhe a
+     sidebar; em telas estreitas abre a gaveta). */
+  .menu-toggle{ display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border:1px solid var(--line); border-radius:12px; background:#fff; cursor:pointer; flex-shrink:0; font-size:22px; line-height:1; color:var(--dhl-black); transition:.15s; }
+  .menu-toggle:hover{ background:#f3f4f6; }
+  .sidebar-backdrop{ display:none; position:fixed; inset:0; background:rgba(15,23,42,.5); z-index:999; opacity:0; transition:opacity .25s ease; }
+  .sidebar-backdrop.show{ display:block; opacity:1; }
+
+  /* Recolher a sidebar no DESKTOP (push: esconde a sidebar e o conteúdo ocupa
+     a largura toda). Estado lembrado em localStorage e aplicado antes do paint. */
+  @media(min-width:1101px){
+    html.sb-collapsed .sidebar{ transform:translateX(-100%); }
+    html.sb-collapsed .main{ margin-left:0; width:100%; }
+  }
+
   @media(max-width:1100px){
-    .sidebar{ position:relative; width:100%; height:auto; }
+    /* Sidebar vira gaveta deslizante (off-canvas), escondida por padrão */
+    .sidebar{ width:264px; transform:translateX(-100%); transition:transform .25s ease; }
+    .sidebar.open{ transform:translateX(0); }
     .main{ margin-left:0; width:100%; }
-    .app-shell{ flex-direction:column; }
+    .menu-toggle{ display:inline-flex; }
+    /* Topbar empilha: título em cima, ações embaixo ocupando a largura toda
+       (evita os botões espremidos na metade direita) */
+    .topbar{ height:auto; flex-direction:column; align-items:stretch; gap:12px; padding:14px 20px; }
+    .topbar-right{ width:100%; }
   }
   @media(max-width:700px){
     .content{ padding:16px; }
-    .topbar{ padding:14px 16px; height:auto; flex-direction:column; align-items:flex-start; gap:10px; }
+    .topbar{ padding:14px 16px; }
     .hero h2{ font-size:24px; }
     .modal-grid{ grid-template-columns:1fr; }
     .grid-2,.grid-3,.g2,.g3,.g4{ grid-template-columns:1fr; }
@@ -248,6 +274,10 @@
   <script src="/static/htmx.min.js"></script>
   <script src="/static/panel.js"></script>
   <script src="/static/filters.js"></script>
+  <script src="/static/img-compress.js"></script>
+  <script src="/static/table-paginate.js"></script>
+  <!-- Aplica o estado "sidebar recolhida" (desktop) ANTES do paint p/ não piscar -->
+  <script>try{if(localStorage.getItem('sidebarCollapsed')==='1')document.documentElement.classList.add('sb-collapsed');}catch(e){}</script>
 </head>
 <body hx-boost="true" hx-target="#main-content" hx-select="#main-content" hx-swap="outerHTML">
 
@@ -271,6 +301,7 @@
       {%- set sec_ap  = request.endpoint is not none and request.endpoint.startswith('achados.') -%}
       {%- set sec_pe  = request.endpoint is not none and request.endpoint.startswith('pe.') -%}
       {%- set sec_af  = request.endpoint is not none and request.endpoint.startswith('af.') -%}
+      {%- set sec_atv = request.endpoint is not none and request.endpoint.startswith('ativos.') -%}
       {%- set sec_cam = request.endpoint in ['cameras_index','cameras_cadastrar','cameras_checklist_novo','cameras_checklist_ver'] -%}
       {%- set sec_cfg = request.endpoint in ['config_campos','config_campos_novo','config_campos_editar','config_campos_excluir'] -%}
       {%- set sec_adm = request.endpoint in ['admin_usuarios','admin_usuario_novo','admin_usuario_editar','admin_solicitacoes','vincular_sites'] -%}
@@ -279,6 +310,12 @@
       <a href="{{ url_for('overview') }}"
          class="nav-direct{{ ' active' if request.endpoint=='overview' else '' }}">
         <span class="nav-icon">🌐</span><span>Overview</span>
+      </a>
+
+      <!-- Gerador de Apresentação — direto -->
+      <a href="{{ url_for('exportar_apresentacao') }}"
+         class="nav-direct{{ ' active' if request.endpoint=='exportar_apresentacao' else '' }}">
+        <span class="nav-icon">📊</span><span>Exportar Apresentação</span>
       </a>
 
       <hr class="nav-sep">
@@ -296,7 +333,7 @@
             <span class="nav-icon">📋</span><span>Investigações</span>
           </a>
           <a href="{{ url_for('analises') }}" class="nav-section{{ ' active' if sec_an else '' }}">
-            <span class="nav-icon">🔍</span><span>Análises</span>
+            <span class="nav-icon">🔍</span><span>Análises Investigativas</span>
           </a>
           <a href="{{ url_for('anc') }}" class="nav-section{{ ' active' if sec_anc else '' }}">
             <span class="nav-icon">⚠️</span><span>ANC</span>
@@ -308,7 +345,7 @@
       </div>
 
       <!-- GRUPO: Patrimonial -->
-      {%- set g2_active = sec_chv or sec_arm or sec_ap or sec_af -%}
+      {%- set g2_active = sec_chv or sec_arm or sec_ap or sec_af or sec_atv -%}
       <div class="nav-group" data-group="patrimonial">
         <button class="nav-group-btn{{ ' has-active' if g2_active else '' }}" onclick="toggleGroup('patrimonial')">
           <span class="nav-group-icon">🏗️</span>
@@ -320,13 +357,16 @@
             <span class="nav-icon">🔑</span><span>Controle de Chaves</span>
           </a>
           <a href="{{ url_for('armarios.painel') }}" class="nav-section{{ ' active' if sec_arm else '' }}">
-            <span class="nav-icon">🗄️</span><span>Armários</span>
+            <span class="nav-icon">🗄️</span><span>Gestão de Armários</span>
           </a>
           <a href="{{ url_for('achados.lista') }}" class="nav-section{{ ' active' if sec_ap else '' }}">
             <span class="nav-icon">📦</span><span>Achados e Perdidos</span>
           </a>
           <a href="{{ url_for('af.controle') }}" class="nav-section{{ ' active' if sec_af else '' }}">
             <span class="nav-icon">🔐</span><span>Abertura/Fechamento</span>
+          </a>
+          <a href="{{ url_for('ativos.colaboradores') }}" class="nav-section{{ ' active' if sec_atv else '' }}">
+            <span class="nav-icon">🏷️</span><span>Controle de Ativos</span>
           </a>
         </div>
       </div>
@@ -344,7 +384,7 @@
             <span class="nav-icon">🚨</span><span>Gestão de Alarmes</span>
           </a>
           <a href="{{ url_for('cameras_index') }}" class="nav-section{{ ' active' if sec_cam else '' }}">
-            <span class="nav-icon">📷</span><span>Câmeras</span>
+            <span class="nav-icon">📷</span><span>Controle de Câmeras</span>
           </a>
         </div>
       </div>
@@ -411,10 +451,14 @@
   </aside>
   <!-- ═══ FIM SIDEBAR ════════════════════════════════════════════ -->
 
+  <!-- Backdrop da gaveta (só em telas estreitas) -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+
   <main class="main" id="main-content">
     <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-left">
+        <button class="menu-toggle" onclick="onMenuButton()" aria-label="Recolher/abrir menu" title="Recolher/abrir menu">☰</button>
         <img src="{{ url_for('static', filename='shared image.png') }}" alt="DHL Security" class="logo-topbar">
         <div>
           <h1>{% block topbar_title %}{% endblock %}</h1>
@@ -499,6 +543,36 @@ function abrirModal(id){ var el=document.getElementById(id); if(el) el.classList
 function fecharModal(id, e){ var el=document.getElementById(id); if(el) el.classList.remove('open'); }
 document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ document.querySelectorAll('.modal-overlay.open').forEach(function(m){ m.classList.remove('open'); }); } });
 
+/* ── Sidebar: gaveta (telas estreitas) + recolher (desktop) ── */
+function toggleSidebar(force){
+  var sb = document.querySelector('.sidebar');
+  var bd = document.getElementById('sidebarBackdrop');
+  if(!sb || !bd) return;
+  var open = (typeof force === 'boolean') ? force : !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  bd.classList.toggle('show', open);
+}
+/* Recolher/expandir no desktop (push) — estado lembrado em localStorage */
+function toggleCollapse(){
+  var c = !document.documentElement.classList.contains('sb-collapsed');
+  document.documentElement.classList.toggle('sb-collapsed', c);
+  try{ localStorage.setItem('sidebarCollapsed', c ? '1' : '0'); }catch(e){}
+}
+/* Botão de menu: decide conforme a largura */
+function onMenuButton(){
+  if(window.innerWidth <= 1100) toggleSidebar();   // gaveta (overlay)
+  else toggleCollapse();                            // recolher (desktop)
+}
+/* Fecha a gaveta ao tocar num link de navegação (a sidebar persiste no swap HTMX) */
+document.addEventListener('click', function(e){
+  if(window.innerWidth > 1100) return;
+  var link = e.target.closest('.sidebar .nav-section, .sidebar .nav-direct');
+  if(link) toggleSidebar(false);
+});
+/* ESC fecha a gaveta; ao voltar para desktop, garante a gaveta fechada */
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') toggleSidebar(false); });
+window.addEventListener('resize', function(){ if(window.innerWidth > 1100) toggleSidebar(false); });
+
 /* ── Grupos colapsáveis da sidebar ── */
 function toggleGroup(name) {
   var items = document.getElementById('grp-' + name);
@@ -539,7 +613,7 @@ function toggleGroup(name) {
   /* Mapa path → grupo */
   var _groupMap = [
     { group:'registros',  test:function(p){ return p.startsWith('/ocorrencias')||p.startsWith('/nova-investigacao')||p==='/dashboard'||p.startsWith('/post/')||p.startsWith('/analise')||p.startsWith('/anc')||p.startsWith('/nova-anc')||p.startsWith('/shift-handover'); } },
-    { group:'patrimonial',test:function(p){ return p.startsWith('/chaves')||p.startsWith('/armarios')||p.startsWith('/achados')||p.startsWith('/site-af'); } },
+    { group:'patrimonial',test:function(p){ return p.startsWith('/chaves')||p.startsWith('/armarios')||p.startsWith('/achados')||p.startsWith('/site-af')||p.startsWith('/ativos'); } },
     { group:'seguranca',  test:function(p){ return p.startsWith('/portas-emergencia')||p.startsWith('/cameras'); } },
     { group:'config',     test:function(p){ return p.startsWith('/config-campos')||p.startsWith('/admin'); } },
   ];

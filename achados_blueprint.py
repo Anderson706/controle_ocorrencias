@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from io import BytesIO
 import os, subprocess, tempfile
 
+from sqlalchemy.orm import deferred
+from sqlalchemy.orm.attributes import set_committed_value
 from werkzeug.utils import secure_filename
 
 from reportlab.lib.pagesizes import A4
@@ -25,17 +27,34 @@ from openpyxl.styles import Font, PatternFill, Alignment as XLAlign
 achados_bp = Blueprint('achados', __name__, template_folder='templates')
 
 # ── Globals preenchidos via setup_achados ─────────────────────────────────────
-_db           = None
-AchadoPerdido = None
+_db             = None
+AchadoPerdido   = None
+_UPLOADS_ROOT   = None  # diretório persistente raiz para uploads
+_FOTO_COL_STATE = None  # None=desconhecido, True=coluna existe, False=ausente
+
+
+def _foto_col_ok() -> bool:
+    """Retorna True se FOTO_DADOS existe em ACHADOS_PERDIDOS (verifica uma vez, cacheia)."""
+    global _FOTO_COL_STATE
+    if _FOTO_COL_STATE is None:
+        try:
+            from sqlalchemy import text as _t
+            with _db.engine.connect() as _c:
+                _c.execute(_t("SELECT FOTO_DADOS FROM ACHADOS_PERDIDOS WHERE 1=0"))
+            _FOTO_COL_STATE = True
+        except Exception:
+            _FOTO_COL_STATE = False
+    return _FOTO_COL_STATE
 
 ALLOWED_EXT = {"png", "jpg", "jpeg", "webp", "gif"}
 _STATUS_VALIDOS = ("Pendente", "Entregue", "Devolvido", "Doacao")
 
 
 # ── Inicialização ──────────────────────────────────────────────────────────────
-def setup_achados(db):
-    global _db, AchadoPerdido
+def setup_achados(db, uploads_root=None):
+    global _db, AchadoPerdido, _UPLOADS_ROOT
     _db = db
+    _UPLOADS_ROOT = uploads_root
 
     class _AchadoPerdido(db.Model):
         __tablename__ = "ACHADOS_PERDIDOS"
@@ -49,7 +68,8 @@ def setup_achados(db):
         data        = db.Column(db.String(20),   nullable=False)   # YYYY-MM-DD
         turno       = db.Column(db.String(30),    nullable=False)
         descricao   = db.Column(db.Text,         nullable=True)
-        foto_path   = db.Column(db.String(500),  nullable=True)
+        foto_path   = db.Column(db.String(500),  nullable=True)   # legado — caminho em disco
+        foto_dados  = deferred(db.Column(db.Text, nullable=True))  # CLOB — data URI base64 (lazy)
         status      = db.Column(db.String(30),   nullable=False, default='Pendente')
         retirado_por = db.Column(db.String(150), nullable=True)
         site        = db.Column(db.String(128),  nullable=True)
@@ -57,6 +77,19 @@ def setup_achados(db):
         created_at  = db.Column(db.DateTime,     nullable=False, default=datetime.utcnow)
 
     AchadoPerdido = _AchadoPerdido
+
+    # ── Migração automática: adiciona FOTO_DADOS se ainda não existir ─────────
+    global _FOTO_COL_STATE
+    try:
+        from sqlalchemy import text as _text
+        with db.engine.connect() as _conn:
+            _conn.execute(_text(
+                "ALTER TABLE ACHADOS_PERDIDOS ADD (FOTO_DADOS CLOB)"
+            ))
+            _conn.commit()
+        _FOTO_COL_STATE = True   # ALTER TABLE teve sucesso → coluna foi criada agora
+    except Exception:
+        pass  # coluna já existe, sem privilégio DDL, ou outro erro — _foto_col_ok() verificará
 
 
 # ── Auth decorator ─────────────────────────────────────────────────────────────
@@ -99,11 +132,10 @@ def _filtrar_query(query):
     return query.filter(AchadoPerdido.site.in_(sites))
 
 
-# ── Upload ─────────────────────────────────────────────────────────────────────
-def _upload_folder():
-    folder = os.path.join(current_app.static_folder, "uploads", "achados_perdidos")
-    os.makedirs(folder, exist_ok=True)
-    return folder
+def _sem_acesso(reg):
+    """True se o usuário logado (não-admin) não tem o site do registro entre os seus."""
+    sites = _sites_usuario()
+    return bool(sites) and reg.site not in sites
 
 
 def _allowed_file(filename):
@@ -249,34 +281,53 @@ def _gerar_pdf(r: dict) -> BytesIO:
         l_y -= esp
     y = card_desc_y - 30
 
-    # Card: Foto
-    foto_rel = r.get("foto_path")
-    if foto_rel:
-        foto_abs = os.path.join(current_app.static_folder, foto_rel)
+    # Card: Foto — tenta primeiro o CLOB base64, depois legado em disco
+    foto_dados_val = r.get("foto_dados")
+    foto_rel       = r.get("foto_path")
+
+    _img_reader = None
+    if foto_dados_val and foto_dados_val.startswith("data:"):
+        try:
+            import base64 as _b64
+            from io import BytesIO as _BytesIO
+            _raw = foto_dados_val.split(",", 1)[1]
+            _img_reader = ImageReader(_BytesIO(_b64.b64decode(_raw)))
+        except Exception:
+            _img_reader = None
+
+    if _img_reader is None and foto_rel:
+        base = _UPLOADS_ROOT if _UPLOADS_ROOT else current_app.static_folder
+        foto_abs = os.path.join(base, foto_rel)
         if os.path.exists(foto_abs):
             try:
-                img = ImageReader(foto_abs)
-                iw, ih = img.getSize()
-                max_w, max_h = 260, 180
-                esc = min(max_w / iw, max_h / ih)
-                dw, dh = iw * esc, ih * esc
-                alt_img = pad * 2 + 2 * esp + dh + 10
-                card_img_y = y - alt_img + pad
-                c.setStrokeColor(DHL_BORDER); c.setFillColor(DHL_GRAY_LIGHT)
-                c.roundRect(card_x, card_img_y, card_w, alt_img, 10, stroke=True, fill=True)
-                c.setFont("Helvetica-Bold", 12); c.setFillColor(DHL_RED)
-                c.drawString(margem_esq, y - esp, "Imagem do objeto")
-                xi = (largura - dw) / 2
-                yi = card_img_y + pad + esp
-                c.setStrokeColor(DHL_BLACK)
-                c.rect(xi - 3, yi - 3, dw + 6, dh + 6, stroke=True, fill=False)
-                c.drawImage(img, xi, yi, width=dw, height=dh,
-                            preserveAspectRatio=True, mask='auto')
-                c.setFont("Helvetica-Oblique", 9); c.setFillColor(DHL_BLACK)
-                c.drawCentredString(largura / 2, card_img_y + pad, "Foto do item registrado.")
-                y = card_img_y - 25
+                _img_reader = ImageReader(foto_abs)
             except Exception:
-                pass
+                _img_reader = None
+
+    if _img_reader:
+        try:
+            img = _img_reader
+            iw, ih = img.getSize()
+            max_w, max_h = 260, 180
+            esc = min(max_w / iw, max_h / ih)
+            dw, dh = iw * esc, ih * esc
+            alt_img = pad * 2 + 2 * esp + dh + 10
+            card_img_y = y - alt_img + pad
+            c.setStrokeColor(DHL_BORDER); c.setFillColor(DHL_GRAY_LIGHT)
+            c.roundRect(card_x, card_img_y, card_w, alt_img, 10, stroke=True, fill=True)
+            c.setFont("Helvetica-Bold", 12); c.setFillColor(DHL_RED)
+            c.drawString(margem_esq, y - esp, "Imagem do objeto")
+            xi = (largura - dw) / 2
+            yi = card_img_y + pad + esp
+            c.setStrokeColor(DHL_BLACK)
+            c.rect(xi - 3, yi - 3, dw + 6, dh + 6, stroke=True, fill=False)
+            c.drawImage(img, xi, yi, width=dw, height=dh,
+                        preserveAspectRatio=True, mask='auto')
+            c.setFont("Helvetica-Oblique", 9); c.setFillColor(DHL_BLACK)
+            c.drawCentredString(largura / 2, card_img_y + pad, "Foto do item registrado.")
+            y = card_img_y - 25
+        except Exception:
+            pass
 
     # Assinaturas
     c.setStrokeColor(DHL_BORDER); c.setLineWidth(0.8)
@@ -354,19 +405,18 @@ def salvar():
     responsavel             = session.get("user_nome") or ""
     id_registro, num_site   = _gerar_codigo_achado(site)
 
-    foto_path = None
+    foto_dados = None
     foto = request.files.get("foto")
     if foto and foto.filename:
         if not _allowed_file(foto.filename):
             flash("Formato não permitido. Use PNG / JPG / JPEG / WEBP / GIF.", "danger")
             return redirect(url_for("achados.novo"))
-        safe  = secure_filename(foto.filename)
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        fname = f"AP_{id_registro}_{stamp}_{safe}"
-        foto.save(os.path.join(_upload_folder(), fname))
-        foto_path = f"uploads/achados_perdidos/{fname}"
+        import base64 as _b64
+        dados = foto.read()
+        mime  = foto.content_type or "image/jpeg"
+        foto_dados = f"data:{mime};base64,{_b64.b64encode(dados).decode()}"
 
-    reg = AchadoPerdido(
+    _kw = dict(
         id_registro  = id_registro,
         numero_site  = num_site,
         objeto       = objeto,
@@ -374,11 +424,14 @@ def salvar():
         data         = data,
         turno        = turno,
         descricao    = descricao,
-        foto_path    = foto_path,
         status       = "Pendente",
         site         = site,
         criado_por   = session.get("user_nome") or "",
     )
+    # só inclui foto_dados se a coluna existir no Oracle (evita ORA-00904 no INSERT)
+    if foto_dados and _foto_col_ok():
+        _kw["foto_dados"] = foto_dados
+    reg = AchadoPerdido(**_kw)
     _db.session.add(reg)
     _db.session.commit()
 
@@ -409,10 +462,25 @@ def lista():
 
     registros_raw = query.order_by(AchadoPerdido.created_at.desc()).all()
 
+    # foto_dados é deferred → não entra no __dict__. Uma query leve (só IDs)
+    # determina quais registros têm foto no Oracle sem carregar o CLOB inteiro.
+    ids_com_foto = set()
+    if _foto_col_ok():
+        try:
+            rows = _db.session.query(AchadoPerdido.id).filter(
+                AchadoPerdido.foto_dados.isnot(None)
+            ).all()
+            ids_com_foto = {row[0] for row in rows}
+        except Exception:
+            pass
+
     registros = []
     hoje = datetime.now().date()
     for r in registros_raw:
         d = r.__dict__.copy()
+        # Marca foto_dados como truthy se existir no Oracle (evita mostrar ícone "sem foto")
+        if r.id in ids_com_foto:
+            d['foto_dados'] = True
         try:
             dt = datetime.strptime(r.data, "%Y-%m-%d").date()
             prazo = dt + timedelta(days=90)
@@ -438,6 +506,9 @@ def lista():
 @_login_required
 def atualizar_status(row_id):
     reg = AchadoPerdido.query.get_or_404(row_id)
+    if _sem_acesso(reg):
+        flash("Sem permissão para este registro.", "danger")
+        return redirect(url_for("achados.lista"))
     novo_status  = (request.form.get("status") or "").strip()
     retirado_por = (request.form.get("retirado_por") or "").strip() or None
 
@@ -456,6 +527,12 @@ def atualizar_status(row_id):
 @_login_required
 def editar(row_id):
     reg = AchadoPerdido.query.get_or_404(row_id)
+    if _sem_acesso(reg):
+        flash("Sem permissão para este registro.", "danger")
+        return redirect(url_for("achados.lista"))
+    # Se FOTO_DADOS não existe no Oracle, marca como None sem disparar lazy load
+    if not _foto_col_ok():
+        set_committed_value(reg, 'foto_dados', None)
     return render_template("achados_editar.html", reg=reg)
 
 
@@ -463,42 +540,90 @@ def editar(row_id):
 @_login_required
 def editar_salvar(row_id):
     reg = AchadoPerdido.query.get_or_404(row_id)
+    if _sem_acesso(reg):
+        flash("Sem permissão para este registro.", "danger")
+        return redirect(url_for("achados.lista"))
     reg.objeto      = (request.form.get("objeto") or "").strip()
     reg.responsavel = (request.form.get("responsavel") or "").strip()
     reg.descricao   = (request.form.get("descricao") or "").strip()
     reg.turno       = (request.form.get("turno") or reg.turno or "").strip()
     reg.status      = (request.form.get("status") or reg.status).strip()
 
-    # Troca de foto (opcional)
+    # Troca de foto (opcional) — salva como base64 no banco (só se coluna existir)
     nova_foto = request.files.get("foto")
-    if nova_foto and nova_foto.filename:
+    if nova_foto and nova_foto.filename and _foto_col_ok():
         if _allowed_file(nova_foto.filename):
-            safe  = secure_filename(nova_foto.filename)
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            fname = f"AP_{reg.id_registro}_{stamp}_{safe}"
-            nova_foto.save(os.path.join(_upload_folder(), fname))
-            reg.foto_path = f"uploads/achados_perdidos/{fname}"
+            import base64 as _b64
+            dados = nova_foto.read()
+            mime  = nova_foto.content_type or "image/jpeg"
+            reg.foto_dados = f"data:{mime};base64,{_b64.b64encode(dados).decode()}"
 
     _db.session.commit()
     flash("Registro atualizado com sucesso!", "success")
     return redirect(url_for("achados.lista"))
 
 
+@achados_bp.route("/<int:row_id>/foto")
+@_login_required
+def foto_imagem(row_id):
+    """Serve a foto de um registro — primeiro do CLOB base64, depois do disco (legado)."""
+    from flask import Response, send_file as _sf, abort as _abort
+    reg = AchadoPerdido.query.get_or_404(row_id)
+    if _sem_acesso(reg):
+        _abort(403)
+
+    # 1) CLOB base64 (novos registros) — só se coluna existir no Oracle
+    if _foto_col_ok():
+        try:
+            fd = reg.foto_dados  # lazy load seguro (coluna existe)
+            if fd and fd.startswith("data:"):
+                import base64 as _b64
+                header, data = fd.split(",", 1)
+                mime = header.split(":")[1].split(";")[0]
+                return Response(_b64.b64decode(data), mimetype=mime,
+                                headers={"Cache-Control": "private, max-age=3600"})
+        except Exception:
+            pass
+
+    # 2) Arquivo em disco (registros antigos / coluna ausente)
+    if reg.foto_path:
+        base = _UPLOADS_ROOT if _UPLOADS_ROOT else current_app.static_folder
+        abs_path = os.path.join(base, reg.foto_path)
+        if os.path.exists(abs_path):
+            return _sf(abs_path)
+
+    _abort(404)
+
+
 @achados_bp.route("/<int:row_id>/excluir", methods=["POST"])
 @_login_required
 def excluir(row_id):
     reg = AchadoPerdido.query.get_or_404(row_id)
+    if _sem_acesso(reg):
+        flash("Sem permissão para este registro.", "danger")
+        return redirect(url_for("achados.lista"))
     _db.session.delete(reg)
     _db.session.commit()
     flash("Registro excluído.", "danger")
     return redirect(url_for("achados.lista"))
 
 
+def _reg_to_dict(reg):
+    """Converte um registro ORM em dict, tratando coluna deferred FOTO_DADOS com segurança."""
+    r = {c.name: getattr(reg, c.name) for c in reg.__table__.columns
+         if c.name != 'foto_dados'}
+    r['foto_dados'] = reg.foto_dados if _foto_col_ok() else None
+    return r
+
+
 @achados_bp.route("/<int:row_id>/pdf")
 @_login_required
 def pdf(row_id):
     reg = AchadoPerdido.query.get_or_404(row_id)
-    r   = {c.name: getattr(reg, c.name) for c in reg.__table__.columns}
+    if _sem_acesso(reg):
+        flash("Sem permissão para este registro.", "danger")
+        return redirect(url_for("achados.lista"))
+    r   = _reg_to_dict(reg)
     buf = _gerar_pdf(r)
     return send_file(
         buf,
@@ -512,7 +637,10 @@ def pdf(row_id):
 @_login_required
 def enviar_email(row_id):
     reg = AchadoPerdido.query.get_or_404(row_id)
-    r   = {c.name: getattr(reg, c.name) for c in reg.__table__.columns}
+    if _sem_acesso(reg):
+        flash("Sem permissão para este registro.", "danger")
+        return redirect(url_for("achados.lista"))
+    r   = _reg_to_dict(reg)
 
     # Gera PDF temporário
     buf = _gerar_pdf(r)
@@ -579,11 +707,13 @@ def enviar_email(row_id):
 @achados_bp.route("/dashboard")
 @_login_required
 def dashboard():
-    from sqlalchemy import func as _func, case as _case
-
     base = AchadoPerdido.query
     base = _filtrar_query(base)
-    todos = base.all()
+    # Carrega só as colunas usadas no dashboard (status/data/responsavel) — evita
+    # transferir objeto/descricao/site/etc. de toda a tabela pela VPN.
+    todos = base.with_entities(
+        AchadoPerdido.status, AchadoPerdido.data, AchadoPerdido.responsavel
+    ).all()
 
     total      = len(todos)
     pendentes  = sum(1 for r in todos if r.status == "Pendente")

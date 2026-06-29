@@ -30,13 +30,24 @@ _DB_PORT    = 1521
 _DB_SERVICE = "SECPANEL"
 
 # ─── Caminhos ────────────────────────────────────────────────────────────────
-INSTALL_DIR      = os.path.join(
+# Estrutura one-folder:
+#   %LOCALAPPDATA%\CCTV_ControlPanel\        ← raiz (persiste entre updates)
+#     ├── app\                               ← pasta do PyInstaller (trocada a cada update)
+#     │   └── CCTV_ControlPanel.exe
+#     ├── version.txt
+#     └── cctv_error.log
+INSTALL_ROOT     = os.path.join(
     os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
     "CCTV_ControlPanel"
 )
+APP_DIR          = os.path.join(INSTALL_ROOT, "app")
 APP_EXE_NAME     = "CCTV_ControlPanel.exe"
-VERSION_FILE     = os.path.join(INSTALL_DIR, "version.txt")
+APP_EXE          = os.path.join(APP_DIR, APP_EXE_NAME)
+VERSION_FILE     = os.path.join(INSTALL_ROOT, "version.txt")
 APP_DISPLAY_NAME = "CCTV Control Panel"
+
+# Compat: nome antigo usado em outros pontos
+INSTALL_DIR      = INSTALL_ROOT
 
 # ─── Cores ───────────────────────────────────────────────────────────────────
 C_RED    = "#d40511"
@@ -63,6 +74,22 @@ def _desktop_path() -> str:
     except Exception:
         pass
     return os.path.join(os.path.expanduser("~"), "Desktop")
+
+
+def _start_menu_path() -> str:
+    """Pasta Programas do Menu Iniciar do usuário."""
+    try:
+        buf = ctypes.create_unicode_buffer(512)
+        # CSIDL_PROGRAMS = 0x0002 (Menu Iniciar > Programas do usuário)
+        ctypes.windll.shell32.SHGetFolderPathW(None, 0x0002, None, 0, buf)
+        if buf.value:
+            return buf.value
+    except Exception:
+        pass
+    return os.path.join(
+        os.environ.get("APPDATA", os.path.expanduser("~")),
+        "Microsoft", "Windows", "Start Menu", "Programs",
+    )
 
 
 def _create_shortcut(target: str, shortcut_lnk: str, description: str = "") -> None:
@@ -98,8 +125,8 @@ def _local_version() -> str:
             return open(VERSION_FILE, encoding="utf-8").read().strip()
     except Exception:
         pass
-    exe = os.path.join(INSTALL_DIR, APP_EXE_NAME)
-    if os.path.exists(exe):
+    # app\ (novo) ou raiz (instalação legada one-file)
+    if os.path.exists(APP_EXE) or os.path.exists(os.path.join(INSTALL_ROOT, APP_EXE_NAME)):
         return "instalado (versão desconhecida)"
     return "não instalado"
 
@@ -160,13 +187,16 @@ def _do_check(on_result, on_error):
 # ─── Instalação ───────────────────────────────────────────────────────────────
 
 def _do_install(on_status, on_progress, on_done, on_error, open_after=False):
+    import io
+    import zipfile
+    import shutil
     try:
         on_status("Conectando ao servidor...")
         on_progress(5)
         conn = _db_connect()
 
         on_status("Verificando versao disponivel...")
-        on_progress(15)
+        on_progress(12)
         cur = conn.cursor()
         cur.execute(
             "SELECT VERSAO, NOME_ARQUIVO, EXE_BLOB FROM "
@@ -185,44 +215,116 @@ def _do_install(on_status, on_progress, on_done, on_error, open_after=False):
                 "Administracao > Releases > Publicar nova versao."
             )
 
-        versao, nome_arquivo, exe_bytes = row
-        nome_arquivo = nome_arquivo or APP_EXE_NAME
-
-        if not exe_bytes:
+        versao, nome_arquivo, blob = row
+        nome_arquivo = nome_arquivo or ""
+        if not blob:
             raise RuntimeError(
                 f"O arquivo da versao {versao} esta vazio no servidor.\n"
                 "Contate o administrador."
             )
 
-        on_status(f"Versao {versao} encontrada  ({_fmt_bytes(len(exe_bytes))})  — instalando...")
-        on_progress(55)
+        on_status(f"Versao {versao} ({_fmt_bytes(len(blob))}) — baixando...")
+        on_progress(45)
+        os.makedirs(INSTALL_ROOT, exist_ok=True)
 
-        os.makedirs(INSTALL_DIR, exist_ok=True)
-        install_path = os.path.join(INSTALL_DIR, APP_EXE_NAME)
+        # ZIP (pacote one-folder) vs EXE (legado one-file) — detecta pela assinatura
+        is_zip = blob[:4] == b"PK\x03\x04" or nome_arquivo.lower().endswith(".zip")
 
-        on_status("Salvando arquivo...")
-        if os.path.exists(install_path):
-            try:
-                os.remove(install_path)
-            except PermissionError:
+        if is_zip:
+            app_new = os.path.join(INSTALL_ROOT, "app_new")
+            app_old = os.path.join(INSTALL_ROOT, "app_old")
+            if os.path.exists(app_new):
+                shutil.rmtree(app_new, ignore_errors=True)
+
+            on_status("Extraindo arquivos...")
+            on_progress(65)
+            with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+                zf.extractall(app_new)
+
+            # Normaliza: se o zip tiver a pasta CCTV_ControlPanel\ por dentro, sobe o conteudo
+            if not os.path.exists(os.path.join(app_new, APP_EXE_NAME)):
+                subdirs = [d for d in os.listdir(app_new)
+                           if os.path.isdir(os.path.join(app_new, d))]
+                for d in subdirs:
+                    if os.path.exists(os.path.join(app_new, d, APP_EXE_NAME)):
+                        sub = os.path.join(app_new, d)
+                        tmp = app_new + "_inner"
+                        shutil.rmtree(tmp, ignore_errors=True)
+                        shutil.move(sub, tmp)
+                        shutil.rmtree(app_new, ignore_errors=True)
+                        shutil.move(tmp, app_new)
+                        break
+
+            if not os.path.exists(os.path.join(app_new, APP_EXE_NAME)):
+                shutil.rmtree(app_new, ignore_errors=True)
                 raise RuntimeError(
-                    f"Nao foi possivel substituir:\n{install_path}\n\n"
-                    "Feche o CCTV Control Panel e tente novamente."
+                    "Pacote invalido: CCTV_ControlPanel.exe nao encontrado no .zip."
                 )
 
-        with open(install_path, "wb") as f:
-            f.write(exe_bytes)
+            on_status("Aplicando atualizacao...")
+            on_progress(82)
+            # Swap seguro: app -> app_old, app_new -> app, com rollback
+            if os.path.exists(app_old):
+                shutil.rmtree(app_old, ignore_errors=True)
+            if os.path.exists(APP_DIR):
+                try:
+                    os.rename(APP_DIR, app_old)
+                except OSError:
+                    shutil.rmtree(app_new, ignore_errors=True)
+                    raise RuntimeError(
+                        "Nao foi possivel atualizar (arquivos em uso).\n\n"
+                        "Feche o CCTV Control Panel e tente novamente."
+                    )
+            try:
+                os.rename(app_new, APP_DIR)
+            except OSError:
+                if os.path.exists(app_old) and not os.path.exists(APP_DIR):
+                    os.rename(app_old, APP_DIR)   # rollback
+                shutil.rmtree(app_new, ignore_errors=True)
+                raise RuntimeError("Falha ao aplicar a atualizacao. Tente novamente.")
+            shutil.rmtree(app_old, ignore_errors=True)
+            install_path = APP_EXE
+        else:
+            # Legado: o blob é o proprio EXE → grava direto em app\
+            os.makedirs(APP_DIR, exist_ok=True)
+            install_path = APP_EXE
+            if os.path.exists(install_path):
+                try:
+                    os.remove(install_path)
+                except PermissionError:
+                    raise RuntimeError(
+                        f"Nao foi possivel substituir:\n{install_path}\n\n"
+                        "Feche o CCTV Control Panel e tente novamente."
+                    )
+            with open(install_path, "wb") as f:
+                f.write(blob)
 
-        # Grava version.txt
+        # Grava version.txt na raiz (persiste entre updates)
         with open(VERSION_FILE, "w", encoding="utf-8") as f:
             f.write(versao)
+        on_progress(90)
 
-        on_progress(88)
+        # Remove EXE legado solto na raiz (migracao do modelo one-file antigo)
+        _legacy = os.path.join(INSTALL_ROOT, APP_EXE_NAME)
+        if os.path.exists(_legacy):
+            try:
+                os.remove(_legacy)
+            except Exception:
+                pass
 
-        on_status("Criando atalho na Area de Trabalho...")
-        desktop      = _desktop_path()
-        shortcut_lnk = os.path.join(desktop, f"{APP_DISPLAY_NAME}.lnk")
-        _create_shortcut(install_path, shortcut_lnk, APP_DISPLAY_NAME)
+        on_status("Criando atalhos (Area de Trabalho e Menu Iniciar)...")
+        on_progress(95)
+        _create_shortcut(install_path,
+                         os.path.join(_desktop_path(), f"{APP_DISPLAY_NAME}.lnk"),
+                         APP_DISPLAY_NAME)
+        _sm = _start_menu_path()
+        try:
+            os.makedirs(_sm, exist_ok=True)
+        except Exception:
+            pass
+        _create_shortcut(install_path,
+                         os.path.join(_sm, f"{APP_DISPLAY_NAME}.lnk"),
+                         APP_DISPLAY_NAME)
 
         on_progress(100)
         on_status(f"Versao {versao} instalada com sucesso!")
@@ -429,7 +531,7 @@ class UpdaterUI:
                     "Instalacao concluida",
                     f"Versao {versao} instalada com sucesso!\n\n"
                     f"Local: {install_path}\n"
-                    "Um atalho foi criado na Area de Trabalho.",
+                    "Atalhos criados na Area de Trabalho e no Menu Iniciar.",
                 )
         self.root.after(0, _cb)
 
@@ -529,8 +631,8 @@ class UpdaterUI:
     # ── Abrir pasta ─────────────────────────────────────────────
 
     def _abrir_pasta(self):
-        os.makedirs(INSTALL_DIR, exist_ok=True)
-        subprocess.Popen(["explorer", INSTALL_DIR])
+        os.makedirs(INSTALL_ROOT, exist_ok=True)
+        subprocess.Popen(["explorer", INSTALL_ROOT])
 
     # ────────────────────────────────────────────────────────────
 

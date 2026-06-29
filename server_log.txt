@@ -1,0 +1,13 @@
+Carregando aplicação...
+Aplicando migrações de schema (rápido após a 1ª vez)...
+
+============================================================
+  CCTV Control Panel — SERVIDOR ATIVO
+============================================================
+  Porta: 5000   Threads: 8
+  Acesse de outras máquinas da rede pelo navegador:
+     ->  http://7.9.61.135:5000
+  Nesta máquina:  http://localhost:5000
+============================================================
+  (Ctrl+C para parar o servidor)
+

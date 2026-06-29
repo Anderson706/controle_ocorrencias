@@ -159,9 +159,9 @@
 
         <!-- Foto -->
         <td>
-          {% if r.foto_path %}
-          <img class="thumb" src="{{ url_for('static', filename=r.foto_path) }}"
-               onclick="abrirFoto('{{ url_for('static', filename=r.foto_path) }}')" alt="foto">
+          {% if r.foto_dados or r.foto_path %}
+          <img class="thumb" src="{{ url_for('achados.foto_imagem', row_id=r.id) }}"
+               onclick="abrirFoto('{{ url_for('achados.foto_imagem', row_id=r.id) }}')" alt="foto">
           {% else %}
           <span class="no-foto" title="Sem foto">📦</span>
           {% endif %}
@@ -185,7 +185,7 @@
           {% if r.data %}
           {{ r.data[8:10] }}/{{ r.data[5:7] }}/{{ r.data[0:4] }}
           {% endif %}
-          <div style="font-size:11px;color:var(--muted)">{{ r.turno }}</div>
+          <div style="font-size:11px;color:var(--muted)">{{ r.turno or '—' }}</div>
         </td>
 
         <!-- Prazo -->
@@ -359,16 +359,17 @@ var _regs = {
   {% for r in registros %}
   {{ r.id }}: {
     id:          {{ r.id }},
-    id_registro: {{ r.id_registro }},
+    id_registro: {{ r.id_registro|tojson }},
     site:        {{ (r.site or '')|tojson }},
     objeto:      {{ r.objeto|tojson }},
     responsavel: {{ r.responsavel|tojson }},
     data:        {{ (r.data or '')|tojson }},
-    turno:       {{ (r.turno|string)|tojson }},
+    turno:       {{ (r.turno or '')|tojson }},
     descricao:   {{ (r.descricao or '')|tojson }},
     status:      {{ (r.status or 'Pendente')|tojson }},
     retirado_por:{{ (r.retirado_por or '')|tojson }},
-    foto_path:   {{ (r.foto_path or '')|tojson }},
+    has_foto:    {{ 1 if (r.foto_dados or r.foto_path) else 0 }},
+    url_foto:    {{ url_for('achados.foto_imagem', row_id=r.id)|tojson }},
     url_pdf:     {{ url_for('achados.pdf',         row_id=r.id)|tojson }},
     url_email:   {{ url_for('achados.enviar_email',row_id=r.id)|tojson }},
     url_editar:  {{ url_for('achados.editar',      row_id=r.id)|tojson }},
@@ -419,8 +420,8 @@ function abrirDetalhes(id) {
 
   // Foto
   var fotoEl = document.getElementById('det-foto');
-  if (r.foto_path) {
-    fotoEl.src = '/static/' + r.foto_path;
+  if (r.has_foto) {
+    fotoEl.src = r.url_foto;
     fotoEl.style.display = 'block';
   } else {
     fotoEl.style.display = 'none';

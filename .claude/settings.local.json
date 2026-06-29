@@ -7,7 +7,20 @@
       "Bash(call venv\\\\Scripts\\\\activate.bat)",
       "Bash(pyinstaller cctv_panel.spec)",
       "Bash(\"venv\\\\Scripts\\\\python.exe\" -m PyInstaller cctv_panel.spec)",
-      "PowerShell($proj = \"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\controle_ocorrencias\"; Set-Location $proj; & \"$proj\\\\venv\\\\Scripts\\\\python.exe\" -m PyInstaller cctv_panel.spec --noconfirm 2>&1)"
+      "PowerShell($proj = \"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\controle_ocorrencias\"; Set-Location $proj; & \"$proj\\\\venv\\\\Scripts\\\\python.exe\" -m PyInstaller cctv_panel.spec --noconfirm 2>&1)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(python -c ' *)",
+      "Bash(python -m pip list)",
+      "Bash(findstr -i \"dotenv flask\")",
+      "Bash(.venvScriptspython.exe -c ' *)",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(find \"/c/Users/deivimar/OneDrive - DPDHL/Documents/GitHub\" -name \"launch.json\" 2>/dev/null)",
+      "Bash(python \"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\comunications\\\\app.py\" --help)",
+      "Bash(\"C:\\\\Users\\\\deivimar\\\\OneDrive - DPDHL\\\\Documents\\\\GitHub\\\\comunications\\\\.venv\\\\Scripts\\\\pip.exe\" list)",
+      "Bash(findstr -i \"pdf\\\\|image\\\\|pillow\\\\|fitz\\\\|weasy\\\\|poppler\")",
+      "Bash(powershell -command \"Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "Bash(./venv/Scripts/python.exe -c ' *)",
+      "Bash(awk '{print $5, $9}')"
     ]
   }
 }

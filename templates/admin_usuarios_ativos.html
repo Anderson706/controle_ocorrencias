@@ -1,0 +1,173 @@
+{% extends "base_app.html" %}
+{% block page_title %}Usuários do Ativos | CCTV Control Panel{% endblock %}
+{% block topbar_title %}🏷️ Usuários — Controle de Ativos{% endblock %}
+{% block topbar_subtitle %}Contas do app Ativos (Supabase) — autocadastro entra como PORTARIA{% endblock %}
+{% block topbar_actions %}
+  <div class="adm-tabs">
+    <a href="{{ url_for('admin_usuarios') }}" class="adm-tab">👥 Usuários</a>
+    <a href="{{ url_for('admin_solicitacoes') }}" class="adm-tab">
+      📋 Solicitações{% if pendentes %} <span class="adm-badge">{{ pendentes }}</span>{% endif %}
+    </a>
+    <a href="{{ url_for('admin_multisites') }}" class="adm-tab">🌐 Multisites</a>
+    <a href="{{ url_for('admin_releases') }}" class="adm-tab">📦 Releases</a>
+    <a href="{{ url_for('admin_usuarios_ativos') }}" class="adm-tab active">🏷️ Usuários Ativos</a>
+  </div>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .adm-tabs{ display:flex; gap:3px; }
+  .adm-tab{ display:inline-flex; align-items:center; gap:5px; padding:7px 14px; border-radius:10px; font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; transition:.15s; white-space:nowrap; }
+  .adm-tab:hover{ background:#f3f4f6; color:var(--text); }
+  .adm-tab.active{ background:#d40511; color:#ffcc00; }
+  .adm-badge{ display:inline-flex; align-items:center; justify-content:center; background:#d40511; color:#fff; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:900; min-width:18px; }
+  .adm-tab.active .adm-badge{ background:rgba(255,255,255,.9); color:#d40511; }
+
+  .info-box{ background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:12px 16px; font-size:13px; color:#1e40af; margin-bottom:16px; }
+
+  .filter-bar{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 20px; display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .filter-bar label{ font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; display:block; margin-bottom:5px; }
+  .filter-bar input,.filter-bar select{ padding:9px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:13px; font-family:inherit; background:#fafbfc; min-width:160px; }
+  .filter-bar input:focus,.filter-bar select:focus{ outline:none; border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(177,3,13,.08); }
+
+  .table-wrap{ background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.04); }
+  .table-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .table-head h3{ font-size:15px; font-weight:900; color:var(--text); margin:0; }
+  table{ width:100%; border-collapse:collapse; }
+  th{ padding:11px 16px; text-align:left; font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; background:#f9fafb; border-bottom:1px solid var(--line); }
+  td{ padding:12px 16px; border-bottom:1px solid var(--line); font-size:13px; color:var(--text); vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  tr:hover td{ background:#fafafa; }
+
+  .badge{ display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:.3px; }
+  .badge-admin{ background:#fff1f2; color:#b1030d; }
+  .badge-operador{ background:#fffbeb; color:#92400e; }
+  .badge-portaria{ background:#f0fdf4; color:#166534; }
+
+  .actions{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+</style>
+
+<div class="info-box">ℹ️ Estas contas vivem no Supabase e controlam o login do app <strong>Controle de Ativos</strong> — são independentes do login deste sistema (Oracle). O autocadastro no Ativos cria a conta direto como <strong>PORTARIA</strong>; use esta tela para promover a OPERADOR/ADMIN ou ajustar o site.</div>
+
+<form method="GET" class="filter-bar">
+  <div>
+    <label>Buscar</label>
+    <input type="text" name="busca" value="{{ filtros.busca }}" placeholder="Usuário ou e-mail...">
+  </div>
+  <div>
+    <label>Role</label>
+    <select name="role">
+      <option value="">Todos os roles</option>
+      <option value="ADMIN"    {{ 'selected' if filtros.role=='ADMIN' }}>Admin</option>
+      <option value="OPERADOR" {{ 'selected' if filtros.role=='OPERADOR' }}>Operador</option>
+      <option value="PORTARIA" {{ 'selected' if filtros.role=='PORTARIA' }}>Portaria</option>
+    </select>
+  </div>
+  <div>
+    <label>Site</label>
+    <select name="site">
+      <option value="">Todos os sites</option>
+      {% for s in todos_sites %}
+      <option value="{{ s }}" {{ 'selected' if filtros.site==s }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-red">🔍 Filtrar</button>
+  <a href="{{ url_for('admin_usuarios_ativos') }}" class="btn btn-soft">↺ Limpar</a>
+</form>
+
+<div class="table-wrap">
+  <div class="table-head">
+    <h3>{{ usuarios|length }} usuário(s) encontrado(s)</h3>
+    <a href="{{ url_for('admin_usuarios_ativos_sync') }}" class="btn btn-sm btn-red" title="Comparar e sincronizar logins com o CCTV (Oracle)">🔄 Sincronizar logins</a>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Usuário</th>
+        <th>E-mail</th>
+        <th>Role</th>
+        <th>Site</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in usuarios %}
+      <tr>
+        <td><strong>{{ u.nome_usuario }}</strong></td>
+        <td style="color:var(--muted)">{{ u.email or '—' }}</td>
+        <td>
+          {% if u.role == 'ADMIN' %}<span class="badge badge-admin">ADMIN</span>
+          {% elif u.role == 'OPERADOR' %}<span class="badge badge-operador">OPERADOR</span>
+          {% else %}<span class="badge badge-portaria">PORTARIA</span>{% endif %}
+        </td>
+        <td>{{ u.site or '—' }}</td>
+        <td>
+          <div class="actions">
+            <a href="{{ url_for('admin_usuario_ativo_editar', uid=u.id) }}" class="btn btn-sm btn-soft" title="Editar">✏️</a>
+            <button class="btn btn-sm btn-soft" title="Redefinir senha"
+              onclick="confirmar('Redefinir senha',
+              'Gerar nova senha para <strong>{{ u.nome_usuario }}</strong>? A nova senha será mostrada na tela (sem e-mail).',
+              '{{ url_for('admin_usuario_ativo_redefinir_senha', uid=u.id) }}', '🔑 Redefinir', 'btn-soft')">🔑</button>
+            <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b" title="Excluir"
+              onclick="confirmar('Excluir usuário',
+              '⚠️ Esta ação não pode ser desfeita. Excluir <strong>{{ u.nome_usuario }}</strong> do Ativos?',
+              '{{ url_for('admin_usuario_ativo_excluir', uid=u.id) }}', '🗑 Excluir', 'btn-red')">🗑</button>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="text-align:center;padding:40px;color:var(--muted)">Nenhum usuário encontrado com os filtros aplicados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modal-title">Confirmar ação</h3>
+      <button class="modal-close" onclick="fecharModalConfirm()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="modal-msg"></p>
+      <form id="modal-form" method="POST">
+        <div id="modal-extra"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+          <button type="button" class="btn btn-soft btn-sm" onclick="fecharModalConfirm()">Cancelar</button>
+          <button type="submit" id="modal-btn" class="btn btn-sm" onclick="document.getElementById('loading-overlay').classList.add('show')">Confirmar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function confirmar(titulo, msg, action, btnLabel, btnClass){
+  document.getElementById('modal-title').innerHTML = titulo;
+  document.getElementById('modal-msg').innerHTML = msg;
+  document.getElementById('modal-form').action = action;
+  const btn = document.getElementById('modal-btn');
+  btn.textContent = btnLabel;
+  btn.className = 'btn btn-sm ' + btnClass;
+  document.getElementById('modal-extra').innerHTML = '';
+  document.getElementById('modal-confirm').classList.add('open');
+}
+function fecharModalConfirm(){
+  document.getElementById('modal-confirm').classList.remove('open');
+}
+document.getElementById('modal-confirm').addEventListener('click', function(e){ if(e.target===this) fecharModalConfirm(); });
+document.addEventListener('keydown', e => { if(e.key==='Escape') fecharModalConfirm(); });
+
+setTimeout(() => {
+  document.querySelectorAll('.flash').forEach(el => {
+    el.style.transition = 'opacity .5s'; el.style.opacity = '0';
+    setTimeout(() => el.remove(), 500);
+  });
+}, 5000);
+</script>
+{% endblock %}

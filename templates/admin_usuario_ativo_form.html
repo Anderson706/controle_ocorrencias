@@ -1,0 +1,63 @@
+{% extends "base_app.html" %}
+{% block page_title %}Editar Usuário Ativos | CCTV Control Panel{% endblock %}
+{% block topbar_title %}✏️ Editar Usuário — Controle de Ativos{% endblock %}
+{% block topbar_subtitle %}Conta do Supabase, usada no login do app Ativos{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('admin_usuarios_ativos') }}" class="btn btn-soft btn-sm">← Voltar</a>
+{% endblock %}
+
+{% block page_content %}
+<style>
+  .content{ max-width:700px; margin:0 auto; }
+  .form-card{ background:#fff; border:1px solid var(--line); border-radius:18px; padding:32px; box-shadow:0 4px 16px rgba(0,0,0,.06); }
+  .form-card h2{ font-size:20px; font-weight:900; color:var(--text); margin:0 0 6px; }
+  .form-card .subtitle{ font-size:13px; color:var(--muted); margin:0 0 28px; }
+  .field{ margin-bottom:18px; }
+  .field label{ display:block; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  .field input,.field select{ width:100%; padding:12px 14px; border:1px solid #d1d5db; border-radius:12px; font-size:14px; font-family:inherit; background:#fafbfc; color:var(--text); transition:.15s; }
+  .field input:focus,.field select:focus{ outline:none; border-color:var(--dhl-red); box-shadow:0 0 0 3px rgba(177,3,13,.08); background:#fff; }
+  .field input[disabled]{ color:var(--muted); background:#f3f4f6; }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:28px; }
+</style>
+
+<div class="form-card">
+  <h2>✏️ Editar Usuário</h2>
+  <p class="subtitle">Edite o role e o site do usuário. Para redefinir a senha, use o botão na lista.</p>
+
+  <div class="field">
+    <label>Usuário</label>
+    <input type="text" value="{{ usuario.nome_usuario }}" disabled>
+  </div>
+  <div class="field">
+    <label>E-mail</label>
+    <input type="text" value="{{ usuario.email or '—' }}" disabled>
+  </div>
+
+  <form method="POST" onsubmit="document.getElementById('loading-overlay').classList.add('show')">
+    <div class="field-row">
+      <div class="field">
+        <label>Role</label>
+        <select name="role">
+          <option value="PORTARIA" {{ 'selected' if usuario.role == 'PORTARIA' }}>Portaria</option>
+          <option value="OPERADOR" {{ 'selected' if usuario.role == 'OPERADOR' }}>Operador</option>
+          <option value="ADMIN"    {{ 'selected' if usuario.role == 'ADMIN' }}>Admin</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Site / Unidade</label>
+        <select name="site">
+          <option value="">Sem site vinculado</option>
+          {% for s in todos_sites %}
+          <option value="{{ s }}" {{ 'selected' if usuario.site == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-actions">
+      <a href="{{ url_for('admin_usuarios_ativos') }}" class="btn btn-soft">Cancelar</a>
+      <button type="submit" class="btn btn-red">✓ Salvar Alterações</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

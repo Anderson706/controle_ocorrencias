@@ -138,6 +138,14 @@
           <option value="CRITICA" {% if filtros.get('prioridade')=='CRITICA' %}selected{% endif %}>CRÍTICA</option>
         </select>
       </div>
+      <div class="filter-group">
+        <label>Assinatura</label>
+        <select name="assinatura">
+          <option value="">Todas</option>
+          <option value="NAO_ASSINADA" {% if filtros.get('assinatura')=='NAO_ASSINADA' %}selected{% endif %}>Não assinadas</option>
+          <option value="ASSINADA" {% if filtros.get('assinatura')=='ASSINADA' %}selected{% endif %}>Assinadas</option>
+        </select>
+      </div>
       <div class="filter-actions">
         <button type="submit" class="btn btn-yellow">Filtrar</button>
         <a href="{{ url_for('sh_controle') }}" class="btn btn-dark" data-clear-filter>Limpar</a>
@@ -155,7 +163,7 @@
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>ID</th><th>Data</th><th>Site</th><th>Turno</th><th>Tipo</th><th>Prioridade</th><th>Status</th><th>Resp. Saída</th><th>Resp. Entrada</th><th style="text-align:right;">Ações</th></tr>
+        <tr><th data-sort="num">ID</th><th data-sort="date">Data</th><th data-sort="text">Site</th><th data-sort="text">Turno</th><th data-sort="text">Tipo</th><th data-sort="text">Prioridade</th><th data-sort="text">Status</th><th data-sort="text">Resp. Saída</th><th data-sort="text">Resp. Entrada</th><th style="text-align:right;">Ações</th></tr>
       </thead>
       <tbody>
         {% for r in ocorrencias %}
@@ -219,8 +227,9 @@
 {% block page_scripts %}
 <script>
 (function(){
-  var _ROWS=[]; document.querySelectorAll('tbody tr').forEach(function(r){_ROWS.push(r);});
-  var PER=10, _page=0;
+  var _ROWS=[], PER=10, _page=0;
+  function _buildRows(){ _ROWS=[]; document.querySelectorAll('tbody tr').forEach(function(r){_ROWS.push(r);}); }
+  _buildRows();
   function _render(){
     var total=_ROWS.length, pages=Math.max(1,Math.ceil(total/PER));
     _ROWS.forEach(function(r,i){ r.style.display=(i>=_page*PER&&i<(_page+1)*PER)?'':'none'; });
@@ -230,6 +239,7 @@
   }
   window.pagerPrev=function(){ if(_page>0){_page--;_render();} };
   window.pagerNext=function(){ var p=Math.ceil(_ROWS.length/PER); if(_page<p-1){_page++;_render();} };
+  window.pagerReset=function(){ _buildRows(); _page=0; _render(); };
   _render();
 
   var _USER_NOME={{ session.get('user_nome','')|tojson }};
